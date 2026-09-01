@@ -8233,6 +8233,7 @@
       "refund_amount_usd": "Dollarda qaytariladi",
       "refund_amount_usd_hint": "Bu qism dollarda to'langan — dollar qaytarilsin",
       "refund_confirm": "Qaytarishni tasdiqlash",
+      "refund_fill_all": "Hammasini qaytarish",
       "refund_no_lines": "Qaytariladigan tovar tanlanmagan",
       "refund_qty_label": "Qaytadi:",
       "refund_success": "Qaytarildi — tovar omborga qaytdi, omborchiga joylashtirish yuborildi",

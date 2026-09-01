@@ -322,13 +322,24 @@ function ChekDetailPanel({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  /**
+   * Qaytarish 0 dan boshlanadi (2026-09-01, kassir shikoyati): avval har
+   * qator TO'LIQ soni bilan ochilardi — bitta tovarni qaytarish uchun qolgan
+   * hammasini qo'lda 0 ga tushirish kerak edi va bexosdan to'liq vozvrat
+   * o'tkazib yuborish xavfi bor edi. To'liq qaytarish uchun «Hammasini
+   * qaytarish» tugmasi va qatordagi «/ N» bosiladi.
+   */
   const startReturn = () => {
+    setReturnQty(Object.fromEntries((data?.positions ?? []).map((p) => [p.id, '0'])));
+    setReturnMode(true);
+  };
+
+  const fillAllReturn = () => {
     setReturnQty(
       Object.fromEntries(
         (data?.positions ?? []).map((p) => [p.id, normalizeQtyDecimal(p.quantity)]),
       ),
     );
-    setReturnMode(true);
   };
 
   if (isLoading || !data) {
@@ -690,8 +701,18 @@ function ChekDetailPanel({
 
         {/* Positions */}
         <div className="rounded-xl border border-[var(--ms-border)] overflow-hidden">
-          <div className="bg-[var(--ms-bg-app)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ms-text-muted)]">
-            {t('products')}
+          <div className="flex items-center justify-between bg-[var(--ms-bg-app)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ms-text-muted)]">
+            <span>{t('products')}</span>
+            {returnMode && (
+              <button
+                type="button"
+                onClick={fillAllReturn}
+                data-test-id="pos-refund-fill-all"
+                className="rounded border border-[var(--ms-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[var(--ms-text-brand)] hover:bg-[var(--ms-bg-hover)]"
+              >
+                {t('refund_fill_all')}
+              </button>
+            )}
           </div>
           <div className="divide-y divide-[var(--ms-border)]">
             {data.positions.map((p) => (
@@ -724,9 +745,19 @@ function ChekDetailPanel({
                       }
                       className="w-14 rounded border border-[var(--ms-border)] bg-[var(--ms-bg-input)] px-1.5 py-0.5 text-right text-sm tabular-nums focus:border-[var(--ms-border-focus)] focus:outline-none"
                     />
-                    <span className="text-xs text-[var(--ms-text-muted)]">
+                    {/* «/ N» tugma: bosilsa shu qator to'liq soniga to'ladi. */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReturnQty((prev) => ({
+                          ...prev,
+                          [p.id]: normalizeQtyDecimal(p.quantity),
+                        }))
+                      }
+                      className="text-xs text-[var(--ms-text-brand)] underline decoration-dotted underline-offset-2 hover:opacity-80"
+                    >
                       / {Number(p.quantity)}
-                    </span>
+                    </button>
                   </div>
                 )}
                 <div className="shrink-0 text-right">
