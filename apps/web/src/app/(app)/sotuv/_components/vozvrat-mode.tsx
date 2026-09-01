@@ -1,16 +1,16 @@
-'use client';
+﻿'use client';
 
 /**
- * «Vozvrat» rejimi (V2, egasi 2026-09-01) — qaytarish uchun chekni TOPISH oynasi.
+ * В«VozvratВ» rejimi (V2, egasi 2026-09-01) вЂ” qaytarish uchun chekni TOPISH oynasi.
  *
  * Sabab: naqdga olib ketgan MIJOZSIZ odam vozvratga kelsa, chekni faqat TOVAR
- * orqali topish mumkin — «Cheklar» qidiruvi (chek nomi/mijoz ismi) bunda ojiz.
- * Shu yerda ikki tab: «Tovar» (asosiy; skaner ham ishlaydi — shtrix-kod
- * `GET /products?search=` da exact tutiladi) va «Mijoz». Tanlangach shu
+ * orqali topish mumkin вЂ” В«CheklarВ» qidiruvi (chek nomi/mijoz ismi) bunda ojiz.
+ * Shu yerda ikki tab: В«TovarВ» (asosiy; skaner ham ishlaydi вЂ” shtrix-kod
+ * `GET /products?search=` da exact tutiladi) va В«MijozВ». Tanlangach shu
  * tovar/mijoz qatnashgan BARCHA `posted` cheklar sanasi bilan, eng yangisi
  * tepada, 50 tadan sahifalab chiqadi (egasining S-V2/S-V3 javoblari).
  *
- * Chekni ochish — mavjud `ChekDetailPanel` (cheklar-mode'dan eksport):
+ * Chekni ochish вЂ” mavjud `ChekDetailPanel` (cheklar-mode'dan eksport):
  * qaytarish oqimi BITTA joyda, bu fayl faqat qidiruv/ro'yxat.
  *
  * Rejimga kirish `salesreturn.create` bilan yon panelda yashiringan
@@ -43,7 +43,7 @@ interface AgentHit {
   phone?: string | null;
 }
 
-/** Tanlangan filtr — bir paytda bittasi (tovar YOKI mijoz). */
+/** Tanlangan filtr вЂ” bir paytda bittasi (tovar YOKI mijoz). */
 interface PickedFilter {
   kind: VozvratTab;
   id: string;
@@ -106,7 +106,7 @@ export function VozvratMode({
     placeholderData: keepPreviousData,
   });
 
-  // Egasining S-V3 javobi: faqat `posted` — oyna «vozvrat qilish» uchun, arxiv
+  // Egasining S-V3 javobi: faqat `posted` вЂ” oyna В«vozvrat qilishВ» uchun, arxiv
   // emas. Qisman qaytarilgan chek `posted` ligicha qoladi va ko'rinaveradi.
   const cheklar = useInfiniteQuery({
     queryKey: ['pos-vozvrat-cheklar', picked?.kind, picked?.id],
@@ -127,7 +127,7 @@ export function VozvratMode({
   const chekRows: SaleRow[] = cheklar.data?.pages.flatMap((p: ChekPage) => p.items) ?? [];
 
   // Skaner naqshi: matn + Enter. Natija AYNAN bitta bo'lsa (shtrix-kod exact
-  // match) — darhol tanlanadi; ko'p bo'lsa kassir qo'l bilan tanlaydi.
+  // match) вЂ” darhol tanlanadi; ko'p bo'lsa kassir qo'l bilan tanlaydi.
   const onSearchEnter = () => {
     if (picked || tab !== 'product') return;
     const items = productHits.data?.items ?? [];
@@ -149,7 +149,7 @@ export function VozvratMode({
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* ── Chap: qidiruv + natija ── */}
+      {/* в”Ђв”Ђ Chap: qidiruv + natija в”Ђв”Ђ */}
       <div className="flex w-[400px] shrink-0 flex-col overflow-hidden border-[var(--ms-border)] border-r">
         {/* Tablar */}
         <div className="flex shrink-0 gap-1 border-b border-[var(--ms-border)] p-2">
@@ -226,7 +226,7 @@ export function VozvratMode({
               {tab === 'product' ? t('scan_not_found') : t('vozvrat_agent_not_found')}
             </div>
           ) : (
-            <div className="flex flex-1 flex-col divide-y divide-[var(--ms-border)] overflow-y-auto">
+            <div className="flex flex-1 flex-col divide-y divide-[var(--ms-border)] overflow-y-auto [&>*]:shrink-0">
               {searchHits.map((hit) => (
                 <button
                   key={hit.id}
@@ -242,7 +242,7 @@ export function VozvratMode({
                       <div className="text-[13px] text-[var(--ms-text-muted)]">{hit.sub}</div>
                     )}
                   </div>
-                  <span className="shrink-0 text-[14px] text-[var(--ms-text-muted)]">›</span>
+                  <span className="shrink-0 text-[14px] text-[var(--ms-text-muted)]">вЂє</span>
                 </button>
               ))}
             </div>
@@ -255,7 +255,7 @@ export function VozvratMode({
             </span>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col divide-y divide-[var(--ms-border)] overflow-y-auto">
+          <div className="flex flex-1 flex-col divide-y divide-[var(--ms-border)] overflow-y-auto [&>*]:shrink-0">
             {chekRows.map((sale) => (
               <button
                 key={sale.id}
@@ -269,7 +269,7 @@ export function VozvratMode({
                     <span className="text-[18px] font-semibold tabular-nums text-[var(--ms-text-primary)]">
                       {formatMoney(BigInt(sale.sumMinor))}
                     </span>
-                    {/* Egasi: «cheklar SANASI bilan chiqsin» — vaqt emas,
+                    {/* Egasi: В«cheklar SANASI bilan chiqsinВ» вЂ” vaqt emas,
                         to'liq sana (eski cheklar ham topiladi). */}
                     <span className="shrink-0 text-[14px] tabular-nums text-[var(--ms-text-muted)]">
                       {new Date(sale.moment).toLocaleString('uz-UZ', {
@@ -288,7 +288,7 @@ export function VozvratMode({
                     </span>
                     {sale._count && (
                       <>
-                        <span>·</span>
+                        <span>В·</span>
                         <span className="shrink-0">
                           {t('items_count', { n: sale._count.positions })}
                         </span>
@@ -296,7 +296,7 @@ export function VozvratMode({
                     )}
                   </div>
                 </div>
-                <span className="shrink-0 text-[14px] text-[var(--ms-text-muted)]">›</span>
+                <span className="shrink-0 text-[14px] text-[var(--ms-text-muted)]">вЂє</span>
               </button>
             ))}
             {cheklar.hasNextPage && (
@@ -314,7 +314,7 @@ export function VozvratMode({
         )}
       </div>
 
-      {/* ── O'ng: detal-panel (qaytarish o'sha yerda) yoki taklif ── */}
+      {/* в”Ђв”Ђ O'ng: detal-panel (qaytarish o'sha yerda) yoki taklif в”Ђв”Ђ */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {selectedChekId ? (
           <ChekDetailPanel
