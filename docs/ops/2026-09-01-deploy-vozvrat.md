@@ -48,6 +48,35 @@ Skript `apps/api/src/scripts/ops-v0-vozvrat-huquqi.ts` (DRY → APPLY → nazora
 - Qaytarish: kassir shabloniga `apply-template` (create'ni tiklaydi) yoki
   override'ga `scope:null`.
 
+## 🔴 HODISA (o'sha kecha, 22:00) — buzilgan kodlash jonliga chiqdi
+
+**Belgisi:** egasi kassa ekranida chek qatorining o'ng chetida `вЂє` yozuvini
+ko'rsatdi (`›` chevron o'rniga).
+
+**Ildiz sabab:** `[&>*]:shrink-0` ni qo'shishda fayl PowerShell bilan qayta
+yozildi:
+```powershell
+(Get-Content ... -Raw) -replace ... | Set-Content ... -Encoding utf8
+```
+Windows PowerShell 5.1 da `Get-Content` **BOM'siz** UTF-8 faylni ANSI kod
+sahifasida (cp1251) o'qiydi; `Set-Content -Encoding utf8` esa noto'g'ri o'qilgan
+belgilarni UTF-8 bo'lib qayta yozadi va **BOM qo'shadi**. Butun fayl buzildi:
+`›`→`вЂє` · `·`→`В·` · `«»`→`В«В»` · `—`→`вЂ”`.
+
+**Nega hech qanday darvoza tutmadi:** mojibake sintaktik jihatdan mutlaqo
+to'g'ri JS satri — typecheck, lint va 4460 test hammasi yashil bo'ldi.
+
+**Tuzatish (`a4d8359e`):** fayl toza commitdan tiklandi
+(`git show 11839627:<yo'l> > <yo'l>`), shrink-qo'riqchisi Edit bilan qayta
+qo'llandi. Yangi statik qo'riqchi `apps/web/src/__tests__/no-mojibake.test.ts`
+shu xato sinfini abadiy yopadi: manba fayllarda mojibake imzolari va UTF-8 BOM
+taqiqlanadi (eski 3 BOM fayl `KNOWN_BOM` registrida — ro'yxat faqat qisqaradi).
+Jonli bundle'da tekshirildi: mojibake 0, toza `›` joyida.
+
+**QOIDA:** manba faylni PowerShell'ning `Get-Content`/`Set-Content` juftligi
+bilan QAYTA YOZMANG — Edit/Write ishlating. Zarur bo'lsa `-Encoding utf8` ni
+IKKALASIGA ham bering.
+
 ## Ochiq qoldiq
 
 - Ertalabki jonli smoke egasida: Shavkat login → Vozvrat tugmasi BOR, tovar
