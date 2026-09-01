@@ -256,8 +256,9 @@ export default function CustomerDisplayPage() {
             <CartPanel lines={lines} hasQueue={hasQueue} />
             <PaymentPanel lines={lines} discountPct={payload.discountPct} />
           </div>
-          {/* Padding YO'Q — video chetlarigacha to'ladi (egasi: «yarmiga
-              to'liq, ajralib turmasin»). Ichki bloklar o'z joyini o'zi oladi. */}
+          {/* Padding YO'Q — media ekranning yarmiga eniga to'la chiqadi
+              (egasi: «yarmiga to'liq, ajralib turmasin»). Balandlik bo'yicha
+              esa rolik kesilmaydi — `MediaLayer` da `contain`. */}
           <div
             className="box-border flex flex-col"
             style={{
@@ -1100,7 +1101,9 @@ function FeaturedPanel({
 
   return (
     <>
-      {/* MEDIA — chetlarigacha, RAMKASIZ. Qatlamlar krossfeyd bilan almashadi. */}
+      {/* MEDIA — RAMKASIZ, eniga to'la. Rolik 16:9 bo'lgani uchun `contain`
+          bilan chiziladi (`MediaLayer`): tepa-pastda oq fon qoladi, lekin
+          mahsulot butunicha ko'rinadi. Qatlamlar krossfeyd bilan almashadi. */}
       <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         {stack.map((pid) => (
           <MediaLayer
@@ -1120,18 +1123,6 @@ function FeaturedPanel({
             onEnded={() => setIndex((i) => (i + 1) % Math.max(1, lines.length))}
           />
         ))}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 140,
-            background: 'linear-gradient(to bottom, rgba(255,255,255,0), var(--cfd-bg))',
-            pointerEvents: 'none',
-          }}
-        />
       </div>
 
       {/* Nom + narx — KLASSIK serif; media bilan birga yumshoq kirib keladi. */}
@@ -1220,8 +1211,11 @@ function FeaturedPanel({
  * `onReady` — birinchi ko'rsatiladigan kadr tayyor (krossfeyd signali).
  * `active` — faqat ustki (joriy) qatlamning `ended` hodisasi karuselni suradi:
  * eski qatlam krossfeyd payti tugab qolsa indeks sakramasin.
+ *
+ * Test uchun eksport qilingan (`__tests__/customer-display.test.tsx`) —
+ * `objectFit` qiymati qo'riqchi bilan qulflangan.
  */
-function MediaLayer({
+export function MediaLayer({
   pid,
   name,
   imageUrl,
@@ -1255,6 +1249,14 @@ function MediaLayer({
       {state !== 'no' ? (
         // Ovoz siyosati: muted — avtomatik ijro ovoz bilan bloklanadi,
         // do'konda uzluksiz ovoz esa shovqin.
+        //
+        // 🔴 `contain`, `cover` EMAS (egasi, 2026-09-01: «videolar katta,
+        // mahsulot to'liq ko'rinmayapti»). Sabab: barcha mahsulot roliklari
+        // 1280×720 (16:9), media qutisi esa 960×~734 (≈4:3). `cover`
+        // balandlikka to'ldirib enidan ~26% ni KESIB tashlagan — mahsulotning
+        // chap va o'ng chekkalari ekranga tushmagan. `contain` da rolik
+        // 960×540 bo'lib eniga to'la sig'adi, tepa-pastda oq fon qoladi.
+        // Qaytib `cover` qilinmasin — kesish qaytadi.
         <video
           src={`/media/videos/${pid}.mp4`}
           autoPlay
@@ -1266,7 +1268,7 @@ function MediaLayer({
           onEnded={() => {
             if (active) onEnded();
           }}
-          style={{ ...fill, objectFit: 'cover' }}
+          style={{ ...fill, objectFit: 'contain' }}
         />
       ) : imageUrl ? (
         <img
@@ -1276,6 +1278,9 @@ function MediaLayer({
           style={{ ...fill, objectFit: 'contain', padding: 32, boxSizing: 'border-box' }}
         />
       ) : (
+        // Brend-rolik ham 1280×720 — `cover` da SHERSET yozuvining chetlari
+        // kesilardi. Foni oq (`--cfd-bg` bilan bir xil), shuning uchun
+        // `contain` da qo'shimcha yo'l-yo'l ko'rinmaydi.
         <video
           src="/brand/sherset-loop.mp4"
           autoPlay
@@ -1283,7 +1288,7 @@ function MediaLayer({
           loop
           playsInline
           onLoadedData={onReady}
-          style={{ ...fill, objectFit: 'cover' }}
+          style={{ ...fill, objectFit: 'contain' }}
         />
       )}
     </div>

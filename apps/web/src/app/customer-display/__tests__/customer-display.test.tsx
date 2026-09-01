@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import ruMessages from '../../../messages/ru.json' with { type: 'json' };
 import uzMessages from '../../../messages/uz.json' with { type: 'json' };
 import { renderWithProviders as render } from '../../../test-utils';
-import { QueuePanel, splitDocNo } from '../page';
+import { MediaLayer, QueuePanel, splitDocNo } from '../page';
 
 /**
  * Mijoz-ekran navbati (2026-09-01, egasining talabi).
@@ -127,5 +127,57 @@ describe('i18n — mijoz-ekran kalitlari', () => {
     for (const key of KEYS) {
       expect(bag[key], `${lang}: ${key}`).toBeTruthy();
     }
+  });
+});
+
+/**
+ * MEDIA — rolik KESILMASLIGI qulflandi (egasi, 2026-09-01: «videolar katta,
+ * mahsulotlar videolari to'liq ko'rinmayapti»).
+ *
+ * Nega qo'riqchi kerak: barcha mahsulot roliklari 1280x720 (16:9), media
+ * qutisi esa 960x~734 (~4:3). `objectFit: cover` da rolik balandlikka
+ * to'ladi va enidan 26.4% KESILADI — mahsulotning chap/o'ng chekkalari,
+ * izoh matnlari va spetsifikatsiya jadvali ekranga tushmaydi. Bu jimgina
+ * qaytishi juda oson: `cover` «media chetlarigacha to'lsin» degan eski
+ * talabga (u ham egasiniki) mos ko'rinadi va bir so'z bilan almashadi.
+ *
+ * Shu fayl tarixida layout regressiyasi allaqachon bir marta jonli
+ * televizorga chiqqan (`docs/ops/2026-09-01-deploy-cfd-layout-fix.md`) —
+ * shuning uchun bu yerda ko'rinish qarori testda turadi, izohda emas.
+ */
+describe('MediaLayer — rolik kesilmaydi', () => {
+  const noop = () => {};
+  const props = {
+    pid: 'p-1',
+    name: 'Termoregulyator',
+    on: true,
+    active: true,
+    onReady: noop,
+    onVideoMeta: noop,
+    onVideoError: noop,
+    onEnded: noop,
+  };
+
+  it('🔴 mahsulot roligi `contain` bilan chiziladi — `cover` EMAS', () => {
+    const { container } = render(<MediaLayer {...props} imageUrl={null} state={undefined} />);
+    const video = container.querySelector<HTMLVideoElement>('video[src="/media/videos/p-1.mp4"]');
+    expect(video, 'mahsulot roligi chizilmadi').not.toBeNull();
+    expect(video?.style.objectFit).toBe('contain');
+  });
+
+  it('🔴 brend-rolik ham `contain` — SHERSET yozuvining chetlari kesilmasin', () => {
+    // Rolik yo'q (`state: 'no'`) va rasm ham yo'q ⇒ zanjirning oxirgi bo'g'ini.
+    const { container } = render(<MediaLayer {...props} imageUrl={null} state="no" />);
+    const video = container.querySelector<HTMLVideoElement>('video[src="/brand/sherset-loop.mp4"]');
+    expect(video, 'brend-rolik chizilmadi').not.toBeNull();
+    expect(video?.style.objectFit).toBe('contain');
+  });
+
+  it('rasm zanjirda roliksiz holatda ishlatiladi va u ham `contain`', () => {
+    const { container } = render(
+      <MediaLayer {...props} imageUrl="https://example.test/a.jpg" state="no" />,
+    );
+    const img = container.querySelector<HTMLImageElement>('img');
+    expect(img?.style.objectFit).toBe('contain');
   });
 });
