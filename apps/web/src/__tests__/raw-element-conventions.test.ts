@@ -128,6 +128,9 @@ const EXEMPT_INPUT_TEXTNUM = [
   'app/(app)/sotuv/_components/smena-mode.tsx',
   'app/(app)/sotuv/_components/cheklar-mode.tsx',
   'app/(app)/sotuv/_components/sotuv-mode.tsx',
+  // V2 — Vozvrat rejimi qidiruv maydoni: cheklar-mode'dagi chek-qidiruv bilan
+  // AYNAN bir xil sabab (zich kassa terisi, 48px sensorli maydon, skaner Enter).
+  'app/(app)/sotuv/_components/vozvrat-mode.tsx',
   'components/pos/rasmilashtirish-modal.tsx',
   // F2 — savat qatorining sensorli tahrir oynasi. Yagona maydon: numpad
   // yozadigan faol qiymat (`type="text"` ATAYLAB — `type="number"` oraliq

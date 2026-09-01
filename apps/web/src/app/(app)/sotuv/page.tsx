@@ -9,6 +9,7 @@ import type { CartLine, SaleRow, UnresolvedSaleRow } from '@/app/(app)/sotuv/_co
 import { SmenaMode } from '@/app/(app)/sotuv/_components/smena-mode';
 import { SavatPanel, SotuvSearchGrid } from '@/app/(app)/sotuv/_components/sotuv-mode';
 import { usePrintOutcome } from '@/app/(app)/sotuv/_components/use-print-outcome';
+import { VozvratMode } from '@/app/(app)/sotuv/_components/vozvrat-mode';
 import {
   type OrderDetail,
   type OrderRow,
@@ -675,6 +676,9 @@ function SalesScreen({
   // `storeId` ham SERVER filtri — kassir o'z do'konining zakazini ko'radi.
   const { can: canDo } = usePermissions();
   const canSeeOrders = canDo('customerorder', 'view');
+  // V2 (egasi, 2026-09-01) — Vozvrat rejimi faqat qaytarish huquqi borga
+  // (Shavkat va b.); server qulfi `POST /retail-sales/:id/refund` da.
+  const canRefund = canDo('salesreturn', 'create');
   const [orderState, setOrderState] = useState<PosOrderState>('draft');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
@@ -1622,6 +1626,7 @@ function SalesScreen({
           onModeChange={setMode}
           badges={{ savat: cartCount, navbat: pickingSales.length + readySales.length }}
           canSeeOrders={canSeeOrders}
+          canRefund={canRefund}
           collapsed={sidebarCollapsed}
           onToggleCollapsed={toggleSidebar}
         />
@@ -1731,6 +1736,15 @@ function SalesScreen({
                 setSelectedChekId={setSelectedChekId}
                 onCopyToCart={copyChekToCart}
               />
+            </div>
+          )}
+
+          {/* ── VOZVRAT (V2) ── chekni tovar/mijoz bo'yicha topib qaytarish;
+              yon panelda `canRefund` bilan yashiringan, rejim o'z so'rovlarini
+              o'zi olib yuradi (CustomersPanel naqshi). */}
+          {mode === 'vozvrat' && (
+            <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden bg-[var(--ms-bg-surface)]">
+              <VozvratMode onCopyToCart={copyChekToCart} />
             </div>
           )}
 

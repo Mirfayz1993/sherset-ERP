@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Clock,
   Receipt,
+  RotateCcw,
   Settings,
   ShoppingCart,
   Users,
@@ -32,7 +33,14 @@ import { useTranslations } from 'next-intl';
  * POS rejim unioni — eski `tab` unionining vorisi ('savat'→'sotuv',
  * 'jarayonda'/'tayyor'→'navbat'). F3–F5 va F8 shu tipga tayanadi.
  */
-export type PosMode = 'sotuv' | 'navbat' | 'zakazlar' | 'cheklar' | 'mijozlar' | 'smena';
+export type PosMode =
+  | 'sotuv'
+  | 'navbat'
+  | 'zakazlar'
+  | 'cheklar'
+  | 'mijozlar'
+  | 'vozvrat'
+  | 'smena';
 
 export interface PosSidebarProps {
   mode: PosMode;
@@ -41,6 +49,8 @@ export interface PosSidebarProps {
   badges: { savat: number; navbat: number };
   /** `customerorder.view` — faqat UX; haqiqiy qulf serverda (eski tab-bar bilan bir xil). */
   canSeeOrders: boolean;
+  /** `salesreturn.create` — Vozvrat rejimi faqat huquqi borga (V2); qulf serverda. */
+  canRefund: boolean;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
@@ -125,6 +135,7 @@ export function PosSidebar({
   onModeChange,
   badges,
   canSeeOrders,
+  canRefund,
   collapsed,
   onToggleCollapsed,
 }: PosSidebarProps) {
@@ -144,6 +155,11 @@ export function PosSidebar({
       : []),
     { key: 'cheklar', icon: Receipt, label: t('sidebar_cheklar') },
     { key: 'mijozlar', icon: Users, label: t('sidebar_mijozlar') },
+    // V2 — vozvrat huquqi (`salesreturn.create`) borgagina ko'rinadi: egasining
+    // qarori bilan qaytarish faqat ayrim xodimlarda (Shavkat va b.).
+    ...(canRefund
+      ? [{ key: 'vozvrat' as const, icon: RotateCcw, label: t('sidebar_vozvrat') }]
+      : []),
   ];
 
   return (

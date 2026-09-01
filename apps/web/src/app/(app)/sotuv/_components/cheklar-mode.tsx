@@ -11,6 +11,7 @@
  * bo'lsa shunday — o'z so'rov/mutatsiyalarini O'ZI olib yuradi.
  */
 
+import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import {
   clampReturnQty,
@@ -145,7 +146,11 @@ function ChekStateBadge({ state, label }: { state: string; label: string }) {
   );
 }
 
-function ChekDetailPanel({
+/**
+ * EKSPORT (V2, 2026-09-01): Vozvrat rejimi (`vozvrat-mode.tsx`) ham shu
+ * panelni ochadi — qaytarish oqimi BITTA joyda qoladi, nusxa taqiqlanadi.
+ */
+export function ChekDetailPanel({
   saleId,
   onBack,
   onCopyToCart,
@@ -164,9 +169,14 @@ function ChekDetailPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
   const finishPrint = usePrintOutcome();
+  // V2 (egasi, 2026-09-01): qaytarish faqat `salesreturn.create` borga.
+  // Ilgari tugma HAMMAGA ko'rinardi — huquqsiz kassir bosib 403 yerdi.
+  // Haqiqiy qulf serverda (refund marshruti); bu faqat UX.
+  const { can } = usePermissions();
+  const canRefund = can('salesreturn', 'create');
   const [returnMode, setReturnMode] = useState(false);
-  // positionId → qaytariladigan miqdor, **decimal SATR** (defolt — to'liq
-  // sotilgan miqdor). FE-02: `number` bo'lganda kassir kasr miqdor kirita
+  // positionId → qaytariladigan miqdor, **decimal SATR** (defolt — 0, qarang
+  // `startReturn`). FE-02: `number` bo'lganda kassir kasr miqdor kirita
   // olmasdi — «1.» yozilishi bilan nuqta o'chib ketardi, ya'ni og'irlik
   // bilan sotilgan tovarni qisman qaytarib bo'lmasdi.
   const [returnQty, setReturnQty] = useState<Record<string, string>>({});
@@ -318,6 +328,9 @@ function ChekDetailPanel({
       setReturnQty({});
       qc.invalidateQueries({ queryKey: ['retail-sale-detail', saleId] });
       qc.invalidateQueries({ queryKey: ['retail-sales-session'] });
+      // V2 — Vozvrat rejimi ro'yxati ham yangilansin (to'liq qaytarilgan chek
+      // `posted` dan chiqadi va ro'yxatdan yo'qolishi kerak).
+      qc.invalidateQueries({ queryKey: ['pos-vozvrat-cheklar'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -476,6 +489,7 @@ function ChekDetailPanel({
           </button>
         )}
         {data.state === 'posted' &&
+          canRefund &&
           (returnMode ? (
             <button
               type="button"
@@ -700,7 +714,10 @@ function ChekDetailPanel({
         </div>
 
         {/* Positions */}
-        <div className="rounded-xl border border-[var(--ms-border)] overflow-hidden">
+        <div
+          data-test-id="chek-positions-card"
+          className="rounded-xl border border-[var(--ms-border)] overflow-hidden"
+        >
           <div className="flex items-center justify-between bg-[var(--ms-bg-app)] px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ms-text-muted)]">
             <span>{t('products')}</span>
             {returnMode && (

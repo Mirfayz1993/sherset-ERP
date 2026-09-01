@@ -441,6 +441,8 @@ export class RetailSaleService {
       // F9 — POS mijoz kartasi. Berilmasa `where` ga UMUMAN tushmaydi, ya'ni
       // mavjud ro'yxat sahifasining so'rov shakli o'zgarmaydi.
       ...(filter.agentId ? { agentId: filter.agentId } : {}),
+      // V1 — Vozvrat oynasi: tovar bo'yicha chek qidiruvi.
+      ...(filter.productId ? { positions: { some: { productId: filter.productId } } } : {}),
       ...(filter.state ? { state: filter.state } : {}),
       ...(filter.dateFrom || filter.dateTo
         ? {

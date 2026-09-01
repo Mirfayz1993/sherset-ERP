@@ -5,6 +5,8 @@
  *  · 6 bo'lim: Sotuv · Navbat · Zakazlar · Cheklar · Mijozlar · Smena;
  *    `canSeeOrders=false` da Zakazlar chizilmaydi (ruxsat UX'i — haqiqiy
  *    qulf serverda, eski tab-bar bilan bir xil);
+ *  · V2: `canRefund=true` bo'lsa Mijozlar OSTIDA Vozvrat bo'limi chiziladi,
+ *    `false` da YO'Q (egasi 2026-09-01: qaytarish faqat ayrim xodimlarda);
  *  · badge'lar (savat soni, navbat soni) ko'rinadi; 0 bo'lsa chizilmaydi;
  *  · bo'lim bosilsa `onModeChange` TO'G'RI mode bilan chaqiriladi;
  *  · yig'ish tugmasi `onToggleCollapsed` chaqiradi;
@@ -23,6 +25,7 @@ function renderSidebar(over: Partial<PosSidebarProps> = {}) {
     onModeChange: vi.fn(),
     badges: { savat: 0, navbat: 0 },
     canSeeOrders: true,
+    canRefund: false,
     collapsed: false,
     onToggleCollapsed: vi.fn(),
     ...over,
@@ -60,6 +63,21 @@ describe('PosSidebar — bo‘limlar', () => {
     renderSidebar({ mode: 'cheklar' });
     expect(screen.getByRole('button', { name: 'Cheklar' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Sotuv' })).not.toHaveAttribute('aria-current');
+  });
+
+  // V2 (egasi, 2026-09-01) — Vozvrat faqat `salesreturn.create` borga.
+  it('`canRefund=false` (defolt) da Vozvrat bo‘limi YO‘Q', () => {
+    renderSidebar();
+    expect(screen.queryByRole('button', { name: 'Vozvrat' })).not.toBeInTheDocument();
+  });
+
+  it('`canRefund=true` da Vozvrat chiziladi va bosilsa `onModeChange("vozvrat")`', async () => {
+    const user = userEvent.setup();
+    const props = renderSidebar({ canRefund: true });
+    const btn = screen.getByRole('button', { name: 'Vozvrat' });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(props.onModeChange).toHaveBeenCalledWith('vozvrat');
   });
 });
 

@@ -77,6 +77,10 @@ async function openRefund(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /Usta Vali/ }));
   await screen.findByText('CHEK-00001');
   await user.click(screen.getByRole('button', { name: '↩ Qaytarish' }));
+  // 2026-09-01: rejim endi 0 bilan ochiladi (chek-detail-panel.test.tsx da
+  // qulflangan) — bu fayl TO'LIQ qaytarish summalarini sinaydi, shuning uchun
+  // «Hammasini qaytarish» bosiladi.
+  await user.click(screen.getByTestId('pos-refund-fill-all'));
 }
 
 function refundQtyInputs(): HTMLElement[] {

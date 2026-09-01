@@ -365,6 +365,11 @@ export const RetailSaleFilterSchema = z.object({
   // o'qiydi. `search` (agent.name contains) buning o'rnini bosolmaydi: bir
   // xil ismli ikki mijoz aralashib ketardi.
   agentId: z.string().uuid().optional(),
+  // V1 — POS Vozvrat oynasi: «shu tovar qatnashgan barcha cheklar». Mijozsiz
+  // (naqd) chekni faqat tovar orqali topish mumkin; `search` (name/agent.name)
+  // buning o'rnini bosolmaydi. Indeks tayyor: RetailSalePosition
+  // @@index([accountId, productId]).
+  productId: z.string().uuid().optional(),
   state: RetailSaleStateSchema.optional(),
   // G2 — omborchi paneli. `/omborchi` sahifasi `assigneeId` ni 2026-08 dan beri
   // YUBORARDI, lekin sxema uni jimgina tashlab yuborardi (z.object unknown

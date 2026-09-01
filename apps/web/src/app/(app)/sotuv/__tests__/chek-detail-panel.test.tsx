@@ -157,8 +157,9 @@ describe('ChekDetailPanel — ko‘rinish', () => {
     renderWithProviders(<SotuvPage />);
     await openChekDetail(user);
 
-    // Tovar nomi chap ustundagi setkada ham bor — «Tovarlar» kartasi ichida qidiramiz.
-    const card = screen.getByText('Tovarlar').parentElement as HTMLElement;
+    // Tovar nomi chap ustundagi setkada ham bor — «Tovarlar» kartasi ichida
+    // qidiramiz (V2: sarlavha endi flex-qator, matndan karta topilmaydi).
+    const card = screen.getByTestId('chek-positions-card');
     expect(norm(card.textContent)).toContain('Kabel 2×2.5');
     expect(norm(card.textContent)).toContain('18 000,00 сум'); // chegirmali qator summasi
     expect(norm(card.textContent)).toContain('2 × 10 000,00 сум');
@@ -300,7 +301,10 @@ describe('Cheklar tabida qidiruv (F6)', () => {
 });
 
 describe('ChekDetailPanel — qaytarish', () => {
-  it('qaytarish rejimi to‘liq miqdor bilan ochiladi va summa CHEGIRMALIdan olinadi', async () => {
+  // 2026-09-01 (kassir shikoyati, egasi tasdig'i): rejim endi 0 BILAN ochiladi —
+  // ilgari to'liq son bilan ochilardi va bitta tovarni qaytarish uchun qolgan
+  // hammasini qo'lda 0 ga tushirish kerak edi (bexosdan to'liq vozvrat xavfi).
+  it('qaytarish rejimi 0 bilan ochiladi — tasdiq BLOKLANGAN', async () => {
     const user = userEvent.setup();
     renderWithProviders(<SotuvPage />);
     await openChekDetail(user);
@@ -309,10 +313,33 @@ describe('ChekDetailPanel — qaytarish', () => {
 
     const inputs = refundQtyInputs();
     expect(inputs).toHaveLength(1);
-    expect(at(inputs, 0)).toHaveValue('2');
+    expect(at(inputs, 0)).toHaveValue('0');
+    expect(screen.getByRole('button', { name: /Qaytarishni tasdiqlash/ })).toBeDisabled();
+  });
+
+  it('«Hammasini qaytarish» to‘liq miqdorni to‘ldiradi va summa CHEGIRMALIdan olinadi', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openChekDetail(user);
+
+    await user.click(screen.getByRole('button', { name: '↩ Qaytarish' }));
+    await user.click(screen.getByTestId('pos-refund-fill-all'));
+
+    expect(at(refundQtyInputs(), 0)).toHaveValue('2');
     // 2 dona to'liq qaytsa — chegirmali qator summasi (18 000), 20 000 EMAS.
     const footer = screen.getByText('Qaytariladigan summa (naqd)').parentElement as HTMLElement;
     expect(norm(footer.textContent)).toContain('18 000,00 сум');
+  });
+
+  it('qatordagi «/ N» tugmasi o‘sha qatorni to‘liq soniga to‘ldiradi', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openChekDetail(user);
+
+    await user.click(screen.getByRole('button', { name: '↩ Qaytarish' }));
+    await user.click(screen.getByRole('button', { name: '/ 2' }));
+
+    expect(at(refundQtyInputs(), 0)).toHaveValue('2');
   });
 
   it('qisman qaytarish summani proporsional kamaytiradi', async () => {
@@ -360,6 +387,8 @@ describe('ChekDetailPanel — qaytarish', () => {
     await openChekDetail(user);
 
     await user.click(screen.getByRole('button', { name: '↩ Qaytarish' }));
+    // V2 xulqi: 0 dan boshlanadi — to'liq qaytarish endi bitta tugma.
+    await user.click(screen.getByTestId('pos-refund-fill-all'));
     await user.click(screen.getByRole('button', { name: /Qaytarishni tasdiqlash/ }));
 
     await waitFor(() => expect(api.post).toHaveBeenCalled());
