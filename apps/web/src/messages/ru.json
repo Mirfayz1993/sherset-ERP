@@ -9428,6 +9428,8 @@
       "header_conn_ok": "Связь с сервером есть",
       "header_sales": "{n} продаж · {sum}",
       "header_shift_age": "открыта {age}",
+      "language": "Язык",
+      "locale_change_failed": "Не удалось изменить язык",
       "new_customer": "+ Новый клиент",
       "new_customer_name_placeholder": "Имя Фамилия / Название организации",
       "not_found": "Не найдено",

@@ -56,6 +56,12 @@ const POS_FILES = [
   // A1 avans qabuli). Ro'yxatga qo'shilmasa yangi kalitlar va matnlar
   // qo'riqchidan chetda qolardi — aynan shu fayl uchun mo'ljallangan bug-klass.
   join(SRC, 'components', 'pos', 'customers-panel.tsx'),
+  // FAZA 1 (kassa ikki tilli, 2026-09-01) — kioskdagi til almashtirgich.
+  // Ikkala reyestrga ham kiradi: bu yerda kalit MAVJUDLIGI (uz+ru) tekshiriladi,
+  // `i18n-no-hardcoded.test.ts` da esa AST bo'yicha hardcoded matn. Yangi
+  // kalitlar (`pages.pos.language`, `pages.pos.locale_change_failed`) shu
+  // qatorsiz faqat bitta bandlda qolib ketishi mumkin edi.
+  join(SRC, 'components', 'pos', 'pos-locale-toggle.tsx'),
 ];
 
 const rel = (f: string) => f.replace(SRC, 'src').replace(/\\/g, '/');

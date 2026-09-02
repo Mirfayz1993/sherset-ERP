@@ -278,6 +278,10 @@ const POS_DONE_FILES = [
   'components/pos/shell-version-badge.tsx',
   // K3 (bo'linadigan tovar) — kassirga bo'lak tarkibi va taklif.
   'components/pos/piece-offer-panel.tsx',
+  // FAZA 1 (kassa ikki tilli, 2026-09-01) — kioskdagi til almashtirgich.
+  // Faza 0 da yoyilgan qochish-qulfi bu faylni MEXANIK talab qiladi:
+  // `components/pos/` ichidagi har bir `.tsx` shu ro'yxatda turishi shart.
+  'components/pos/pos-locale-toggle.tsx',
   'app/(app)/sotuv/page.tsx',
   // F1 (POS redizayn) — page.tsx dan ajratilgan rejim-komponentlar.
   'app/(app)/sotuv/_components/smena-mode.tsx',
