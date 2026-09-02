@@ -30,6 +30,7 @@ const COUNT_NUMPAD_USD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0',
 const COUNT_MAX_LEN = 12;
 
 import { PosLocaleToggle } from '@/components/pos/pos-locale-toggle';
+import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import type { CurrentSession } from '@moysklad/contracts';
 import { formatMoney } from '@moysklad/ui';
@@ -145,6 +146,7 @@ export function SmenaMode({
   // F9 — mijoz kartasi yorliqlari POS komponentlari bilan bir joyda
   // (`pages.pos`), chunki panelning o'zi shu namespace'ni o'qiydi.
   const tPos = useTranslations('pages.pos');
+  const bcp47 = useBcp47();
 
   // ── F5 — yopiq sanoq holat mashinasi ──────────────────────────────────────
   // `idle` = showCloseForm false. Bosqich SHU yerda: sahifa faqat qiymatlarni
@@ -226,7 +228,7 @@ export function SmenaMode({
         <div className="flex justify-between mb-1">
           <span className="text-[var(--ms-text-muted)]">{t('opened_at')}</span>
           <span className="font-medium tabular-nums">
-            {new Date(session.openedAt).toLocaleTimeString('uz-UZ', {
+            {new Date(session.openedAt).toLocaleTimeString(bcp47, {
               hour: '2-digit',
               minute: '2-digit',
             })}

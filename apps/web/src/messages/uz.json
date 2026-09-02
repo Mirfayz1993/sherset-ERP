@@ -1596,6 +1596,7 @@
     "customer_display": {
       "cart_empty": "Xaridlaringiz shu yerda ko'rinadi",
       "cart_title": "SIZNING XARIDINGIZ",
+      "cash_desk_fallback": "Kassa №1",
       "discount": "Chegirma",
       "in_queue": "navbatda",
       "items_count": "{count, plural, other {# ta mahsulot}}",

@@ -31,8 +31,10 @@
 // Brauzerda sinash (Electron'siz):  /customer-display?demo=1
 
 import './cfd-theme.css';
+import { LOCALE_COOKIE, isLocale } from '@/i18n/config';
 import { api } from '@/lib/api-client';
 import { getAccessToken, refresh } from '@/lib/auth-store';
+import { useBcp47 } from '@/lib/i18n-format';
 import { CART_DRAFTS_STORAGE_KEY, parseCartDrafts } from '@/lib/pos/cart-drafts';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
 import { scaleMinorByQty } from '@moysklad/money';
@@ -52,6 +54,16 @@ const QUEUE_MAX_CARDS = 6;
 /** Savat qatori balandligi (maket) — avto-aylanish masofasi shundan hisoblanadi. */
 const ROW_H = 64;
 const API = '/api/v1';
+/**
+ * Til o'zgarganini tekshirish oralig'i (`useLocaleSync`).
+ *
+ * `QUEUE_POLL_MS` (8 s) QAYTA ISHLATILMAYDI: u `tokenReady` ga bog'liq, til
+ * esa tokendan mustaqil bo'lishi kerak — token kelmasa ham ekran to'g'ri
+ * tilda turishi shart. Qolaversa kassir uchun 2 s «darhol» tuyuladi.
+ */
+const LOCALE_POLL_MS = 2000;
+/** Sikl qo'riqchisi belgisi — QAYSI tilga o'tish uchun reload qilinganini eslaydi. */
+const LOCALE_RELOAD_KEY = 'cfd.localeReloadFor';
 
 // ── IPC shartnomasi — kassir oynasi shu shaklda uzatadi ─────────────────────
 interface CartLineDTO {
@@ -183,6 +195,8 @@ export default function CustomerDisplayPage() {
   const lines = payload.lines;
   const { picking, ready, cashDeskName } = useQueue(tokenReady, demo);
   const parked = useParkedDrafts(demo);
+  // Kassada til almashtirilsa shu oyna o'zi qayta yuklanadi (sabab hook izohida).
+  useLocaleSync();
 
   // ── 3. Har mahsulot uchun media'ni bir marta yuklab, keshlab qo'yish ──────
   // (karusel 5s'da almashganda "sekin ochilish" bo'lmasin — oldindan preload.)
@@ -354,6 +368,118 @@ function useParkedDrafts(demo: boolean): number[] {
 }
 
 /**
+ * `NEXT_LOCALE` cookie qiymati (yo'q yoki buzuq bo'lsa `null`).
+ *
+ * Cookie `httpOnly` EMAS (`middleware.ts`, `app/actions/locale.ts`) — shuning
+ * uchun sahifa uni o'zi o'qiy oladi. `decodeURIComponent` buzuq %-ketma-ketlikda
+ * OTADI; shuning uchun try/catch — mijoz turgan ekran hech qachon oq bo'lib
+ * qolmasligi kerak.
+ */
+function readLocaleCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const part of document.cookie.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== LOCALE_COOKIE) continue;
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Sikl-belgisini o'qiydi. Storage yo'q bo'lsa `null`. */
+function readReloadMark(): string | null {
+  try {
+    return window.sessionStorage.getItem(LOCALE_RELOAD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Belgini yozadi. `false` — yozib bo'lmadi ⇒ reload QILINMAYDI (4-qo'riqchi). */
+function writeReloadMark(locale: string): boolean {
+  try {
+    window.sessionStorage.setItem(LOCALE_RELOAD_KEY, locale);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Belgini o'chiradi (til mos kelganda). Storage yo'q bo'lsa — tozalanadigani ham yo'q. */
+function clearReloadMark(): void {
+  try {
+    window.sessionStorage.removeItem(LOCALE_RELOAD_KEY);
+  } catch {
+    /* storage mavjud emas */
+  }
+}
+
+/**
+ * Kassada til almashtirilganda mijoz-ekran O'ZI ergashadi.
+ *
+ * Sahifaning tili root layout'da SERVER tomonda hal qilinadi
+ * (`app/layout.tsx` → `NextIntlClientProvider`), ya'ni uni yangilash uchun
+ * sahifa server'dan qayta render bo'lishi shart. Shuning uchun bu yerda jonli
+ * almashtirish emas, QAYTA YUKLASH bor — va u xavfsiz: mijoz-ekranda
+ * saqlanadigan holat YO'Q, savatni qobiq `did-finish-load` da qayta yuboradi
+ * (`desktop/main.js`).
+ *
+ * 🔴 Nega cookie POLL, IPC yoki BroadcastChannel EMAS:
+ *   • Yangi IPC maydoni — `main.js` `normalizeCart()` payload'ni oq ro'yxat
+ *     bo'yicha qayta quradi, ya'ni O'RNATILGAN qobiq (v1.9.0) uni tashlab
+ *     yuborardi va yangi `.exe` kerak bo'lardi.
+ *   • `BroadcastChannel` — bu faylda bor, lekin FAQAT brauzer yo'lida (Electron
+ *     yo'li undan oldin `return` qiladi); ikki Electron oynasi orasida hech
+ *     qachon o'lchanmagan. Tasdiqlanmagan mexanizmga tayanilmaydi.
+ *   • Cookie esa umumiyligi JONLIDA isbotlangan: mijoz-oyna auth tokenini aynan
+ *     shu umumiy sessiyadan oladi (`main.js` — `partition` ataylab berilmagan).
+ *     Qolaversa cookie'ni SERVER o'qiydi, ya'ni u yagona haqiqat manbai —
+ *     nusxa saqlanmaydi, demak desinxron bo'lish imkoni ham yo'q.
+ *
+ * Qo'riqchilar — har biri aniq nosozlikni yopadi, O'CHIRMA:
+ *   1. `isLocale` — bo'sh yoki buzuq cookie render tiliga hech qachon teng
+ *      bo'lmaydi, ya'ni tekshiruvsiz har turda CHEKSIZ RELOAD bo'lardi.
+ *      Middleware buni deyarli imkonsiz qiladi, lekin mijoz turgan ekranda
+ *      «deyarli» yetarli emas.
+ *   2. `sessionStorage` belgisi — reload'dan keyin ham mos kelmasa (masalan
+ *      server eski tilni bersa) ikkinchi marta urinilmaydi. Bu `main.js` dagi
+ *      `cfdRetries` naqshining aynan o'zi.
+ *   3. Belgi `cookie === rendered` bo'lganda TOZALANADI — aks holda ikkinchi
+ *      marta til o'zgartirilganda hook boshqa ishlamay qolardi.
+ *   4. Belgini YOZIB BO'LMASA — reload QILINMAYDI (fail-closed). Aks holda
+ *      storage o'chirilgan muhitda har 2 soniyada qayta yuklanadigan ekran
+ *      paydo bo'lardi; eski tilda turgan ekran undan yaxshiroq.
+ *
+ * `sessionStorage`, localStorage EMAS: belgi shu OYNA sessiyasiga tegishli.
+ * localStorage kassir oynasiga ham ko'rinardi va ma'nosiz umumiy holat yaratardi.
+ */
+export function useLocaleSync(): void {
+  const rendered = useLocale();
+
+  useEffect(() => {
+    // Darhol tekshirilmaydi: sahifa hozirgina AYNI shu cookie bilan render
+    // bo'lgan, ya'ni mount paytida ular doim mos keladi.
+    const id = setInterval(() => {
+      const next = readLocaleCookie();
+      if (!isLocale(next)) return; // 1-qo'riqchi
+      if (next === rendered) {
+        clearReloadMark(); // 3-qo'riqchi
+        return;
+      }
+      if (readReloadMark() === next) return; // 2-qo'riqchi
+      if (!writeReloadMark(next)) return; // 4-qo'riqchi
+      window.location.reload();
+    }, LOCALE_POLL_MS);
+
+    return () => clearInterval(id);
+  }, [rendered]);
+}
+
+/**
  * Navbat manbasi — sahifaning O'Z so'rovi (IPC EMAS, sababi fayl boshida).
  *
  * Har turda avval joriy smena-sessiyasi so'raladi: kassirlar bitta qurilmada
@@ -372,12 +498,13 @@ function useQueue(
   const [picking, setPicking] = useState<QueueSale[]>([]);
   const [ready, setReady] = useState<QueueSale[]>([]);
   const [cashDeskName, setCashDeskName] = useState<string | null>(null);
+  const t = useTranslations('pages.customer_display');
 
   useEffect(() => {
     if (demo) {
       setPicking(DEMO_PICKING);
       setReady(DEMO_READY);
-      setCashDeskName('Kassa №1');
+      setCashDeskName(t('cash_desk_fallback'));
       return;
     }
     if (!tokenReady) return;
@@ -413,7 +540,7 @@ function useQueue(
       alive = false;
       clearInterval(id);
     };
-  }, [tokenReady, demo]);
+  }, [tokenReady, demo, t]);
 
   return { picking, ready, cashDeskName };
 }
@@ -444,7 +571,7 @@ export function splitDocNo(name: string): { prefix: string; tail: string } {
 // ─────────────────────────────────────────────────────────────────────────────
 function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
   const t = useTranslations('pages.customer_display');
-  const locale = useLocale();
+  const bcp47 = useBcp47();
   // 🔴 Soat `null` dan boshlanadi va faqat mount'dan keyin to'ladi: server va
   // brauzer vaqti bir xil bo'lmasligi mumkin va React gidratatsiya nomuvofiqligi
   // haqida ogohlantirardi (ekran mijoz oldida — konsol xatosi kerak emas).
@@ -492,7 +619,7 @@ function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
           style={{ fontSize: 34, fontWeight: 700, color: 'var(--cfd-ink)' }}
         >
           {now
-            ? now.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'uz-UZ', {
+            ? now.toLocaleTimeString(bcp47, {
                 hour: '2-digit',
                 minute: '2-digit',
               })
@@ -550,7 +677,7 @@ export function QueuePanel({
   parked: number[];
 }) {
   const t = useTranslations('pages.customer_display');
-  const locale = useLocale();
+  const bcp47 = useBcp47();
   type Card =
     | { kind: 'sale'; key: string; sale: QueueSale; done: boolean }
     | { kind: 'hold'; key: string; at: number };
@@ -573,7 +700,7 @@ export function QueuePanel({
           c.kind === 'sale' ? (
             <QueueCard key={c.key} sale={c.sale} done={c.done} />
           ) : (
-            <HoldCard key={c.key} at={c.at} locale={locale} />
+            <HoldCard key={c.key} at={c.at} bcp47={bcp47} />
           ),
         )}
         {rest > 0 && (
@@ -706,9 +833,9 @@ function QueueCard({ sale, done }: { sale: QueueSale; done: boolean }) {
  * chek raqami YO'Q (u serverga bormagan), POS chipida ham kassir uni vaqt
  * bo'yicha taniydi — mijoz-ekran o'sha tilda gaplashadi.
  */
-function HoldCard({ at, locale }: { at: number; locale: string }) {
+function HoldCard({ at, bcp47 }: { at: number; bcp47: string }) {
   const t = useTranslations('pages.customer_display');
-  const time = new Date(at).toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'uz-UZ', {
+  const time = new Date(at).toLocaleTimeString(bcp47, {
     hour: '2-digit',
     minute: '2-digit',
   });

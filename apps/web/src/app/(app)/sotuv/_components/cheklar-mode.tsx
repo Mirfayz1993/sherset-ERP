@@ -13,6 +13,7 @@
 
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import {
   clampReturnQty,
   normalizeQtyDecimal,
@@ -161,6 +162,7 @@ export function ChekDetailPanel({
 }) {
   const t = useTranslations('pages.sotuv');
   const tCommon = useTranslations('common');
+  const bcp47 = useBcp47();
   const { data, isLoading } = useQuery<ChekDetailData>({
     queryKey: ['retail-sale-detail', saleId],
     queryFn: () => api.get(`/retail-sales/${saleId}`),
@@ -382,7 +384,7 @@ export function ChekDetailPanel({
         <div className="min-w-0 flex-1">
           <div className="font-bold text-[var(--ms-text-primary)]">{data.name}</div>
           <div className="text-xs text-[var(--ms-text-muted)]">
-            {new Date(data.moment).toLocaleString('uz-UZ', {
+            {new Date(data.moment).toLocaleString(bcp47, {
               day: '2-digit',
               month: '2-digit',
               hour: '2-digit',
@@ -945,6 +947,7 @@ export function CheklarMode({
   onCopyToCart,
 }: CheklarModeProps) {
   const t = useTranslations('pages.sotuv');
+  const bcp47 = useBcp47();
   const listStateLabel = chekStateLabels(t);
   const chekQuery = chekSearch.trim();
 
@@ -1000,7 +1003,7 @@ export function CheklarMode({
                       {formatMoney(BigInt(sale.sumMinor))}
                     </span>
                     <span className="shrink-0 text-[14px] text-[var(--ms-text-muted)]">
-                      {new Date(sale.moment).toLocaleTimeString('uz-UZ', {
+                      {new Date(sale.moment).toLocaleTimeString(bcp47, {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}

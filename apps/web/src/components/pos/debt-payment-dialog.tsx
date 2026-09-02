@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import { formatAmountInput, parseAmountToMinor } from '@/lib/pos/parse-amount';
 import { formatForeignMajor } from '@/lib/pos/receipt-payments';
 import { RATE_SCALE, convertByRateE8 } from '@moysklad/money';
@@ -134,9 +135,13 @@ function newRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function fmtDate(iso: string | null): string {
+/**
+ * FAZA 3 (2026-09-01): BCP-47 teg PARAMETR — modul darajasidagi sof
+ * funksiyada hook chaqirib bo'lmaydi (`customer-card-panel.tsx` bilan bir naqsh).
+ */
+function fmtDate(iso: string | null, bcp47: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('uz-UZ', {
+  return new Date(iso).toLocaleDateString(bcp47, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -175,6 +180,7 @@ export function DebtPaymentDialog({
   onPaid,
 }: Props) {
   const qc = useQueryClient();
+  const bcp47 = useBcp47();
   const t = useTranslations('pages.pos');
   const tCommon = useTranslations('common');
   const [search, setSearch] = useState('');
@@ -596,7 +602,7 @@ export function DebtPaymentDialog({
                       <div className="mt-1 text-orange-700 text-xs">
                         {t('debt_meta', {
                           count: summary?.openCount ?? 0,
-                          date: fmtDate(summary?.oldestAt ?? null),
+                          date: fmtDate(summary?.oldestAt ?? null, bcp47),
                         })}
                         {oldestDays !== null &&
                           oldestDays > 0 &&
@@ -627,7 +633,7 @@ export function DebtPaymentDialog({
                           className="flex items-center justify-between rounded-lg border border-[var(--ms-border)] px-3 py-1.5 text-xs"
                         >
                           <span className="text-[var(--ms-text-muted)]">
-                            {d.name} · {fmtDate(d.orderAt)}
+                            {d.name} · {fmtDate(d.orderAt, bcp47)}
                           </span>
                           <span className="font-medium tabular-nums">
                             {formatMoney(BigInt(d.outstandingMinor))}

@@ -13,6 +13,7 @@
 
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
 import { Button, formatMoney, useToast } from '@moysklad/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -225,6 +226,7 @@ export function ZakazlarMode({
   paying,
 }: ZakazlarModeProps) {
   const t = useTranslations('pages.sotuv');
+  const bcp47 = useBcp47();
 
   // F4 (spec §5.3) — to'liq-ekran: chapda holat-filtri + ro'yxat (64px
   // qatorlar), o'ngda detal-panel. Detal ilgari ro'yxat O'RNIGA chizilardi;
@@ -279,7 +281,7 @@ export function ZakazlarMode({
                     {formatMoney(BigInt(o.sumMinor))}
                   </div>
                   <div className="text-[14px] text-[var(--ms-text-muted)] tabular-nums">
-                    {new Date(o.moment).toLocaleDateString('uz-UZ', {
+                    {new Date(o.moment).toLocaleDateString(bcp47, {
                       day: '2-digit',
                       month: '2-digit',
                     })}

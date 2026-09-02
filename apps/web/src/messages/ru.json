@@ -1596,6 +1596,7 @@
     "customer_display": {
       "cart_empty": "Ваши покупки появятся здесь",
       "cart_title": "ВАША ПОКУПКА",
+      "cash_desk_fallback": "Касса №1",
       "discount": "Скидка",
       "in_queue": "в очереди",
       "items_count": "{count, plural, one {# товар} few {# товара} many {# товаров} other {# товара}}",

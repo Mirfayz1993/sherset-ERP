@@ -15,6 +15,7 @@
  * smena-strip olib tashlandi (ma'lumot PosHeader chip'ida).
  */
 
+import { useBcp47 } from '@/lib/i18n-format';
 import {
   cartLineMarkdownMinor,
   cartLineProfitMinor,
@@ -82,6 +83,7 @@ export function SotuvSearchGrid({
   addToCart,
 }: SotuvSearchGridProps) {
   const t = useTranslations('pages.sotuv');
+  const bcp47 = useBcp47();
   // Narx qavati id'si SHART: usiz resolver `salePrices[0]` ga tushadi va u
   // yozilish tartibi bo'yicha «Оптовая» bo'lishi mumkin (2026-08-23 auditi).
   const { defaultId } = usePriceTypeIds();
@@ -212,7 +214,7 @@ export function SotuvSearchGrid({
                           : 'text-[var(--ms-text-muted)]'
                       }
                     >
-                      {t('stock')}: {onHand.toLocaleString('uz-UZ')} {t('pieces')}
+                      {t('stock')}: {onHand.toLocaleString(bcp47)} {t('pieces')}
                     </span>
                     {/* «Kelgan» — ekranda KO'RSATILMAYDI (P02, 2026-08-13,
                         egasi): mijoz ko'zi oldida tan narx ochiq turmasin.

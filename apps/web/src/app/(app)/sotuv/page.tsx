@@ -32,6 +32,7 @@ import { useFillViewport } from '@/hooks/use-fill-viewport';
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-store';
+import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import {
   CART_DRAFTS_STORAGE_KEY,
@@ -335,6 +336,7 @@ function SalesScreen({
 }) {
   const t = useTranslations('pages.sotuv');
   const tCommon = useTranslations('common');
+  const bcp47 = useBcp47();
   // P4 — smena yoshi. `openMinutes` ni SERVER beradi (chegara MK13
   // registrida), ekran faqat matnga aylantiradi.
   const shiftAge = formatShiftAge(session.openMinutes, t);
@@ -1007,7 +1009,7 @@ function SalesScreen({
     () =>
       cartDrafts.map((d) => ({
         id: d.id,
-        timeLabel: new Date(d.createdAt).toLocaleTimeString('uz-UZ', {
+        timeLabel: new Date(d.createdAt).toLocaleTimeString(bcp47, {
           hour: '2-digit',
           minute: '2-digit',
         }),
@@ -1020,7 +1022,7 @@ function SalesScreen({
           })),
         ),
       })),
-    [cartDrafts],
+    [cartDrafts, bcp47],
   );
 
   /**

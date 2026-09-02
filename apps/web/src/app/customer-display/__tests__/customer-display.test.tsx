@@ -117,6 +117,13 @@ describe('i18n — mijoz-ekran kalitlari', () => {
     'queue_title',
     'total',
     'welcome',
+    // FAZA 0 (2026-09-01): bu uchtasi ekranda CHIZILADI, lekin ro'yxatda
+    // yo'q edi — `tagline` xush-kelibsiz panelida, `som` har bir narx
+    // yonida, `in_queue` navbat kartasida. Bittasi yetishmasa next-intl
+    // otiladi va mijoz-ekran OQ qoladi.
+    'tagline',
+    'som',
+    'in_queue',
   ];
 
   it.each([
