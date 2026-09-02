@@ -128,6 +128,12 @@ export function TovarChek({
   // Nom ustuni o'ralganda (80mm da 3-4 qator bo'ladi) qisqa ustunlar tepada
   // osilib qolmasin — namunada bunday qator yo'q, lekin «tepada» ko'rinishi buzuq.
   const midCell: React.CSSProperties = { ...cell, textAlign: 'center', verticalAlign: 'middle' };
+  // № va «Soni» — RAQAM kataklari: hech qachon ikkiga bo'linmaydi. Electron-HTML
+  // renderer'ida aynan shu ustunlar 200 ni «20»+«0» qilib sindirgan edi
+  // (egasining fotosi, 2026-09-02); shablon bitta bo'lishi uchun bu yerda ham
+  // AYNI qoida. `fmtQty` ru-RU guruh ajratgichi bilan chiqadi («2 000») —
+  // nowrap'siz u probel joyidan ham sinardi.
+  const numCell: React.CSSProperties = { ...midCell, whiteSpace: 'nowrap' };
 
   return (
     <div
@@ -198,10 +204,10 @@ export function TovarChek({
       >
         <thead>
           <tr style={{ fontWeight: 700 }}>
-            <td style={{ ...cell, width: 14, textAlign: 'center' }}>№</td>
+            <td style={{ ...numCell, width: 22 }}>№</td>
             <td style={{ ...cell, textAlign: 'center' }}>{t('chek_col_name')}</td>
             <td style={{ ...cell, width: 24, textAlign: 'center' }}>{t('chek_col_uom')}</td>
-            <td style={{ ...cell, width: 26, textAlign: 'center' }}>{t('chek_col_qty')}</td>
+            <td style={{ ...numCell, width: 34 }}>{t('chek_col_qty')}</td>
             <td style={{ ...numHead, width: 52 }}>{t('chek_col_price')}</td>
             <td style={{ ...numHead, width: 58 }}>{t('chek_col_sum')}</td>
           </tr>
@@ -209,10 +215,10 @@ export function TovarChek({
         <tbody>
           {positions.map((p, i) => (
             <tr key={p.position}>
-              <td style={midCell}>{i + 1}</td>
+              <td style={numCell}>{i + 1}</td>
               <td style={{ ...cell, textAlign: 'center', verticalAlign: 'middle' }}>{p.name}</td>
               <td style={midCell}>{p.uom ?? '—'}</td>
-              <td style={midCell}>{fmtQty(p.quantity)}</td>
+              <td style={numCell}>{fmtQty(p.quantity)}</td>
               <td style={{ ...num, verticalAlign: 'middle' }}>{fmtSom(p.priceMinor)}</td>
               <td style={{ ...num, verticalAlign: 'middle' }}>{fmtSom(p.sumMinor)}</td>
             </tr>

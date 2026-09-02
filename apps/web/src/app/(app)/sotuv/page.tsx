@@ -954,15 +954,31 @@ function SalesScreen({
   );
 
   // SOTUVSIZ CHEK (2026-08-16, egasi): savatdan chek — sotuv/hujjat YO'Q,
-  // serverga hech nima yozilmaydi. Chek raqami vaqtdan (haqiqiy cheklar
-  // bilan to'qnashmaydi). Muvaffaqiyatda savat qoralamaga o'tadi — «chekni
-  // o'zgartirish» = chipni ochish → o'zgartirish → yana chiqarish.
+  // serverga hech nima yozilmaydi. Muvaffaqiyatda savat qoralamaga o'tadi —
+  // «chekni o'zgartirish» = chipni ochish → o'zgartirish → yana chiqarish.
+  //
+  // Chek RAQAMI (2026-09-02, egasi) — kassirning shu kundagi ketma-ket soni,
+  // haqiqiy sotuv cheki bilan AYNI hisoblagichdan (`document_sequences`).
+  // Ilgari u soatdan yasalardi (`CHEK-112159` = 11:21:59) va mijoz uchun
+  // hech qanday ma'no bermasdi.
   const printProforma = useCallback(async () => {
     if (cart.length === 0 || cartLocked || payingSale != null) return;
     const now = new Date();
-    const two = (n: number) => n.toString().padStart(2, '0');
+    // 🔴 So'rov yiqilsa chek TO'XTAMAYDI — eski vaqt-raqami zaxira bo'lib
+    // qoladi. Tarmoq uzilgani uchun mijozni qog'ozsiz qoldirish yomonroq
+    // natija; raqam takrorlanmasligini vaqt kafolatlaydi.
+    let number: string;
+    try {
+      const allocated = await api.post<{ number: number }>('/retail-sales/receipt-number', {
+        sessionId: session.id,
+      });
+      number = String(allocated.number);
+    } catch {
+      const two = (n: number) => n.toString().padStart(2, '0');
+      number = `CHEK-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+    }
     const input = cartToProformaReceipt(cart, discountPct, {
-      number: `CHEK-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`,
+      number,
       moment: now.toISOString(),
       cashierName: session.cashier.name,
       organization: { name: session.organization.name },

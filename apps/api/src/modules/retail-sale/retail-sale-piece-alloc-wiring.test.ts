@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import { mockDocumentSequence } from '../../prisma/document-sequence.mock.js';
 import { RetailSaleService } from './retail-sale.service.js';
 
 /**
@@ -84,6 +85,7 @@ function makeService(client: unknown, stock: ReturnType<typeof makeStockStub>) {
 /** `pieceTracked` POZITSIYA bilan birga keladi — bu naqshning o'zi qulflanadi. */
 function makePostHarness(opts: { pieceTracked: boolean }) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     // K4 — bayrog'i YOQILGAN tovarda `post()` bo'lak reyestrini ham yopadi
     // (mijozga ketgan bo'lak `sold` bo'ladi). Bu dunyoda reyestr BO'SH, ya'ni
@@ -132,6 +134,7 @@ function makePostHarness(opts: { pieceTracked: boolean }) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE_UN,
           salesCount: 0,
@@ -243,6 +246,7 @@ describe('K3/7.1 — post(): bo`linadigan tovar BO`LINMAYDI', () => {
 
 function makePickingHarness(opts: { pieceTracked: boolean }) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),

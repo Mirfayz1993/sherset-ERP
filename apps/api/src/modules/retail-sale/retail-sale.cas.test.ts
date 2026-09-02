@@ -69,6 +69,7 @@ function makeService(
 describe('RetailSaleService.post — CAS state guard', () => {
   it('throws ConflictException when updateMany returns count=0 (lost race)', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -101,6 +102,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: CASHDESK_ID,
             storeId: STORE_ID,
             salesCount: 0,
@@ -135,6 +137,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
 
   it('proceeds with cash inflow + session aggregate when CAS succeeds (count=1)', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -167,6 +170,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: CASHDESK_ID,
             storeId: STORE_ID,
             salesCount: 0,
@@ -211,6 +215,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
 
   it('skips cashDesk.update when cashAmount is zero (card-only payment)', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -243,6 +248,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: CASHDESK_ID,
             storeId: STORE_ID,
             salesCount: 0,
@@ -270,6 +276,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
 
   it('runs the stock cascade for positions with productId and skips service-only rows', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -309,6 +316,7 @@ describe('RetailSaleService.post — CAS state guard', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: CASHDESK_ID,
             storeId: STORE_ID,
             salesCount: 0,
@@ -418,6 +426,7 @@ describe('RetailSaleService.cancel — CAS state guard', () => {
 describe('RetailSaleService.refund — CAS state guard', () => {
   it('throws ConflictException when another refund already flipped state', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -446,6 +455,7 @@ describe('RetailSaleService.refund — CAS state guard', () => {
       cashierSession: {
         findFirst: vi.fn(async () => ({
           id: SESSION_ID,
+          cashierId: 'cashier-1',
           cashDeskId: CASHDESK_ID,
           storeId: STORE_ID,
           cashDesk: { currency: 'UZS' },
@@ -480,6 +490,7 @@ describe('RetailSaleService.refund — CAS state guard', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: CASHDESK_ID,
             storeId: STORE_ID,
             cashDesk: { currency: 'UZS' },

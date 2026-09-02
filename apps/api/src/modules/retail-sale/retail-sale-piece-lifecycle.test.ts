@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mockDocumentSequence } from '../../prisma/document-sequence.mock.js';
 import { RetailSaleService } from './retail-sale.service.js';
 
 /**
@@ -68,6 +69,7 @@ function makeService(client: unknown, stock: ReturnType<typeof makeStockStub>) {
 function makePostWorld(pieces: Array<{ id: string; length: string; status?: string }>) {
   const pieceUpdateMany = vi.fn().mockResolvedValue({ count: pieces.length });
   const tx = {
+    documentSequence: mockDocumentSequence(),
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     stockPiece: {
       findMany: vi.fn().mockResolvedValue(
@@ -116,6 +118,7 @@ function makePostWorld(pieces: Array<{ id: string; length: string; status?: stri
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE,
           salesCount: 0,
@@ -191,6 +194,7 @@ describe('K4 — cancel(): bo`lak OMBORDA qoladi', () => {
   function makeCancelWorld() {
     const pieceUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const tx = {
+      documentSequence: mockDocumentSequence(),
       retailSale: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       stockPiece: { updateMany: pieceUpdateMany },
       stockReservation: { findMany: vi.fn().mockResolvedValue([]) },

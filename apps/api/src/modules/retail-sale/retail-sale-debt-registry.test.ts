@@ -111,6 +111,7 @@ function makeHarness(opts: HarnessOpts = {}) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: 'store-1',
           salesCount: 0,
@@ -245,7 +246,14 @@ describe('Q2 — idempotentlik (invariant 3)', () => {
 
     expect(saleRows(registry)).toHaveLength(1);
     // Raqam ham SARFLANMAYDI — `QRZ-` ketma-ketligida teshik qolmaydi.
-    expect(registry.tx.documentSequence.update).not.toHaveBeenCalled();
+    // 🔴 Faqat `QRZ-` kaliti tekshiriladi: post() endi AYNI tranzaksiyada
+    // kunlik chek raqamini ham suradi (`CHEKKUN:…`, 2026-09-02) va u har
+    // chekda, shu jumladan idempotent takrorda ham, o'z raqamini oladi.
+    const qrzCalls = registry.tx.documentSequence.update.mock.calls.filter(
+      (c: [{ where: { accountId_key: { key: string } } }]) =>
+        c[0].where.accountId_key.key.startsWith('QRZ-'),
+    );
+    expect(qrzCalls).toHaveLength(0);
     expect(registry.debtNote.create).not.toHaveBeenCalled();
   });
 

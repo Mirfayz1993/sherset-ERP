@@ -83,6 +83,19 @@ export interface ReceiptSaleInput {
    */
   variant?: 'sale' | 'debtPayment';
   name: string;
+  /**
+   * QOG'OZDAGI chek raqami — kassirning SHU KUNDAGI ketma-ket soni
+   * (egasi, 2026-09-02: «120 ta sotuv bo'lsa keyingi chek 121»).
+   *
+   * Serverda `RetailSale.receiptNo` — post() onida muzlaydi, ya'ni qayta chop
+   * etilgan chekda AYNI raqam qaytadi. Sotuvsiz chek uni
+   * `POST /retail-sales/receipt-number` dan oladi.
+   *
+   * `null`/berilmagan = 2026-09-02 dan OLDINGI cheklar va raqam olib
+   * bo'lmagan holat: shablon `name` ga (`ТРН-2026-00073`) qaytadi — chek
+   * RAQAMSIZ chiqib qolmasin.
+   */
+  receiptNo?: number | null;
   moment: string;
   sumMinor: string;
   payments?: ReceiptPaymentRow[] | null;
@@ -272,7 +285,10 @@ export function buildReceiptModel(sale: ReceiptSaleInput): ReceiptModel {
     orgName: sale.session.organization.name || (sale.session.organization.legalTitle ?? ''),
     orgPhone: sale.session.organization.phone?.trim() || null,
     title: sale.variant === 'debtPayment' ? RECEIPT_LABELS.titleDebt : RECEIPT_LABELS.titleSale,
-    docNumber: sale.name,
+    // Qog'ozda qisqa kunlik raqam; eski (raqamsiz) cheklarda — hujjat nomi.
+    // 🔴 Uchala renderer SHU YERDAN oziqlanadi, ya'ni ESC/POS matn, Electron
+    // HTML va `/print/retail-sale` React sahifasi bir xil raqamni bosadi.
+    docNumber: sale.receiptNo != null ? String(sale.receiptNo) : sale.name,
     dateLabel: fmtReceiptDate(sale.moment),
     sellerName: sale.session.cashier.name,
     buyerName: sale.agent ? (sale.agent.legalTitle ?? sale.agent.name) : '—',

@@ -314,6 +314,25 @@ export const UpdateSaleCommentSchema = z.object({
 });
 export type UpdateSaleCommentInput = z.infer<typeof UpdateSaleCommentSchema>;
 
+/**
+ * SOTUVSIZ CHEK uchun kunlik raqam (`POST /retail-sales/receipt-number`).
+ *
+ * Sotuvsiz chek serverda hech qanday hujjat yaratmaydi (egasi, 2026-08-16),
+ * lekin qog'ozdagi raqami haqiqiy chek bilan AYNI hisoblagichdan kelishi
+ * kerak — aks holda bir kassirning qo'lida ikki xil raqamlangan chek yurardi.
+ * Shuning uchun bu yagona yo'l: hisoblagichdan raqam OLADI, boshqa hech nima
+ * qilmaydi.
+ *
+ * `sessionId` — kassir SHU hisoblagichdan olsin. `userId` dan olinmadi:
+ * chekni smena EGASI (kassir) nomidan chiqarish kerak, hatto administrator
+ * o'sha kassaning ekranida turgan bo'lsa ham — raqamlar kassirning kunlik
+ * ketma-ketligiga tushsin.
+ */
+export const AllocateReceiptNumberSchema = z.object({
+  sessionId: z.string().uuid(),
+});
+export type AllocateReceiptNumberInput = z.infer<typeof AllocateReceiptNumberSchema>;
+
 // --- G2: kontrol tahriri ---
 
 /**

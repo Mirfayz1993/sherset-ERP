@@ -119,6 +119,7 @@ function makeHarness(opts: HarnessOpts = {}) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: 'store-1',
           salesCount: 0,

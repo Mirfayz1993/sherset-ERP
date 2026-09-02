@@ -87,6 +87,7 @@ function makeClient(opts: { sumMinor: bigint; agentId?: string | null }) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE_ID,
           salesCount: 0,

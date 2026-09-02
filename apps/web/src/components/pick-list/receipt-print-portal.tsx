@@ -130,11 +130,11 @@ export function PickReceiptBody({
           <table className="w-full table-fixed border-collapse text-[10px]">
             <thead>
               <tr>
-                <th className={`${th} w-[5mm]`}>№</th>
+                <th className={`${th} w-[7mm]`}>№</th>
                 <th className={th}>{t('receipt_col_name')}</th>
                 <th className={`${th} w-[7mm]`}>{t('receipt_col_uom')}</th>
-                <th className={`${th} w-[8mm]`}>{t('receipt_col_qty')}</th>
-                <th className={`${th} w-[19mm]`}>{t('print_col_cell')}</th>
+                <th className={`${th} w-[11mm]`}>{t('receipt_col_qty')}</th>
+                <th className={`${th} w-[17mm]`}>{t('print_col_cell')}</th>
               </tr>
             </thead>
             <tbody>
@@ -145,7 +145,9 @@ export function PickReceiptBody({
                     <td className={`${td} text-center`}>{rowNo}</td>
                     <td className={`${td} rcpt-name break-words text-[11px]`}>{p.name}</td>
                     <td className={`${td} text-center`}>{p.uom ?? t('receipt_uom_default')}</td>
-                    <td className={`${td} text-center font-bold text-[11px]`}>{p.qty}</td>
+                    <td className={`${td} whitespace-nowrap text-center font-bold text-[11px]`}>
+                      {p.qty}
+                    </td>
                     <td
                       className={`${td} whitespace-nowrap text-center font-extrabold text-[10px] tabular-nums`}
                       data-test-id="receipt-cell"

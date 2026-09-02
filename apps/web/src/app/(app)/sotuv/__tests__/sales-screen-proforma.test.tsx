@@ -6,8 +6,11 @@
  *    bo'lsa BLOKLANADI — «Sotish» bilan bir xil qoidalar;
  *  · bosilganda HECH QANDAY sotuv/hujjat yaratilmaydi (api.post chaqirilmaydi),
  *    chek savatdan yig'ilib chop yo'liga ketadi;
- *  · chop etilgach savat avtomatik QORALAMA chipiga o'tadi — «har bir chekni
- *    o'zgartirish» = chipni ochib, o'zgartirib, yana chiqarish.
+ * *  · chop etilgach savat avtomatik QORALAMA chipiga o'tadi — «har bir chekni
+ *    o'zgartirish» = chipni ochib, o'zgartirib, yana chiqarish;
+ *  · chek RAQAMI (2026-09-02, egasi) — kassirning shu kundagi ketma-ket soni,
+ *    `POST /retail-sales/receipt-number` dan. Bu hujjat YARATMAYDI: faqat
+ *    haqiqiy sotuv cheki bilan AYNI hisoblagichni suradi.
  */
 
 import { api } from '@/lib/api-client';
@@ -83,8 +86,11 @@ describe('Chek chiqarish (sotuvsiz) — tugma va oqim', () => {
     expect(input.positions[0]?.product?.name).toBe('Kabel 2×2.5');
     expect(input.sumMinor).toBe('1000000');
 
-    // HECH QANDAY hujjat yaratilmagan.
-    expect(api.post).not.toHaveBeenCalled();
+    // HECH QANDAY hujjat yaratilmagan. Yagona POST — kunlik chek RAQAMI
+    // (2026-09-02): u hisoblagichni suradi, sotuv/hujjat yozmaydi.
+    expect(vi.mocked(api.post).mock.calls.map((c) => c[0])).toEqual([
+      '/retail-sales/receipt-number',
+    ]);
 
     // Savat bo'shadi va qoralama chipi paydo bo'ldi («chekni o'zgartirish» yo'li).
     await waitFor(() => expect(screen.queryByTestId('sotuv-cart-line')).not.toBeInTheDocument());
@@ -132,5 +138,34 @@ describe('Chek chiqarish (sotuvsiz) — tugma va oqim', () => {
     await addFirstProduct(user);
 
     expect(screen.getByTestId('sotuv-proforma')).not.toBeDisabled();
+  });
+});
+
+describe('Chek raqami — kassirning kunlik ketma-ketligi (2026-09-02)', () => {
+  it('serverdan kelgan raqam chekka TUSHADI («SAVDO CHEKI № 121»)', async () => {
+    vi.mocked(api.post).mockResolvedValue({ number: 121 });
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await addFirstProduct(user);
+
+    await user.click(screen.getByTestId('sotuv-proforma'));
+
+    await waitFor(() => expect(printProformaReceiptViaAgent).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(printProformaReceiptViaAgent).mock.calls[0]?.[0] as { name: string };
+    expect(input.name).toBe('121');
+  });
+
+  it('so`rov YIQILSA chek baribir chiqadi — vaqt-raqami zaxira', async () => {
+    // 🔴 Tarmoq uzilgani uchun mijozni qog'ozsiz qoldirish yomonroq natija.
+    vi.mocked(api.post).mockRejectedValue(new Error('network'));
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await addFirstProduct(user);
+
+    await user.click(screen.getByTestId('sotuv-proforma'));
+
+    await waitFor(() => expect(printProformaReceiptViaAgent).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(printProformaReceiptViaAgent).mock.calls[0]?.[0] as { name: string };
+    expect(input.name).toMatch(/^CHEK-\d{6}$/);
   });
 });

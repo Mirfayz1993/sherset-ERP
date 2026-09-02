@@ -21,7 +21,14 @@ import type { ReceiptSaleInput } from './receipt-model';
 import { mulQtyMinor } from './receipt-model';
 
 export interface ProformaContext {
-  /** Chek «raqami» — vaqtdan yasaladi (haqiqiy chek raqamlari bilan to'qnashmaydi). */
+  /**
+   * Chek «raqami» — kassirning shu kundagi ketma-ket soni (2026-09-02, egasi),
+   * `POST /retail-sales/receipt-number` dan. So'rov yiqilsa chaqiruvchi eski
+   * vaqt-raqamini (`CHEK-112159`) zaxira sifatida beradi.
+   *
+   * Bu yerda `name` ga yoziladi — `buildReceiptModel` raqamsiz chekda aynan
+   * `name` ni bosadi, ya'ni qog'ozda «SAVDO CHEKI № 121» chiqadi.
+   */
   number: string;
   /** ISO moment — chekdagi sana. */
   moment: string;

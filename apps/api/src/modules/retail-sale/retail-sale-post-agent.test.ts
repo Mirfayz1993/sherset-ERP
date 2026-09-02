@@ -48,6 +48,7 @@ function makeHarness(opts: { saleAgentId?: string | null } = {}) {
   };
 
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -101,6 +102,7 @@ function makeHarness(opts: { saleAgentId?: string | null } = {}) {
         session: {
           id: SESSION,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: 'st-1',
           salesCount: 0,
