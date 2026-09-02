@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addQtyDecimal,
   applyDiscountMinor,
+  applyRefundTenderChoice,
   cartCostMinor,
   cartCount,
   cartLineMarkdownMinor,
@@ -716,5 +717,55 @@ describe('saleCashLikeMinor — yashiq olgan ulush (P5)', () => {
 
   it('buzuq qiymat pul YARATMAYDI', () => {
     expect(saleCashLikeMinor([{ method: 'CASH_UZS', amountBaseMinor: 'xx' }])).toBe(0n);
+  });
+});
+
+/**
+ * V3 (egasi, 2026-09-02): «pul qaytarganda naqd/karta tanlash imkoni bo'lsin».
+ * Kanal tanlovi SO'M ulushini bitta kanalga yig'adi; dollar va qarz tegilmaydi.
+ */
+describe('applyRefundTenderChoice', () => {
+  const split = { cashMinor: 30_000n, cardMinor: 70_000n, usdMinor: 500n };
+
+  it('`auto` — taqsimot o`z holicha (sukut xulq o`zgarmaydi)', () => {
+    expect(applyRefundTenderChoice(split, 'auto')).toEqual(split);
+  });
+
+  it('`cash` — butun so`m ulushi naqdga yig`iladi', () => {
+    expect(applyRefundTenderChoice(split, 'cash')).toEqual({
+      cashMinor: 100_000n,
+      cardMinor: 0n,
+      usdMinor: 500n,
+    });
+  });
+
+  it('`card` — butun so`m ulushi kartaga yig`iladi', () => {
+    expect(applyRefundTenderChoice(split, 'card')).toEqual({
+      cashMinor: 0n,
+      cardMinor: 100_000n,
+      usdMinor: 500n,
+    });
+  });
+
+  it('DOLLAR ulushi hech qachon so`m kanaliga qo`shilmaydi (MK31)', () => {
+    for (const c of ['auto', 'cash', 'card'] as const) {
+      expect(applyRefundTenderChoice(split, c).usdMinor).toBe(500n);
+    }
+  });
+
+  it('so`m jami HAR QANDAY tanlovda saqlanadi (pul yo`qdan paydo bo`lmaydi)', () => {
+    for (const c of ['auto', 'cash', 'card'] as const) {
+      const r = applyRefundTenderChoice(split, c);
+      expect(r.cashMinor + r.cardMinor).toBe(100_000n);
+    }
+  });
+
+  it('100% KARTA chekini NAQDGA o`tkazish (egasi so`ragan asosiy holat)', () => {
+    const kartaChek = { cashMinor: 0n, cardMinor: 23_000n, usdMinor: 0n };
+    expect(applyRefundTenderChoice(kartaChek, 'cash')).toEqual({
+      cashMinor: 23_000n,
+      cardMinor: 0n,
+      usdMinor: 0n,
+    });
   });
 });

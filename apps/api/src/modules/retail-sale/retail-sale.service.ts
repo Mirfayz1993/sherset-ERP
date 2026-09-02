@@ -2608,6 +2608,9 @@ export class RetailSaleService {
       debtReturn,
       usdReturn,
       prepayReturn,
+      // V3 — kassir kanalni o'zi tanlagan bo'lsa kanal cap'i o'tkaziladi
+      // (jami cap emas). Qarang: `RefundRetailSaleSchema.channelOverride`.
+      { channelOverride: parsed.channelOverride },
     );
     if (settleError) throw new BadRequestException(settleError);
     // Cap o'tdi, ya'ni chekda dollar HAQIQATAN olingan — lekin kursi

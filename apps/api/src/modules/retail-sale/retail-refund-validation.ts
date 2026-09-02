@@ -442,6 +442,19 @@ export function validateRefundSettlement(
   usdReturnMinor = 0n,
   /** A2 — mijozning balansiga qaytariladigan avans ulushi. Uzatilmasa 0. */
   prepayReturnMinor = 0n,
+  /**
+   * V3 (egasi, 2026-09-02: «pul qaytarganda naqd/karta tanlash imkoni
+   * bo'lsin»). `channelOverride` = kassir kanalni O'ZI tanladi ⇒ KANAL cap'i
+   * (`cashMaxMinor`) tekshirilmaydi: karta bilan to'langan chekni naqd
+   * qaytarish mumkin bo'ladi.
+   *
+   * 🔴 JAMI cap (`moneyMaxMinor`) BEKOR QILINMAYDI — kassa olganidan ko'p pul
+   * qaytarish, qarz/avans ulushini naqdga aylantirish hamon TAQIQ. Bayroq
+   * pulni «yo'qdan» yaratmaydi, faqat qaysi kanaldan chiqishini kassirga
+   * qoldiradi. Sukut `false` ⇒ P5/R1 himoyasi (avtomatik hisoblangan
+   * noto'g'ri taqsimot) boshqa hamma chaqiruvchi uchun O'Z KUCHIDA.
+   */
+  opts: { channelOverride?: boolean } = {},
 ): string | null {
   if (cashReturnMinor < 0n || cardReturnMinor < 0n || debtReturnMinor < 0n) {
     return 'Refund cash/card/debt amounts must be non-negative';
@@ -482,7 +495,11 @@ export function validateRefundSettlement(
   // P5 — kanal cap'i. Prodda o'lchandi (R1): 100% KARTA cheki naqd qaytarilib
   // yashiqdan hech qachon kirmagan pul chiqib ketdi. Xabar KASSIRGA
   // ko'rinadi, shuning uchun o'zbekcha va nima qilish kerakligi bilan.
-  if (cashReturnMinor > caps.cashMaxMinor) {
+  //
+  // V3: kassir kanalni ATAYLAB tanlagan bo'lsa bu cap o'tkazib yuboriladi —
+  // R1 hodisasi AVTOMATIK taqsimotning xatosi edi, qo'lda tanlov esa
+  // ongli qaror (yashiq shu summaga kam chiqadi, bu kutilgan).
+  if (!opts.channelOverride && cashReturnMinor > caps.cashMaxMinor) {
     return (
       `Naqd qaytarish ${(cashReturnMinor / 100n).toString()} so'm — kassa bu chek uchun ` +
       `atigi ${(caps.cashMaxMinor / 100n).toString()} so'm naqd olgan. Qolgan qismi karta/terminal ` +

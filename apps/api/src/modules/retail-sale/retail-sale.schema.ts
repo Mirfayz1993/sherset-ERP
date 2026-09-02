@@ -263,6 +263,20 @@ export const RefundRetailSaleSchema = z.object({
     .string()
     .regex(/^\d+$/, 'prepayReturnMinor must be a non-negative integer')
     .optional(),
+  /**
+   * V3 (egasi, 2026-09-02): «pul qaytarganda naqd/karta tanlash imkoni
+   * bo'lsin». Kassir kanalni O'ZI tanlaganini bildiradi — server KANAL
+   * cap'ini (`cashMaxMinor`) tekshirmaydi, ya'ni karta bilan to'langan chek
+   * naqd qaytarilishi mumkin.
+   *
+   * 🔴 JAMI cap o'z kuchida: `naqd + karta ≤ kassa olgan pul`. Qarz/avans
+   * ulushi hamon naqdga aylanmaydi.
+   *
+   * Sukut `false` — bayroqni faqat POS ning kanal tanlagichi yuboradi;
+   * boshqa chaqiruvchilar (moysklad-compat, integratsiyalar, eski POS)
+   * uchun P5/R1 himoyasi o'zgarmaydi.
+   */
+  channelOverride: z.boolean().optional().default(false),
   description: z.string().max(4000).nullish(),
 });
 export type RefundRetailSaleInput = z.infer<typeof RefundRetailSaleSchema>;

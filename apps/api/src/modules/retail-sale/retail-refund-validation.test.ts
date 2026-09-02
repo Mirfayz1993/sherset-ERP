@@ -702,3 +702,62 @@ describe('P5 — naqd ulushi O`LCHANMAGAN bo`lsa kanal cap`i qo`yilmaydi', () =>
     expect(caps.moneyMaxMinor).toBe(50_000n);
   });
 });
+
+/**
+ * V3 (egasi, 2026-09-02): «pul qaytarganda naqd/karta tanlash imkoni bo'lsin».
+ *
+ * Kassir kanalni O'ZI tanlaganda KANAL cap'i (P5) o'tkazib yuboriladi — R1
+ * hodisasi AVTOMATIK taqsimotning xatosi edi, qo'lda tanlov esa ongli qaror.
+ * JAMI cap (`moneyMaxMinor`) esa BEKOR QILINMAYDI: kassa olganidan ko'p pul
+ * chiqmaydi, qarz/avans ulushi naqdga aylanmaydi.
+ */
+describe('V3 — kanal tanlash (channelOverride)', () => {
+  // 100% KARTA chek: kanal cap 0, jami cap to'liq.
+  const kartaChek = {
+    moneyMaxMinor: 40_000n,
+    cashMaxMinor: 0n,
+    debtMaxMinor: 0n,
+    usdMaxMinor: 0n,
+    prepayMaxMinor: 0n,
+  };
+
+  it('bayroqSIZ: karta chekini naqd qaytarish RAD etiladi (P5 kuchida)', () => {
+    expect(validateRefundSettlement(kartaChek, 40_000n, 0n, 0n)).toMatch(/naqd olgan/);
+  });
+
+  it('bayroq bilan: karta chekini NAQD qaytarish mumkin', () => {
+    expect(
+      validateRefundSettlement(kartaChek, 40_000n, 0n, 0n, 0n, 0n, { channelOverride: true }),
+    ).toBeNull();
+  });
+
+  it('bayroq JAMI capni buzmaydi — olganidan ko`p pul chiqmaydi', () => {
+    expect(
+      validateRefundSettlement(kartaChek, 40_001n, 0n, 0n, 0n, 0n, { channelOverride: true }),
+    ).toMatch(/so'm pul olgan/);
+  });
+
+  it('bayroq QARZ capini buzmaydi', () => {
+    expect(
+      validateRefundSettlement(kartaChek, 0n, 0n, 1n, 0n, 0n, { channelOverride: true }),
+    ).toMatch(/credit taken/);
+  });
+
+  it('bayroq qarzli chekda pulni «yo`qdan» yaratmaydi', () => {
+    // To'liq QARZGA sotilgan chek: kassa pul olmagan ⇒ jami cap 0.
+    const qarzChek = { ...kartaChek, moneyMaxMinor: 0n, debtMaxMinor: 40_000n };
+    expect(
+      validateRefundSettlement(qarzChek, 1n, 0n, 0n, 0n, 0n, { channelOverride: true }),
+    ).toMatch(/so'm pul olgan/);
+  });
+
+  it('bayroq DOLLAR capini buzmaydi', () => {
+    expect(
+      validateRefundSettlement(kartaChek, 0n, 0n, 0n, 1n, 0n, { channelOverride: true }),
+    ).toMatch(/dollar olgan/);
+  });
+
+  it('sukut (bayroq berilmasa) — eski xulq, kanal cap kuchida', () => {
+    expect(validateRefundSettlement(kartaChek, 1n, 0n, 0n, 0n, 0n, {})).toMatch(/naqd olgan/);
+  });
+});
