@@ -1,16 +1,16 @@
 'use client';
 
 /**
- * В«VozvratВ» rejimi (V2, egasi 2026-09-01) вЂ” qaytarish uchun chekni TOPISH oynasi.
+ * «Vozvrat» rejimi (V2, egasi 2026-09-01) — qaytarish uchun chekni TOPISH oynasi.
  *
  * Sabab: naqdga olib ketgan MIJOZSIZ odam vozvratga kelsa, chekni faqat TOVAR
- * orqali topish mumkin вЂ” В«CheklarВ» qidiruvi (chek nomi/mijoz ismi) bunda ojiz.
- * Shu yerda ikki tab: В«TovarВ» (asosiy; skaner ham ishlaydi вЂ” shtrix-kod
- * `GET /products?search=` da exact tutiladi) va В«MijozВ». Tanlangach shu
+ * orqali topish mumkin — «Cheklar» qidiruvi (chek nomi/mijoz ismi) bunda ojiz.
+ * Shu yerda ikki tab: «Tovar» (asosiy; skaner ham ishlaydi — shtrix-kod
+ * `GET /products?search=` da exact tutiladi) va «Mijoz». Tanlangach shu
  * tovar/mijoz qatnashgan BARCHA `posted` cheklar sanasi bilan, eng yangisi
  * tepada, 50 tadan sahifalab chiqadi (egasining S-V2/S-V3 javoblari).
  *
- * Chekni ochish вЂ” mavjud `ChekDetailPanel` (cheklar-mode'dan eksport):
+ * Chekni ochish — mavjud `ChekDetailPanel` (cheklar-mode'dan eksport):
  * qaytarish oqimi BITTA joyda, bu fayl faqat qidiruv/ro'yxat.
  *
  * Rejimga kirish `salesreturn.create` bilan yon panelda yashiringan
@@ -44,7 +44,7 @@ interface AgentHit {
   phone?: string | null;
 }
 
-/** Tanlangan filtr вЂ” bir paytda bittasi (tovar YOKI mijoz). */
+/** Tanlangan filtr — bir paytda bittasi (tovar YOKI mijoz). */
 interface PickedFilter {
   kind: VozvratTab;
   id: string;
@@ -108,7 +108,7 @@ export function VozvratMode({
     placeholderData: keepPreviousData,
   });
 
-  // Egasining S-V3 javobi: faqat `posted` вЂ” oyna В«vozvrat qilishВ» uchun, arxiv
+  // Egasining S-V3 javobi: faqat `posted` — oyna «vozvrat qilish» uchun, arxiv
   // emas. Qisman qaytarilgan chek `posted` ligicha qoladi va ko'rinaveradi.
   const cheklar = useInfiniteQuery({
     queryKey: ['pos-vozvrat-cheklar', picked?.kind, picked?.id],
@@ -129,7 +129,7 @@ export function VozvratMode({
   const chekRows: SaleRow[] = cheklar.data?.pages.flatMap((p: ChekPage) => p.items) ?? [];
 
   // Skaner naqshi: matn + Enter. Natija AYNAN bitta bo'lsa (shtrix-kod exact
-  // match) вЂ” darhol tanlanadi; ko'p bo'lsa kassir qo'l bilan tanlaydi.
+  // match) — darhol tanlanadi; ko'p bo'lsa kassir qo'l bilan tanlaydi.
   const onSearchEnter = () => {
     if (picked || tab !== 'product') return;
     const items = productHits.data?.items ?? [];
@@ -151,7 +151,7 @@ export function VozvratMode({
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* в”Ђв”Ђ Chap: qidiruv + natija в”Ђв”Ђ */}
+      {/* ── Chap: qidiruv + natija ── */}
       <div className="flex w-[400px] shrink-0 flex-col overflow-hidden border-[var(--ms-border)] border-r">
         {/* Tablar */}
         <div className="flex shrink-0 gap-1 border-b border-[var(--ms-border)] p-2">
@@ -271,7 +271,7 @@ export function VozvratMode({
                     <span className="text-[18px] font-semibold tabular-nums text-[var(--ms-text-primary)]">
                       {formatMoney(BigInt(sale.sumMinor))}
                     </span>
-                    {/* Egasi: В«cheklar SANASI bilan chiqsinВ» вЂ” vaqt emas,
+                    {/* Egasi: «cheklar SANASI bilan chiqsin» — vaqt emas,
                         to'liq sana (eski cheklar ham topiladi). */}
                     <span className="shrink-0 text-[14px] tabular-nums text-[var(--ms-text-muted)]">
                       {new Date(sale.moment).toLocaleString(bcp47, {
@@ -316,7 +316,7 @@ export function VozvratMode({
         )}
       </div>
 
-      {/* в”Ђв”Ђ O'ng: detal-panel (qaytarish o'sha yerda) yoki taklif в”Ђв”Ђ */}
+      {/* ── O'ng: detal-panel (qaytarish o'sha yerda) yoki taklif ── */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {selectedChekId ? (
           <ChekDetailPanel

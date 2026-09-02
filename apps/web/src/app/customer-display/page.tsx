@@ -193,7 +193,7 @@ export default function CustomerDisplayPage() {
   }, [demo, demoMode]);
 
   const lines = payload.lines;
-  const { picking, ready, cashDeskName } = useQueue(tokenReady, demo);
+  const { picking, ready, cashDeskName, cashierName } = useQueue(tokenReady, demo);
   const parked = useParkedDrafts(demo);
   // Kassada til almashtirilsa shu oyna o'zi qayta yuklanadi (sabab hook izohida).
   useLocaleSync();
@@ -255,7 +255,7 @@ export default function CustomerDisplayPage() {
           background: 'var(--cfd-bg)',
         }}
       >
-        <TopBar cashDeskName={cashDeskName} />
+        <TopBar cashDeskName={cashDeskName} cashierName={cashierName} />
         {/* `scale !== null` = mount bo'lgan. Serverda `demo` doim false
             (window yo'q), brauzerda true bo'lishi mumkin — badge'ni SSR
             daraxtiga qo'shsak gidratatsiya nomuvofiqligi chiqadi (jonli
@@ -494,17 +494,29 @@ export function useLocaleSync(): void {
 function useQueue(
   tokenReady: boolean,
   demo: boolean,
-): { picking: QueueSale[]; ready: QueueSale[]; cashDeskName: string | null } {
+): {
+  picking: QueueSale[];
+  ready: QueueSale[];
+  cashDeskName: string | null;
+  cashierName: string | null;
+} {
   const [picking, setPicking] = useState<QueueSale[]>([]);
   const [ready, setReady] = useState<QueueSale[]>([]);
   const [cashDeskName, setCashDeskName] = useState<string | null>(null);
   const t = useTranslations('pages.customer_display');
+  // Kassir ismi (egasi, 2026-09-02: «ikkinchi ekranda kassir nomi ham
+  // ko'rinishi kerak»). Backend'ga tegilmadi — `/cashier-sessions/current`
+  // javobida `cashier: { id, name }` ALLAQACHON bor (shartnoma:
+  // packages/contracts/src/cashier-session.ts, `CurrentSessionSchema`), bu
+  // ekran uni shunchaki o'qimasdi.
+  const [cashierName, setCashierName] = useState<string | null>(null);
 
   useEffect(() => {
     if (demo) {
       setPicking(DEMO_PICKING);
       setReady(DEMO_READY);
       setCashDeskName(t('cash_desk_fallback'));
+      setCashierName(t('cashier_fallback'));
       return;
     }
     if (!tokenReady) return;
@@ -512,11 +524,16 @@ function useQueue(
     let alive = true;
     async function tick(): Promise<void> {
       try {
-        const session = await api.get<{ id?: string; cashDesk?: { name?: string } } | null>(
-          '/cashier-sessions/current',
-        );
+        const session = await api.get<{
+          id?: string;
+          cashDesk?: { name?: string };
+          cashier?: { name?: string };
+        } | null>('/cashier-sessions/current');
         if (!alive) return;
         setCashDeskName(session?.cashDesk?.name ?? null);
+        // Sessiya yopilgan/yo'q bo'lsa `null` — TopBar u holda ismni umuman
+        // chizmaydi (eski kassirning ismi ekranda osilib qolmasin).
+        setCashierName(session?.cashier?.name ?? null);
         if (!session?.id) {
           setPicking([]);
           setReady([]);
@@ -542,7 +559,7 @@ function useQueue(
     };
   }, [tokenReady, demo, t]);
 
-  return { picking, ready, cashDeskName };
+  return { picking, ready, cashDeskName, cashierName };
 }
 
 /** Miqdorni server sxemasi shakliga keltiradi (`BigInt(1.5)` otilishini yopadi). */
@@ -569,7 +586,13 @@ export function splitDocNo(name: string): { prefix: string; tail: string } {
 // ─────────────────────────────────────────────────────────────────────────────
 // TEPA PANEL — logo · kassa nomi · soat
 // ─────────────────────────────────────────────────────────────────────────────
-function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
+export function TopBar({
+  cashDeskName,
+  cashierName,
+}: {
+  cashDeskName: string | null;
+  cashierName: string | null;
+}) {
   const t = useTranslations('pages.customer_display');
   const bcp47 = useBcp47();
   // 🔴 Soat `null` dan boshlanadi va faqat mount'dan keyin to'ladi: server va
@@ -606,10 +629,35 @@ function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
         </div>
       </div>
       <div className="flex items-center" style={{ gap: 28 }}>
-        {cashDeskName && (
+        {/* Kassa nomi va KASSIR ISMI (egasi, 2026-09-02). Ikkalasi ham
+            SERVER ma'lumoti — bu yerda tarjima qilinadigan matn YO'Q, shuning
+            uchun yangi i18n kaliti ham kerak emas.
+
+            Ism kassa nomidan KUCHLIROQ ko'rinadi: mijoz uchun «kim xizmat
+            qilyapti» degan savol «qaysi kassa» dan muhimroq. Ikkalasi ham
+            bo'lmasa butun blok (ajratgich chizig'i bilan) chizilmaydi —
+            soat yolg'iz o'zi o'ngda qoladi, maket buzilmaydi. */}
+        {(cashDeskName || cashierName) && (
           <>
-            <div style={{ fontSize: 26, fontWeight: 500, color: 'var(--cfd-muted)' }}>
-              {cashDeskName}
+            <div className="flex items-center" style={{ gap: 12 }}>
+              {cashDeskName && (
+                <div style={{ fontSize: 26, fontWeight: 500, color: 'var(--cfd-muted)' }}>
+                  {cashDeskName}
+                </div>
+              )}
+              {cashDeskName && cashierName && (
+                <div aria-hidden="true" style={{ fontSize: 22, color: 'var(--cfd-dim)' }}>
+                  ·
+                </div>
+              )}
+              {cashierName && (
+                <div
+                  data-test-id="cfd-cashier-name"
+                  style={{ fontSize: 26, fontWeight: 600, color: 'var(--cfd-ink)' }}
+                >
+                  {cashierName}
+                </div>
+              )}
             </div>
             <div style={{ width: 1, height: 34, background: 'var(--cfd-hairline)' }} />
           </>

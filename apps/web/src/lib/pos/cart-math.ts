@@ -520,6 +520,34 @@ export function refundTenderSplit(i: {
 }
 
 /**
+ * V3 (egasi, 2026-09-02): «pul qaytarganda naqd/karta tanlash imkoni bo'lsin».
+ *
+ * `refundTenderSplit` chek QANDAY to'langanidan kelib chiqib taqsimlaydi —
+ * karta bilan to'langan chekda naqd 0 chiqadi. Kassir esa mijoz bilan
+ * kelishib naqd berishi (yoki aksincha) kerak bo'lishi mumkin.
+ *
+ * Bu funksiya SO'M pul ulushini (naqd + karta) bitta tanlangan kanalga
+ * yig'adi. `auto` — hisoblangan taqsimot o'z holicha (sukut xulq, hech narsa
+ * o'zgarmaydi).
+ *
+ * 🔴 DOLLAR ULUSHIGA TEGILMAYDI: u boshqa BIRLIK (sent), o'z cap'i bilan
+ * qaytadi — so'm kanallariga qo'shilsa MK31 dagi yo'qotish qaytarilardi.
+ * Qarz ulushi ham tegilmaydi: u pul emas, serverning auto-split'i yozadi.
+ */
+export type RefundTenderChoice = 'auto' | 'cash' | 'card';
+
+export function applyRefundTenderChoice(
+  split: { cashMinor: bigint; cardMinor: bigint; usdMinor: bigint },
+  choice: RefundTenderChoice,
+): { cashMinor: bigint; cardMinor: bigint; usdMinor: bigint } {
+  if (choice === 'auto') return split;
+  const moneyMinor = split.cashMinor + split.cardMinor;
+  return choice === 'cash'
+    ? { cashMinor: moneyMinor, cardMinor: 0n, usdMinor: split.usdMinor }
+    : { cashMinor: 0n, cardMinor: moneyMinor, usdMinor: split.usdMinor };
+}
+
+/**
  * Foyda bazasi — kassa HAQIQATAN oladigan pul.
  *
  * Mavjud chekni to'layotgan bo'lsak (omborchidan qaytgan «Tayyor» chek)
