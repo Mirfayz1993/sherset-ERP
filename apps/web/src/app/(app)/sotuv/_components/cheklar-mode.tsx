@@ -14,6 +14,8 @@
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import {
+  type RefundTenderChoice,
+  applyRefundTenderChoice,
   clampReturnQty,
   normalizeQtyDecimal,
   refundPayoutMinor,
@@ -180,6 +182,13 @@ export function ChekDetailPanel({
   // olmasdi — «1.» yozilishi bilan nuqta o'chib ketardi, ya'ni og'irlik
   // bilan sotilgan tovarni qisman qaytarib bo'lmasdi.
   const [returnQty, setReturnQty] = useState<Record<string, string>>({});
+  /**
+   * V3 (egasi, 2026-09-02) — pul qaysi kanaldan qaytadi. `auto` = chek qanday
+   * to'langan bo'lsa shunday (sukut, eski xulq); kassir bosgan zahoti butun
+   * so'm ulushi tanlangan kanalga o'tadi va so'rovga `channelOverride`
+   * yuboriladi (server kanal cap'ini o'tkazadi, JAMI cap o'z kuchida).
+   */
+  const [tenderChoice, setTenderChoice] = useState<RefundTenderChoice>('auto');
 
   const { confirm } = useConfirm();
 
@@ -300,22 +309,31 @@ export function ChekDetailPanel({
       // P5: pul ulushi endi KANAL bo'yicha ham bo'linadi — yashiq olgani
       // naqd, bank orqali kelgani karta qatoriga. Aks holda karta/terminal
       // chek serverning `cashMaxMinor` qo'riqchisiga urilib qaytarilmasdi.
-      const split = refundTenderSplit({
-        originalSumMinor: BigInt(data?.sumMinor ?? '0'),
-        originalDebtMinor: saleDebtMinor(data?.payments),
-        originalCashLikeMinor: saleCashLikeMinor(data?.payments),
-        // 2026-08-17: dollar ulushi O'Z birligida (sent) qaytadi. Busiz server
-        // `moneyMax` qo'riqchisi dollarli chekni RAD etadi — ya'ni bu qator
-        // bo'lmasa dollarli chekni POS'dan umuman qaytarib bo'lmaydi.
-        originalCashUsdMinor: saleCashUsdMinor(data?.payments),
-        originalUsdBaseMinor: saleUsdBaseMinor(data?.payments),
-        refundSumMinor: refundValue,
-      });
+      //
+      // V3: kassir kanalni tanlagan bo'lsa (`tenderChoice`) butun so'm ulushi
+      // o'sha kanalga yig'iladi va `channelOverride` yuboriladi.
+      const split = applyRefundTenderChoice(
+        refundTenderSplit({
+          originalSumMinor: BigInt(data?.sumMinor ?? '0'),
+          originalDebtMinor: saleDebtMinor(data?.payments),
+          originalCashLikeMinor: saleCashLikeMinor(data?.payments),
+          // 2026-08-17: dollar ulushi O'Z birligida (sent) qaytadi. Busiz server
+          // `moneyMax` qo'riqchisi dollarli chekni RAD etadi — ya'ni bu qator
+          // bo'lmasa dollarli chekni POS'dan umuman qaytarib bo'lmaydi.
+          originalCashUsdMinor: saleCashUsdMinor(data?.payments),
+          originalUsdBaseMinor: saleUsdBaseMinor(data?.payments),
+          refundSumMinor: refundValue,
+        }),
+        tenderChoice,
+      );
       await api.post(`/retail-sales/${saleId}/refund`, {
         positions,
         cashAmountMinor: split.cashMinor.toString(),
         cardAmountMinor: split.cardMinor.toString(),
         cashUsdReturnMinor: split.usdMinor.toString(),
+        // V3 — kassir kanalni O'ZI tanladi: server KANAL cap'ini o'tkazadi
+        // (JAMI cap emas — olganidan ko'p pul baribir chiqmaydi).
+        ...(tenderChoice === 'auto' ? {} : { channelOverride: true }),
         // ⚠️ i18n-emas, ATAYLAB: bu hujjatning DB'da saqlanadigan izohi, ekran
         // matni emas. Kassirning tiliga bog'lasak bir xil hujjat kim yaratganiga
         // qarab turlicha yozilib qolardi (hisobot/qidiruv buziladi).
@@ -326,6 +344,7 @@ export function ChekDetailPanel({
       toast.success(t('refund_success'));
       setReturnMode(false);
       setReturnQty({});
+      setTenderChoice('auto');
       qc.invalidateQueries({ queryKey: ['retail-sale-detail', saleId] });
       qc.invalidateQueries({ queryKey: ['retail-sales-session'] });
       // V2 — Vozvrat rejimi ro'yxati ham yangilansin (to'liq qaytarilgan chek
@@ -344,6 +363,7 @@ export function ChekDetailPanel({
    */
   const startReturn = () => {
     setReturnQty(Object.fromEntries((data?.positions ?? []).map((p) => [p.id, '0'])));
+    setTenderChoice('auto');
     setReturnMode(true);
   };
 
@@ -835,7 +855,9 @@ export function ChekDetailPanel({
             // P5: ekran ham AYNI bo'linishni ko'rsatadi — kassir «naqd
             // beraman» deb turib server 400 bermasin, va mijozga qaysi
             // kanaldan pul qaytishini aytа olsin.
-            const split = refundTenderSplit({
+            // V3: ekran ham AYNI kanal tanlovini qo'llaydi (FE-01 intizomi —
+            // bitta formula), so'rov `refundMut` da shu funksiyani ishlatadi.
+            const autoSplit = refundTenderSplit({
               originalSumMinor: BigInt(data.sumMinor),
               originalDebtMinor: saleDebt,
               originalCashLikeMinor: saleCashLikeMinor(data.payments),
@@ -843,7 +865,21 @@ export function ChekDetailPanel({
               originalUsdBaseMinor: saleUsdBaseMinor(data.payments),
               refundSumMinor: refundValue,
             });
+            const split = applyRefundTenderChoice(autoSplit, tenderChoice);
             const refundMinor = split.cashMinor;
+            // Tanlagich faqat qaytariladigan SO'M puli bo'lganda ma'noli:
+            // to'liq qarzli chekda pul chiqmaydi, tanlashga narsa yo'q.
+            const moneyMinor = split.cashMinor + split.cardMinor;
+            // Sukut (`auto`) holatida ham kassir qaysi kanal ishlayotganini
+            // ko'rib tursin — yolg'iz kanal bo'lsa o'sha tugma yoritiladi.
+            const activeChoice: RefundTenderChoice =
+              tenderChoice !== 'auto'
+                ? tenderChoice
+                : autoSplit.cardMinor === 0n
+                  ? 'cash'
+                  : autoSplit.cashMinor === 0n
+                    ? 'card'
+                    : 'auto';
             // Qarzdan yechiladigan qism — serverning auto-split'i aynan shu
             // qoldiqni yozadi. Kassir mijozga «pulingiz emas, qarzingiz
             // kamayadi» deyishi uchun ekranda ko'rinishi SHART.
@@ -853,6 +889,33 @@ export function ChekDetailPanel({
             const refundDebtMinor = refundValue - split.cashMinor - split.cardMinor;
             return (
               <>
+                {/* V3 (egasi, 2026-09-02): «pul qaytarganda naqd/karta tanlash
+                    imkoni bo'lsin». Tanlangach butun so'm ulushi o'sha
+                    kanalga o'tadi; server kanal cap'ini o'tkazadi, jami cap
+                    esa o'z kuchida (olganidan ko'p pul chiqmaydi). */}
+                {moneyMinor > 0n && (
+                  <div className="mb-3 flex items-center gap-2" data-test-id="pos-refund-tender">
+                    <span className="shrink-0 text-sm text-[var(--ms-text-muted)]">
+                      {t('refund_tender_label')}
+                    </span>
+                    {(['cash', 'card'] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        data-test-id={`pos-refund-tender-${k}`}
+                        data-active={activeChoice === k || undefined}
+                        onClick={() => setTenderChoice(k)}
+                        className={`h-9 flex-1 rounded-lg border text-sm font-semibold transition-colors ${
+                          activeChoice === k
+                            ? 'border-[var(--ms-primary-500)] bg-[var(--ms-primary-500)] text-white'
+                            : 'border-[var(--ms-border)] text-[var(--ms-text-muted)] hover:bg-[var(--ms-bg-hover)]'
+                        }`}
+                      >
+                        {k === 'cash' ? t('refund_tender_cash') : t('refund_tender_card')}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-sm text-[var(--ms-text-muted)]">
                     {t('refund_amount_cash')}
@@ -868,9 +931,14 @@ export function ChekDetailPanel({
                   >
                     <span className="text-sm text-[var(--ms-text-muted)]">
                       {t('refund_amount_card')}
-                      <span className="mt-0.5 block text-[11px] text-[var(--ms-text-muted)]">
-                        {t('refund_amount_card_hint')}
-                      </span>
+                      {/* Eslatma faqat AVTOMATIK taqsimotda o'rinli: kassir
+                          kanalni o'zi tanlagan bo'lsa «naqd berilmaydi» yolg'on
+                          bo'lardi (V3). */}
+                      {tenderChoice === 'auto' && (
+                        <span className="mt-0.5 block text-[11px] text-[var(--ms-text-muted)]">
+                          {t('refund_amount_card_hint')}
+                        </span>
+                      )}
                     </span>
                     <span className="shrink-0 font-semibold tabular-nums text-[var(--ms-text-primary)]">
                       {formatMoney(split.cardMinor)}

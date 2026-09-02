@@ -336,3 +336,93 @@ describe('dollarli chekni qaytarish — dollar dollarda ketadi', () => {
     expect(row.textContent).toContain('$1.00');
   });
 });
+
+/**
+ * V3 (egasi, 2026-09-02): «pul har doim qaytaradigan paytda naqd/karta
+ * tanlash imkoni bo'lsin».
+ *
+ * P5 kanal-taqsimoti SUKUT bo'lib qoladi (karta cheki → karta qatori), lekin
+ * kassir tugma bilan butun so'm ulushini boshqa kanalga o'tkaza oladi va
+ * so'rovga `channelOverride: true` ketadi — server kanal cap'ini o'tkazadi.
+ * JAMI cap serverda o'z kuchida: olganidan ko'p pul baribir chiqmaydi.
+ */
+describe('ChekDetailPanel — qaytarish kanalini tanlash (V3)', () => {
+  it('KARTA chekida sukut «Karta/terminal» yoritilgan turadi', async () => {
+    vi.mocked(api.get).mockImplementation(router(chekRoutes({ payments: CARD_ONLY })));
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openRefund(user);
+
+    expect(screen.getByTestId('pos-refund-tender-card')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByTestId('pos-refund-tender-cash')).not.toHaveAttribute('data-active');
+  });
+
+  it('🔴 ASOSIY HOLAT: karta chekini NAQD qaytarish — so`rovda naqd + bayroq', async () => {
+    vi.mocked(api.get).mockImplementation(router(chekRoutes({ payments: CARD_ONLY })));
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openRefund(user);
+
+    await user.click(screen.getByTestId('pos-refund-tender-cash'));
+    await user.click(screen.getByRole('button', { name: /Qaytarishni tasdiqlash/ }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.cashAmountMinor).toBe('1800000');
+    expect(body.cardAmountMinor).toBe('0');
+    expect(body.channelOverride).toBe(true);
+  });
+
+  it('NAQD chekini KARTAGA o`tkazish ham ishlaydi (teskari yo`nalish)', async () => {
+    // To'lov qatorlarisiz chek = hammasi naqd (yuqoridagi eski-chek testi).
+    vi.mocked(api.get).mockImplementation(router(chekRoutes()));
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openRefund(user);
+
+    await user.click(screen.getByTestId('pos-refund-tender-card'));
+    await user.click(screen.getByRole('button', { name: /Qaytarishni tasdiqlash/ }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.cashAmountMinor).toBe('0');
+    expect(body.cardAmountMinor).toBe('1800000');
+    expect(body.channelOverride).toBe(true);
+  });
+
+  it('kassir TEGMASA bayroq YUBORILMAYDI (eski xulq saqlanadi)', async () => {
+    vi.mocked(api.get).mockImplementation(router(chekRoutes({ payments: CARD_ONLY })));
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openRefund(user);
+
+    await user.click(screen.getByRole('button', { name: /Qaytarishni tasdiqlash/ }));
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.channelOverride).toBeUndefined();
+    expect(body.cardAmountMinor).toBe('1800000');
+  });
+
+  it('TO`LIQ qarzli chekda tanlagich UMUMAN chiqmaydi (pul chiqmaydi)', async () => {
+    vi.mocked(api.get).mockImplementation(
+      router(
+        chekRoutes({
+          payments: [
+            {
+              method: 'DEBT',
+              amountMinor: '1800000',
+              currency: 'UZS',
+              rateMinor: null,
+              amountBaseMinor: '1800000',
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await openRefund(user);
+
+    expect(screen.queryByTestId('pos-refund-tender')).not.toBeInTheDocument();
+  });
+});
