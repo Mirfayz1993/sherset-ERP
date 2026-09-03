@@ -8302,6 +8302,8 @@
       "vozvrat_clear_filter": "Сбросить фильтр",
       "vozvrat_detail_placeholder": "Выберите чек — возврат оформляется там",
       "vozvrat_empty": "Чеки не найдены",
+      "vozvrat_filter_empty": "У этого клиента нет чеков с таким товаром",
+      "vozvrat_filter_product": "Поиск товара у этого клиента...",
       "vozvrat_hint": "Найдите товар или клиента — выйдут все оплаченные чеки с ним, с датой",
       "vozvrat_more": "Показать ещё",
       "vozvrat_search_agent": "Имя клиента или телефон...",

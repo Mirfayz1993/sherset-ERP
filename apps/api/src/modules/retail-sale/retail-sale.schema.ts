@@ -384,6 +384,20 @@ export const RetailSaleFilterSchema = z.object({
   // buning o'rnini bosolmaydi. Indeks tayyor: RetailSalePosition
   // @@index([accountId, productId]).
   productId: z.string().uuid().optional(),
+  /**
+   * V4 (egasi, 2026-09-03) — «mijozni tanladik, endi shu mijoz cheklaridagi
+   * ma'lum tovarni topmoqchimiz». `productId` dan FARQI: bu MATN, ya'ni bitta
+   * kartochkaga bog'lanmaydi.
+   *
+   * 🔴 Nega matn kerak: jonlida bir tovarning bir nechta kartochkasi bo'ladi
+   * (o'lchandi 2026-09-02: `05136 avvg 3x4 1x2.5` va `04878 avv 3x4*1x2.5` —
+   * biri mijozli, biri naqd cheklarda). Aniq kartochka tanlansa kassir
+   * ikkinchisidagi chekni TOPOLMAYDI. Matn ikkalasini ham tutadi.
+   *
+   * Moslik tovar qidiruvi bilan bir xil qoida: nom ICHIDAN (trigram indeks
+   * `products_name_trgm_idx`), kod/artikul BOSHIDAN, shtrix-kod ANIQ (skaner).
+   */
+  productSearch: z.string().max(100).optional(),
   state: RetailSaleStateSchema.optional(),
   // G2 — omborchi paneli. `/omborchi` sahifasi `assigneeId` ni 2026-08 dan beri
   // YUBORARDI, lekin sxema uni jimgina tashlab yuborardi (z.object unknown

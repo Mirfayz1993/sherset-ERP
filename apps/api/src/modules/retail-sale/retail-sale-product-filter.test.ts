@@ -72,3 +72,86 @@ describe('V1 — `GET /retail-sales?productId=`', () => {
     expect(args?.where?.state).toBe('posted');
   });
 });
+
+/**
+ * V4 (egasi, 2026-09-03): «mijozni tanladik, shu mijoz cheklaridagi ma'lum
+ * tovarni topmoqchimiz» — mijoz chipi ostidagi matnli qidiruv.
+ *
+ * `productId` dan farqi MATN ekani: jonlida bir tovarning bir nechta
+ * kartochkasi bo'ladi (2026-09-02 da o'lchandi: `05136 avvg 3x4 1x2.5`
+ * mijozli cheklarda, `04878 avv 3x4*1x2.5` naqd cheklarda) — aniq kartochka
+ * tanlansa kassir ikkinchisidagi chekni topolmaydi.
+ */
+describe('V4 — `GET /retail-sales?productSearch=`', () => {
+  it('sxema `productSearch` ni QABUL qiladi', () => {
+    expect(RetailSaleFilterSchema.parse({ productSearch: 'avvg 3x4' }).productSearch).toBe(
+      'avvg 3x4',
+    );
+  });
+
+  it('100 belgidan uzun matn RAD etiladi', () => {
+    expect(() => RetailSaleFilterSchema.parse({ productSearch: 'a'.repeat(101) })).toThrow();
+  });
+
+  it('`where` ga tovar nomi/kodi/shtrix-kodi bo`yicha OR tushadi', async () => {
+    const h = makeHarness();
+    await h.svc.list(ACC, { productSearch: 'avvg', limit: 5 });
+
+    const args = h.findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> } | undefined;
+    expect(args?.where?.positions).toEqual({
+      some: {
+        product: {
+          OR: [
+            { name: { contains: 'avvg', mode: 'insensitive' } },
+            { code: { startsWith: 'avvg', mode: 'insensitive' } },
+            { article: { startsWith: 'avvg', mode: 'insensitive' } },
+            { barcodes: { has: 'avvg' } },
+          ],
+        },
+      },
+    });
+  });
+
+  it('MIJOZ bilan birga ishlaydi (egasi so`ragan asosiy holat)', async () => {
+    const h = makeHarness();
+    await h.svc.list(ACC, { agentId: AGENT, productSearch: 'izolenta', state: 'posted', limit: 5 });
+
+    const args = h.findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> } | undefined;
+    expect(args?.where?.agentId).toBe(AGENT);
+    expect(args?.where?.state).toBe('posted');
+    expect(args?.where?.positions).toBeDefined();
+  });
+
+  /**
+   * 🔴 TUZOQ QULFI: ikkalasi ham `where.positions` kalitiga yozadi. Alohida
+   * spread qilinsa ikkinchisi birinchisini JIMGINA o'chirardi — so'rov
+   * noto'g'ri natija qaytarardi va buni na typecheck, na boshqa test tutardi.
+   */
+  it('`productId` va `productSearch` BIRGA berilsa IKKALASI ham saqlanadi', async () => {
+    const h = makeHarness();
+    await h.svc.list(ACC, { productId: PRODUCT, productSearch: 'avvg', limit: 5 });
+
+    const args = h.findMany.mock.calls[0]?.[0] as
+      | { where?: { positions?: { some?: Record<string, unknown> } } }
+      | undefined;
+    const some = args?.where?.positions?.some;
+    expect(some?.productId).toBe(PRODUCT);
+    expect(some?.product).toBeDefined();
+  });
+
+  it('bo`sh/probel matn filtr YASAMAYDI (butun ro`yxat qaytib qolmasin)', async () => {
+    const h = makeHarness();
+    await h.svc.list(ACC, { productSearch: '   ', limit: 5 });
+
+    const args = h.findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> } | undefined;
+    expect(args?.where && 'positions' in args.where).toBe(false);
+  });
+
+  it('`productSearch` berilmasa `where` shakli o`zgarmaydi', async () => {
+    const h = makeHarness();
+    await h.svc.list(ACC, { productId: PRODUCT, limit: 5 });
+
+    const args = h.findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> } | undefined;
+    expect(args?.where?.positions).toEqual({ some: { productId: PRODUCT } });
+  });
+});

@@ -8302,6 +8302,8 @@
       "vozvrat_clear_filter": "Filtrni tozalash",
       "vozvrat_detail_placeholder": "Chekni tanlang — qaytarish o'sha yerda",
       "vozvrat_empty": "Chek topilmadi",
+      "vozvrat_filter_empty": "Bu mijozda shunday tovar bo'lgan chek topilmadi",
+      "vozvrat_filter_product": "Shu mijozdagi tovarni qidirish...",
       "vozvrat_hint": "Tovar yoki mijozni qidiring — u qatnashgan barcha to'langan cheklar sanasi bilan chiqadi",
       "vozvrat_more": "Yana ko'rsatish",
       "vozvrat_search_agent": "Mijoz ismi yoki telefon...",

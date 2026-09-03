@@ -68,11 +68,32 @@ export function VozvratMode({
   const [debounced, setDebounced] = useState('');
   const [picked, setPicked] = useState<PickedFilter | null>(null);
   const [selectedChekId, setSelectedChekId] = useState<string | null>(null);
+  /**
+   * V4 (egasi, 2026-09-03) — mijoz tanlangach uning cheklari ICHIDAN tovar
+   * qidirish. Serverga `productSearch` bo'lib ketadi (MATN, aniq kartochka
+   * emas): jonlida bir tovarning bir nechta kartochkasi bo'ladi va aniq
+   * kartochka tanlansa kassir ikkinchisidagi chekni topolmaydi.
+   */
+  const [productFilter, setProductFilter] = useState('');
+  const [productFilterDebounced, setProductFilterDebounced] = useState('');
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [search]);
+
+  useEffect(() => {
+    const id = setTimeout(
+      () => setProductFilterDebounced(productFilter.trim()),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(id);
+  }, [productFilter]);
+
+  const clearProductFilter = () => {
+    setProductFilter('');
+    setProductFilterDebounced('');
+  };
 
   const switchTab = (next: VozvratTab) => {
     if (next === tab) return;
@@ -81,6 +102,7 @@ export function VozvratMode({
     setDebounced('');
     setPicked(null);
     setSelectedChekId(null);
+    clearProductFilter();
   };
 
   const pick = (kind: VozvratTab, id: string, name: string) => {
@@ -88,6 +110,9 @@ export function VozvratMode({
     setSearch('');
     setDebounced('');
     setSelectedChekId(null);
+    // Mijoz almashsa oldingi tovar filtri qolib ketmasin (yangi mijozning
+    // cheklari sababsiz bo'sh ko'rinardi).
+    clearProductFilter();
   };
 
   const productHits = useQuery<{ items: ProductHit[] }>({
@@ -108,14 +133,21 @@ export function VozvratMode({
 
   // Egasining S-V3 javobi: faqat `posted` — oyna «vozvrat qilish» uchun, arxiv
   // emas. Qisman qaytarilgan chek `posted` ligicha qoladi va ko'rinaveradi.
+  // V4 — tovar filtri FAQAT mijoz tabida ma'noli (Tovar tabida tovar
+  // allaqachon tanlangan).
+  const agentProductQuery = picked?.kind === 'agent' ? productFilterDebounced : '';
+
   const cheklar = useInfiniteQuery({
-    queryKey: ['pos-vozvrat-cheklar', picked?.kind, picked?.id],
+    queryKey: ['pos-vozvrat-cheklar', picked?.kind, picked?.id, agentProductQuery],
     queryFn: ({ pageParam, signal }) => {
       const filterParam =
         picked?.kind === 'product' ? `productId=${picked.id}` : `agentId=${picked?.id}`;
       const cursorParam = pageParam ? `&cursor=${pageParam}` : '';
+      const productParam = agentProductQuery
+        ? `&productSearch=${encodeURIComponent(agentProductQuery)}`
+        : '';
       return api.get<ChekPage>(
-        `/retail-sales?${filterParam}&state=posted&sortBy=moment&sortDir=desc&limit=50${cursorParam}`,
+        `/retail-sales?${filterParam}${productParam}&state=posted&sortBy=moment&sortDir=desc&limit=50${cursorParam}`,
         { signal },
       );
     },
@@ -171,8 +203,9 @@ export function VozvratMode({
           ))}
         </div>
 
-        {/* Qidiruv maydoni yoki tanlangan filtr-chip */}
-        <div className="shrink-0 border-b border-[var(--ms-border)] p-2">
+        {/* Qidiruv maydoni yoki tanlangan filtr-chip (+ V4: chip ostida
+            mijozning cheklari ichidan tovar qidirish) */}
+        <div className="flex shrink-0 flex-col gap-2 border-b border-[var(--ms-border)] p-2">
           {picked ? (
             <div className="flex h-[48px] items-center gap-2 rounded-lg border border-[var(--pos-brand)] bg-[var(--pos-brand)]/10 px-3">
               {picked.kind === 'product' ? (
@@ -190,6 +223,7 @@ export function VozvratMode({
                 onClick={() => {
                   setPicked(null);
                   setSelectedChekId(null);
+                  clearProductFilter();
                 }}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--ms-text-muted)] hover:bg-[var(--ms-bg-hover)]"
               >
@@ -210,6 +244,34 @@ export function VozvratMode({
               }
               className="h-[48px] w-full rounded-lg border border-[var(--ms-border)] bg-[var(--ms-bg-app)] px-3 text-[16px] outline-none focus:border-[var(--ms-primary-500)]"
             />
+          )}
+
+          {/* V4 (egasi, 2026-09-03) — mijoz tanlangach uning cheklari ICHIDAN
+              tovar qidirish. Faqat Mijoz tabida: Tovar tabida tovar
+              allaqachon tanlangan, ikkinchi tovar filtri ma'nosiz bo'lardi.
+              Skaner ham ishlaydi — server shtrix-kodni aniq tutadi. */}
+          {picked?.kind === 'agent' && (
+            <div className="relative">
+              <input
+                type="text"
+                data-test-id="pos-vozvrat-product-filter"
+                value={productFilter}
+                onChange={(e) => setProductFilter(e.target.value)}
+                placeholder={t('vozvrat_filter_product')}
+                className="h-[44px] w-full rounded-lg border border-[var(--ms-border)] bg-[var(--ms-bg-app)] pr-9 pl-3 text-[15px] outline-none focus:border-[var(--ms-primary-500)]"
+              />
+              {productFilter.length > 0 && (
+                <button
+                  type="button"
+                  data-test-id="pos-vozvrat-product-filter-clear"
+                  aria-label={t('vozvrat_clear_filter')}
+                  onClick={clearProductFilter}
+                  className="-translate-y-1/2 absolute top-1/2 right-1 flex h-8 w-8 items-center justify-center rounded-lg text-[var(--ms-text-muted)] hover:bg-[var(--ms-bg-hover)]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -248,10 +310,17 @@ export function VozvratMode({
             </div>
           )
         ) : chekRows.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-1 text-[var(--ms-text-muted)]">
+          <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center text-[var(--ms-text-muted)]">
             <Receipt className="h-8 w-8 opacity-40" />
             <span className="text-[15px]">
-              {cheklar.isLoading ? t('loading') : t('vozvrat_empty')}
+              {cheklar.isLoading
+                ? t('loading')
+                : // V4 — filtr qo'yilgan bo'lsa sabab AYTILADI: mijozda chek
+                  // umuman yo'qmi yoki shu tovar topilmadimi — kassir farqni
+                  // bilib tursin.
+                  agentProductQuery
+                  ? t('vozvrat_filter_empty')
+                  : t('vozvrat_empty')}
             </span>
           </div>
         ) : (
@@ -260,6 +329,7 @@ export function VozvratMode({
               <button
                 key={sale.id}
                 type="button"
+                data-test-id="pos-vozvrat-chek-row"
                 onClick={() => setSelectedChekId(sale.id)}
                 data-selected={selectedChekId === sale.id || undefined}
                 className="flex min-h-[var(--pos-row-h)] w-full shrink-0 items-center gap-3 px-4 text-left hover:bg-[var(--ms-bg-hover)] active:bg-[var(--ms-bg-hover)] data-[selected]:bg-[var(--pos-brand)]/10"

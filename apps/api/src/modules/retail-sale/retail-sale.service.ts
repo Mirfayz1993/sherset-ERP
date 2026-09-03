@@ -435,14 +435,45 @@ export class RetailSaleService {
 
   async list(accountId: string, rawFilter: unknown) {
     const filter = RetailSaleFilterSchema.parse(rawFilter);
+    /**
+     * V4 — chek POZITSIYASI bo'yicha filtr, BITTA joyda yig'iladi.
+     *
+     * 🔴 Nega birlashtirilgan: `productId` ham, `productSearch` ham `where`
+     * ning AYNI `positions` kalitiga yozadi. Ikkalasi alohida spread qilinsa
+     * ikkinchisi birinchisini JIMGINA o'chirardi (obyektda kalit bitta) va
+     * so'rov noto'g'ri natija qaytarardi — typecheck ham, testlar ham buni
+     * tutmasdi. Qo'riqchi: `retail-sale-product-filter.test.ts`.
+     *
+     * Semantika: `some` ⇒ chekda IKKALA shartga ham mos keladigan BITTA
+     * pozitsiya bo'lishi kerak (ikki xil qatorga tarqalgan mos kelish emas).
+     */
+    const productToken = filter.productSearch?.trim();
+    const positionFilter: Prisma.RetailSalePositionWhereInput = {
+      ...(filter.productId ? { productId: filter.productId } : {}),
+      ...(productToken
+        ? {
+            // Tovar qidiruvi (`product.repository.ts`) bilan AYNI qoida:
+            // nom ichidan (trigram indeks), kod/artikul boshidan, shtrix-kod
+            // aniq — kassir skaner bilan ham topa olsin.
+            product: {
+              OR: [
+                { name: { contains: productToken, mode: 'insensitive' as const } },
+                { code: { startsWith: productToken, mode: 'insensitive' as const } },
+                { article: { startsWith: productToken, mode: 'insensitive' as const } },
+                { barcodes: { has: productToken } },
+              ],
+            },
+          }
+        : {}),
+    };
     const where: Prisma.RetailSaleWhereInput = {
       accountId,
       ...(filter.sessionId ? { sessionId: filter.sessionId } : {}),
       // F9 — POS mijoz kartasi. Berilmasa `where` ga UMUMAN tushmaydi, ya'ni
       // mavjud ro'yxat sahifasining so'rov shakli o'zgarmaydi.
       ...(filter.agentId ? { agentId: filter.agentId } : {}),
-      // V1 — Vozvrat oynasi: tovar bo'yicha chek qidiruvi.
-      ...(filter.productId ? { positions: { some: { productId: filter.productId } } } : {}),
+      // V1/V4 — Vozvrat oynasi: tovar bo'yicha chek qidiruvi (yuqorida yig'ilgan).
+      ...(Object.keys(positionFilter).length > 0 ? { positions: { some: positionFilter } } : {}),
       ...(filter.state ? { state: filter.state } : {}),
       ...(filter.dateFrom || filter.dateTo
         ? {
