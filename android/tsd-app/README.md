@@ -202,7 +202,14 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
    ko'chirishga urinib ko'ring → **403** («store.update kerak»).
 7. **Sanash:** yacheyka yorlig'ini skanerlang → tarkib chiqsin → bitta tovarga
    yangi son kiriting → saqlang → `/cell` ekranida o'sha son ko'rinsin.
-8. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+8. **Biriktirilgan tovarlar (T1):** qoldig'i YO'Q, lekin tovar kartasida
+   «Yacheyka»/«Polka» shu yacheykaga qo'yilgan tovar tayyorlang → o'sha
+   yacheyka yorlig'ini Sanash ekranida skanerlang → «Yacheyka bo'sh»
+   O'RNIGA kulrang «biriktirilgan · qoldiq 0» qatori chiqsin; sarlavhada
+   «Qoldiqda 0 · biriktirilgan 1» ko'rinsin → qatorni bosing → yuqorida
+   sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» kartasi ochilsin →
+   son kiriting → saqlang → qator endi qoldiq guruhida ko'rinsin.
+9. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
 
 ## Qo'lda smoke (K4 qabul mezoni — BO'LINADIGAN TOVAR KESIMI)
 

@@ -46,11 +46,27 @@ import org.json.JSONObject
  * javonda turgan lekin tizimda ko'rinmagan tovar sanalganda avto
  * Оприходование yoziladi — aynan shuning uchun ekran buni OCHIQ ogohlantirish
  * bilan ko'rsatadi («kirim bo'lib yoziladi»), jimgina qo'shib qo'ymaydi.
+ *
+ * 🔵 **BIRIKTIRILGAN TOVARLAR (T1, egasi 2026-09-03).** Jonli sinovda
+ * omborchi bo'sh yacheykada tiqilib qoldi: ekran «ro'yxatdan tanlang»
+ * derdi, ro'yxat esa bo'sh edi. Sabab — `cellByBarcode` javobining
+ * `products` maydoni (yacheykaga biriktirilgan tovarlar, `__yacheyka` +
+ * `ProductCellLink`) O'QILMASDAN tashlab yuborilardi. Endi ekran ikki
+ * guruh chizadi: qoldig'i bor qatorlar va biriktirilgan-lekin-qoldiqsiz
+ * qatorlar. Qo'shimcha tarmoq so'rovi YO'Q — ma'lumot o'sha javobda.
  */
 class CountScreen(private val shell: Shell) : Screen {
 
     private var cell by mutableStateOf<JSONObject?>(null)
     private var items by mutableStateOf(JSONArray())
+
+    /**
+     * T1 — yacheykaga BIRIKTIRILGAN tovarlar (`products`). Qoldiqdan MUSTAQIL:
+     * bu joylashuv yorlig'i (`__yacheyka` + `ProductCellLink`), son emas.
+     * Server uni `cellByBarcode` javobida ALLAQACHON yuborardi, ekran esa
+     * tashlab yuborardi — shuning uchun bo'sh yacheyka boshi berk ko'cha edi.
+     */
+    private var bound by mutableStateOf(JSONArray())
 
     /** Skanerlangan (yoki ro'yxatdan bosilgan) tovar — yuqoridagi karta. */
     private var picked by mutableStateOf<JSONObject?>(null)
@@ -78,10 +94,20 @@ class CountScreen(private val shell: Shell) : Screen {
             return
         }
 
+        val extras = boundOnly()
+
         SectionCard(tint = Palette.PrimaryContainer, border = MaterialTheme.colorScheme.primary) {
             CellBadge(c.optString("name"))
             Spacer(Modifier.height(6.dp))
             Text(c.optString("storeName"), color = Palette.TextMuted)
+            Spacer(Modifier.height(4.dp))
+            // «Qoldiqda N · biriktirilgan M» — N + M aynan quyida chiziladigan
+            // qatorlar soni, ya'ni omborchi ro'yxat tugaganini ko'radi.
+            Text(
+                stringResource(R.string.count_summary, items.length(), extras.size),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
         }
         Spacer(Modifier.height(10.dp))
 
@@ -98,7 +124,9 @@ class CountScreen(private val shell: Shell) : Screen {
             Spacer(Modifier.height(10.dp))
         }
 
-        if (items.length() == 0) {
+        // «Yacheyka bo'sh» faqat IKKALA guruh ham bo'sh bo'lganda — aks holda
+        // ekran o'zi ko'rsatib turgan ro'yxatni «yo'q» deb aytardi (T1).
+        if (items.length() == 0 && extras.isEmpty()) {
             EmptyState(stringResource(R.string.count_empty))
         }
         for (i in 0 until items.length()) {
@@ -124,6 +152,38 @@ class CountScreen(private val shell: Shell) : Screen {
                 Spacer(Modifier.height(10.dp))
                 PrimaryButton(text = stringResource(R.string.count_save)) {
                     save(c, assortmentId, (counts[assortmentId] ?: it.optString("qty")).trim())
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
+        // Ikkinchi guruh: biriktirilgan, lekin qoldig'i 0 tovarlar. Sanoq
+        // maydoni bu yerda YO'Q — bosilganda yuqoridagi «sanalayotgan tovar»
+        // kartasi ochiladi va sariq ogohlantirish (kirim bo'lib yoziladi)
+        // o'sha yerda ko'rinadi.
+        for (b in extras) {
+            val boundId = b.optString("id")
+            if (boundId == p?.optString("id")) continue
+            SectionCard(
+                modifier = Modifier.clickable { pick(b.optString("name"), boundId) },
+                tint = Palette.SurfaceMuted,
+            ) {
+                // NARX YO'Q: `getCellProducts` select'i — id, name, code,
+                // barcode, archived. Narx maydoni javobda umuman yo'q.
+                Text(b.optString("name"), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.count_bound_zero),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Palette.TextMuted,
+                )
+                if (b.optBoolean("archived")) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        stringResource(R.string.count_archived),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Palette.Warning,
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -186,6 +246,28 @@ class CountScreen(private val shell: Shell) : Screen {
         }
     }
 
+    /**
+     * Biriktirilgan, lekin `stock` da BO'LMAGAN tovarlar. Qoldig'i bor tovar
+     * ikki marta chizilmaydi (ikki maydon bir tovarga ikki xil son berardi),
+     * arxivlanganlari esa oxiriga suriladi — `sortedBy` barqaror, ya'ni
+     * serverning `name` tartibi guruh ichida saqlanadi.
+     */
+    private fun boundOnly(): List<JSONObject> {
+        if (bound.length() == 0) return emptyList()
+        val inStock = HashSet<String>()
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            inStock.add(it.optString("assortmentId"))
+        }
+        val out = ArrayList<JSONObject>()
+        for (i in 0 until bound.length()) {
+            val b = bound.optJSONObject(i) ?: continue
+            if (inStock.contains(b.optString("id"))) continue
+            out.add(b)
+        }
+        return out.sortedBy { if (it.optBoolean("archived")) 1 else 0 }
+    }
+
     /** Shu yacheykadagi tizim qoldig'i, tovar ro'yxatda bo'lmasa `null`. */
     private fun systemQty(assortmentId: String): String? {
         for (i in 0 until items.length()) {
@@ -206,6 +288,7 @@ class CountScreen(private val shell: Shell) : Screen {
     private fun reset() {
         cell = null
         items = JSONArray()
+        bound = JSONArray()
         counts.clear()
         picked = null
         pickedQty = ""
@@ -263,6 +346,8 @@ class CountScreen(private val shell: Shell) : Screen {
                 1 -> {
                     cell = cells.getJSONObject(0)
                     items = resp.optJSONArray("stock") ?: JSONArray()
+                    // Qo'shimcha SO'ROV YO'Q — `products` shu javobning ichida.
+                    bound = resp.optJSONArray("products") ?: JSONArray()
                     counts.clear()
                     picked = null
                     pickedQty = ""

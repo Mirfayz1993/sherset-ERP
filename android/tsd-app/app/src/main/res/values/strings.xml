@@ -101,6 +101,10 @@
     <string name="count_save">Saqlash</string>
     <string name="count_saved">Sanoq saqlandi</string>
     <string name="count_offline">Aloqa yo\'q — sanoq saqlanmadi, qayta urinib ko\'ring</string>
+    <!-- T1 - yacheykaga biriktirilgan tovarlar (qoldiqdan mustaqil ro'yxat) -->
+    <string name="count_summary">Qoldiqda %1$d · biriktirilgan %2$d</string>
+    <string name="count_bound_zero">biriktirilgan · qoldiq 0</string>
+    <string name="count_archived">⚠ arxivlangan</string>
 
     <!-- 0.2.0 — bosh ekran (plitkali menyu, egasining tanlovi 2026-09-01) -->
     <string name="home_title">Bosh ekran</string>
