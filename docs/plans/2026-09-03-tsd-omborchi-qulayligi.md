@@ -1,0 +1,751 @@
+# TSD — omborchi qulayligi (T-reja)
+
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`)
+> **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
+> **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
+> HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
+> **Bog'liq rejalar:** U-reja (`2026-09-01-tsd-zamonaviy-ui.md`), G-reja (`2026-08-23-omborchi-tsd-mijozlar.md`),
+> F-reja (`2026-08-23-ombor-restrukturizatsiya.md`), K-reja (`2026-08-25-bolinadigan-tovar-bolak-hisobi.md`).
+>
+> **Ijro tartibi (O'ZGARMAS):** har faza **ALOHIDA sessiyada**. Agent shu faylni to'liq o'qiydi, FAQAT o'z fazasini
+> bajaradi, testlardan o'tkazadi, §5 «Hisobotlar» ga o'z fazasi ostiga yozadi va **TO'XTAYDI** —
+> keyingi fazani BOSHLAMAYDI. Sabab: kontekst o'sishi bilan token sarfi ~kvadratik oshadi.
+
+---
+
+## 1. Kontekst (nega bu reja)
+
+### 1.1. Hozir nima bor (2026-09-03 da koddan o'qib o'lchandi)
+
+- Ilova: `android/tsd-app`, `0.4.0` (versionCode 4), Jetpack Compose + Material 3, **11 ekran**
+  (`HomeScreen`, `TaskListScreen`, `TaskDetailScreen`, `ShortageScreen`, `CutScreen`, `PlaceScreen`,
+  `CountScreen`, `ScanInfoScreen`, `PickProductScreen`, `QueueScreen`, `DiagnosticsScreen`, `AuthScreens`).
+- Server sirti: `GET /tsd/scan` (narxsiz), TSD allowlist `tsd-policy.ts` (**default-deny**), `/auth/tsd-login`,
+  oflayn navbat `clientOpId` idempotentligi bilan.
+- U-reja fazalari U1…U7 bajarilgan; **U4 (jonli qurilma smoke) — QISMAN, ochiq qarz** (U-reja «Ochiq qolganlar»).
+- **Kod hali commit qilinmagan**: `git status` da `android/tsd-app` ning 15+ fayli `M`/`??` holatida,
+  branch `yacheyka-inventarizatsiya`. Birinchi faza buni hisobga oladi (§2, qoida 6).
+
+### 1.2. 🔴 Jonli hodisa — «Yacheyka bo'sh» boshi berk ko'cha
+
+Omborchi Sanash ekranida `02-01-01-04` yacheykasini ochdi. Yacheyka bo'sh chiqdi. Ekran
+«Tovar shtrixini skanerlang **yoki ro'yxatdan tanlang**» deydi — lekin ro'yxat bo'sh, ya'ni maslahatning
+yarmi bajarilmaydi. Tovarni biriktirishning yo'li qolmadi. **Uchta ildiz sabab, uchalasi ham koddan
+o'qib tasdiqlangan (taxmin emas):**
+
+1. **Nom/artikul bo'yicha qidiruv YO'Q.** `TsdService.scan` faqat AYNAN moslik bilan qidiradi:
+   `apps/api/src/modules/tsd/tsd.service.ts` — `OR: [{ barcodes: { has: code } }, { code }, { article: code }]`.
+   Ya'ni shtrixi yo'q / yorlig'i yirtilgan / shtrixi bazaga kiritilmagan tovar = **boshi berk ko'cha**.
+   TSD allowlist'da `/products` ATAYLAB yo'q (narx sababi) — demak qidiruv uchun **yangi narxsiz sirt** kerak.
+2. **Server allaqachon beradigan ma'lumot TASHLAB YUBORILAYAPTI.**
+   `store-address.service.ts: lookupCellByBarcode` javobi **`{ cells, products, stock }`** —
+   `products` bu yacheykaga BIRIKTIRILGAN tovarlar ro'yxati (`__yacheyka` + `ProductCellLink`, narxsiz).
+   `CountScreen.openCell` esa faqat `cells` va `stock` ni o'qiydi, `products` ni **umuman ko'rmaydi**.
+   Ya'ni «bo'sh» yacheykada aslida ko'rsatiladigan ro'yxat BOR va u qo'shimcha so'rovsiz keladi.
+3. **Qo'lda kiritib ham bo'lmaydi.** `ScanBar.kt` — 3 belgidan keyin **350 ms jimlikda avtomatik yuboradi**
+   (U5 da suffikssiz skaner uchun qo'yilgan zaxira). Odam qo'lda `02-01-01-04` yozsa, `02-` dan keyin
+   pauza bo'ladi va yarim kod yuboriladi → «Topilmadi». Klaviatura amalda ishlamaydi.
+
+### 1.3. Qo'shimcha ergonomika bo'shliqlari (o'lchandi)
+
+- **Ovoz/tebranish YO'Q** (`grep`: `Vibrator`, `ToneGenerator`, `SoundPool` — hech biri yo'q). Omborchi javon
+  oldida turadi, ekranga qaramaydi; muvaffaqiyat ham, xato ham faqat toast bilan aytiladi.
+- **`keepScreenOn` YO'Q** — sanash o'rtasida ekran o'chadi, PIN qayta so'raladi.
+- **Miqdor faqat sof raqam** (`NumberField`) — «12 quti × 24 dona» ni omborchi boshida hisoblaydi.
+- **Sanashda progress yo'q** — yacheykada nechta qator sanaldi/qoldi ko'rinmaydi; «sanalmagan qolganini 0 qilish»
+  yo'li yo'q, ya'ni inventarizatsiya hech qachon TO'LIQ yopilmaydi.
+- **Sanoqni qaytarish yo'q** — noto'g'ri raqam saqlansa server **jim avto-Оприходование** yozadi
+  (`setCellStock`, `oldQty = 0` shoxi). Bu jonlidagi «Ombor 02 yacheykalarida 361 885 soxta son» muammosi
+  bilan bir klass.
+
+### 1.4. O'zgarmaydigan biznes qoidalari (bu reja ularga TEGMAYDI)
+
+- **NARX HECH QAYERDA ko'rinmaydi** — server bermaydi, ilova so'ramaydi (`tsd-scan.ts` oq ro'yxati).
+- Sanash — **mutlaq son** (`mode: 'set'`), oflayn navbatga qo'yilmaydi.
+- **«Tayyor» tugmasi yo'q** — hamma qator yopilgach chek o'zi kontrolga tushadi (G2).
+- **Multi-hit'da tanlovni ODAM qiladi** — ilova hech qachon o'zi tovar tanlamaydi.
+- Oflayn navbat: FIFO, 4xx → «rad etilganlar» ro'yxatiga (jim yo'qotish yo'q — IS-5).
+
+---
+
+## 2. O'ZGARMAS QOIDALAR (har sessiya uchun)
+
+1. **Bitta sessiya = bitta faza.** Faza tugagach agent **KEYINGISINI BOSHLAMAYDI** — §5 ga hisobot yozadi
+   va to'xtaydi. Bu qoidaning istisnosi yo'q.
+2. Ishni boshlashdan avval **shu faylni TO'LIQ o'qi** (ayniqsa §1, §2 va avvalgi fazalar hisobotlarini).
+   O'z fazang vazifalaridan tashqariga chiqma — «yo'l-yo'lakay tuzatdim» bu yerda TAQIQ; topilgan boshqa
+   nuqson hisobotning «Ochiq qolganlar» bandiga yoziladi.
+3. **Narx qoidasi — qizil chiziq.** Serverga qo'shiladigan har qanday yangi javob maydoni uchun savol:
+   «bu yerda narx bormi?». TSD allowlist'iga qator qo'shilsa, hisobotda **nega narxsizligi** yozma
+   isbotlanadi (`select` oq ro'yxati bilan, «ekranda ko'rsatmayapmiz» — isbot EMAS).
+4. **Testlar majburiy:**
+   - server tegilgan bo'lsa: `cd apps/api && npx vitest run <o'z modulingdagi testlar>` + `pnpm --filter @moysklad/api typecheck`
+     (OOM'da `NODE_OPTIONS=--max-old-space-size=8192`), yangi mantiqqa **yangi test**;
+   - allowlist tegilgan bo'lsa: `tsd-policy.test.ts` **majburiy** (yangi qator ochilgani + `/products` hamon YOPIQ);
+   - ilova tegilgan bo'lsa: build **ogohlantirishsiz** o'tsin:
+     ```sh
+     cd android/tsd-app && JAVA_HOME=D:/dev/java/jdk-17 ANDROID_HOME=D:/dev/android-sdk \
+       /d/dev/_downloads/g87/gradle-8.7/bin/gradle --no-daemon assembleDebug
+     ```
+     (Gradle **8.7**, 9.x AGP 8.5.0 bilan MOS EMAS.)
+   - web tegilgan bo'lsa (odatda tegilmaydi): i18n gate'lar `pnpm i18n:gate`.
+5. **Hisobot majburiy** (§5, o'z fazang sarlavhasi ostiga): nima qilindi (fayllar, commit), **test natijalari
+   raqam bilan**, qabul mezonining har bandi bo'yicha ✔/✘, ochiq qolganlar, keyingi fazaga eslatmalar.
+   Hisobotsiz faza TUGAMAGAN hisoblanadi.
+6. **Git.** Branch `yacheyka-inventarizatsiya`, push → `mirfayz` remote. Diqqat: T-reja boshlanganda
+   `android/tsd-app` da **commit qilinmagan U-reja ishi** turibdi — birinchi faza agenti avval
+   `git status` ni tekshiradi va o'z commitiga BEGONA fayllarni qo'shmaydi (kerak bo'lsa mavjud ishni
+   alohida commit bilan qamrab, hisobotda aytadi). Commit subject **kichik harf** (commitlint);
+   biome `noAssignInExpressions`/`noNonNullAssertion` pre-commit'da xato beradi.
+7. **Qabul mezoni — yopish sharti.** Bandlardan biri bajarilmasa faza «TUGADI» deb yopilmaydi; holati
+   **«QISMAN — <nima kutilmoqda>»** bo'ladi. Mezonni egasiga o'tkazish — yopish EMAS. (F-reja qoida 11.)
+8. **Jonli xulqqa ta'sir savoli.** Hisobotda **«bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»** savoliga
+   YOZMA javob beriladi — «buzmaydi» deyish ham dalil bilan. Ilova-ichi o'zgarishlar uchun ham: sanash
+   semantikasi (mutlaq son), oflayn navbat, multi-hit va narx qoidalari buzilmaganini ko'rsat.
+9. **APK'ni kanalga chiqarish — FAQAT egasi «chiqar» desa.** Faza kodni yozadi va build qiladi;
+   `tools/publish.sh` **avtomatik chaqirilmaydi** (o'rnatish terminalni qayta ishga tushiradi va yarim
+   bajarilgan yig'ish/sanashni uzadi). Chiqarilsa: `versionCode` +1 va `versionName` oshiriladi,
+   **debug-kalit** bilan imzolanishi va kalit shu mashinada qolishi esda tutiladi (T9 shuni yopadi).
+10. **Tegilmaydigan fayllar** (fazasi ochiq aytmasa): `ApiClient.kt` ning transport qismi (cookie idorasi,
+    `exec`, 401-refresh), `ActionQueue.kt`, `QueueSender.kt`, `DeviceStore.kt`, `ScannerBridge.kt`.
+    Yangi API metodi qo'shish `ApiClient` ga RUXSAT (transport mantig'iga tegmasdan).
+11. **Maxfiy ma'lumot bu faylga YOZILMAYDI** (repo public): parol, token, `deviceSecret`, PIN.
+12. Ishlar faqat `D:\sherset-v2` da. Jonli bazaga skript yozilmaydi (bu reja ilova+API doirasida).
+
+---
+
+## 3. Fazalar xaritasi
+
+| Faza | Nima | Server ishi | Prioritet | Holat |
+|---|---|---|---|---|
+| **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | **TUGADI** |
+| **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | REJA |
+| **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | REJA |
+| **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | REJA |
+| **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | REJA |
+| **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | REJA |
+| **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | REJA |
+| **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
+| **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | REJA |
+| **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | REJA |
+| **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | REJA |
+
+**Tartib sababi:** T1 eng arzon va rasmdagi holatni darhol yaxshilaydi; T2 matn kiritishning poydevori
+(usiz T3 dagi qidiruv maydoniga qo'lda yozish ham xavf ostida); T3 eng katta va eng muhim funksiya.
+T4–T7 — kundalik qulaylik. T8 U-rejadan qolgan qarz va uni **T1–T3 jonliga chiqqach** bajargan ma'qul
+(bitta o'rnatishda uchalasi ham sinaladi). T9–T11 — keyingi bosqich.
+
+---
+
+## 4. Fazalar tafsiloti
+
+### T1 — Yacheykaga biriktirilgan tovarlar (Sanash ekrani)
+
+**Maqsad.** «Yacheyka bo'sh» ekrani boshi berk ko'cha bo'lmasin: yacheykaga BIRIKTIRILGAN tovarlar
+ro'yxat bo'lib chiqsin va bosilganda sanoq maydoni ochilsin.
+
+**Nega arzon.** `GET /admin/stores/cells/by-barcode` javobi **allaqachon** `{ cells, products, stock }`
+qaytaradi (`store-address.service.ts: lookupCellByBarcode`) — `products` narxsiz
+(`id, name, code, barcode, archived`). Ilova uni tashlab yuboryapti. **Qo'shimcha so'rov ham,
+server o'zgarishi ham KERAK EMAS.**
+
+**Vazifalar.**
+1. `CountScreen.openCell`: `resp.optJSONArray("products")` ni ham o'qib state'ga sol (`bound`).
+2. Ekranda **ikki guruh**: (a) `stock` — qoldig'i bor qatorlar (hozirgidek); (b) `bound` dan `stock` da
+   BO'LMAGANLARI — kulrang «biriktirilgan · qoldiq 0» qatori, bosilsa `pick(name, id)` ishlaydi
+   (mavjud metod, o'zgarmaydi). `archived: true` bo'lganlari eng oxirida va belgisi bilan.
+3. `count_empty` matni faqat **ikkala guruh ham bo'sh** bo'lgandagina chiqsin; hozirgi
+   `count_scan_product_tip` matni endi haqiqatga mos bo'ladi.
+4. Sarlavha-kartaga qisqa hisob: «Qoldiqda N · biriktirilgan M».
+5. Yangi `strings.xml` qatorlari (uz).
+6. `README.md` → «Qo'lda smoke» ga T1 bandi: bo'sh yacheyka ochilganda biriktirilgan tovar ko'rinishi.
+
+**Cheklovlar.** Sanash semantikasi (`mode: 'set'`, mutlaq son) va yacheykada YO'Q tovar sanalganda
+chiqadigan **sariq ogohlantirish** (`count_not_in_cell`, «kirim bo'lib yoziladi») o'z holicha qoladi —
+biriktirilgan lekin qoldig'i 0 tovar ham aynan shu ogohlantirishga tushadi.
+
+**Qabul mezoni.**
+- `assembleDebug` **ogohlantirishsiz**;
+- bo'sh (lekin biriktirilgan tovari bor) yacheykada ro'yxat chiqadi va tanlash ishlaydi — **kodda ko'rsatilsin**
+  (jonli qurilma sinovi T8 da);
+- hech qanday yangi tarmoq so'rovi qo'shilmagani hisobotda aytilsin;
+- server fayllariga **bitta bayt ham** tegilmagan.
+
+<details><summary><b>T1 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) Avval `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` faylini TO'LIQ o'qi —
+   ayniqsa §1 (kontekst), §2 (o'zgarmas qoidalar) va §4 dagi T1 bo'limini.
+2) Sen FAQAT **T1 — Yacheykaga biriktirilgan tovarlar (Sanash ekrani)** fazasini bajarasan.
+   Boshqa fazalarga TEGMA, «yo'l-yo'lakay» tuzatish qilma.
+3) Ishni boshlashdan oldin `git status` ni tekshir: android/tsd-app da commit qilinmagan
+   U-reja ishi bor — o'z commitingga begona fayllarni qo'shma (§2, qoida 6).
+4) Qabul mezonini bajar va §2 qoida 4 dagi build buyrug'ini yugurtir.
+5) Tugagach rejaning §5 «Hisobotlar» bo'limiga «### T1 — …» sarlavhasi ostida to'liq
+   hisobot yoz (nima qilindi, fayllar, build natijasi, qabul mezoni bo'yicha ✔/✘,
+   «qaysi oqimni buzishi mumkin?» savoliga javob, ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. Hisobotni yozib TO'XTA.
+```
+</details>
+
+---
+
+### T2 — Qo'lda kiritish (`ScanBar` 350 ms tuzog'i)
+
+**Maqsad.** Omborchi klaviaturadan yacheyka kodini yoki shtrixni **qo'lda** yoza olsin; skanerning
+suffikssiz rejimi esa ishlashda davom etsin.
+
+**Nega.** `ScanBar.kt` da `LaunchedEffect(value) { if (length >= 3) { delay(350); submit() } }` —
+skaner uchun to'g'ri, odam uchun halokatli: qo'lda yozilgan kodning birinchi 3 belgisi yuboriladi.
+
+**Vazifalar.**
+1. **Manbani ajrat.** Tugma hodisalari orasidagi vaqtni o'lcha (`onPreviewKeyEvent` da oxirgi belgi
+   vaqti): o'rtacha interval **< 50 ms** → skaner (avto-yuborish ISHLAYDI); **≥ 50 ms** → odam
+   (avto-yuborish O'CHADI, faqat ENT/«Qidirish» tugmasi yuboradi). Chegara `config.xml` dan o'qilsin
+   (qurilma almashsa kod o'zgarmasin). Broadcast rejimi (`ScannerBridge`) bu shoxdan mustaqil.
+2. Maydonda **rejim belgisi**: odam yozayotgani aniqlanganda o'ng tomonda «⏎» ko'rsatkichi/tugma chiqsin —
+   omborchi nima kutilayotganini ko'rsin.
+3. **Fokus intizomi:** ekran ichida boshqa matn maydoni fokus olganda `ScanBar` uni **tortib olmasin**
+   (hozir `LaunchedEffect(screenKey)` faqat ekran almashganda ishlaydi — buni buzma, lekin T3 da
+   qidiruv maydoni qo'shilishini hisobga olib xulqni hisobotda aniq yozib qoldir).
+4. `DiagnosticsScreen` ga: oxirgi kiritish **skaner** deb topildimi yoki **odam** deb — jonlida
+   sozlashni USB'siz tekshirish uchun.
+5. `README.md` → «Skaner» bo'limiga qisqa izoh.
+
+**Cheklovlar.** `ScannerBridge.kt` ning broadcast qismiga TEGILMAYDI (§2, qoida 10). 350 ms zaxirasi
+**o'chirilmaydi** — u faqat odam yozganda chetlab o'tiladi (U5 dagi suffikssiz skaner muammosi qaytmasin).
+
+**Qabul mezoni.**
+- `assembleDebug` ogohlantirishsiz;
+- kodda ko'rsatilsin: sekin yozilgan 11 belgili kod **bir marta va to'liq** yuboriladi; tez «yozilgan»
+  (skaner) kod avvalgidek 350 ms da yuboriladi;
+- ENT bilan yuborish ishlaydi va maydon tozalanadi;
+- diagnostika ekranida manba ko'rinadi.
+
+<details><summary><b>T2 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi — §1, §2 va §4 dagi T2 bo'limi,
+   hamda §5 dagi T1 hisoboti (u qidiruv/fokus haqida eslatma qoldirgan bo'lishi mumkin).
+2) Sen FAQAT **T2 — Qo'lda kiritish (ScanBar 350 ms tuzog'i)** fazasini bajarasan.
+3) Diqqat: 350 ms avto-yuborish zaxirasi U5 da JONLI muammo uchun qo'yilgan — uni o'chirma,
+   faqat odam yozganda chetlab o't. ScannerBridge broadcast qismiga tegma.
+4) §2 qoida 4 dagi build buyrug'ini yugurtir (Gradle 8.7).
+5) Tugagach §5 ga «### T2 — …» hisobotini yoz (nima qilindi, chegara qiymati va u qayerdan o'qiladi,
+   build natijasi, qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?», ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T3 — Nom / artikul bo'yicha qidiruv (`GET /tsd/search` + ilova)
+
+**Maqsad.** Shtrixsiz (yoki shtrixi o'qilmaydigan) tovarni omborchi **nomidan** topa olsin — Sanash,
+Joylashtirish va «ma'lumot» oqimlarining hammasida.
+
+**Nega yangi endpoint.** `/tsd/scan` faqat aynan moslik qiladi; `/products` esa TSD'ga ATAYLAB yopiq
+(javobida `buyPrice`, `minPrice`, `salePrices` bor). Demak — **narxsiz alohida sirt**, `/tsd/scan` bilan
+bir xil oq ro'yxat ustida.
+
+**Vazifalar — server.**
+1. `apps/api/src/modules/tsd/tsd-search.ts` (SOF modul, Prisma/Nest yo'q): so'rovni tozalash
+   (`normalizeSearchQuery`), min 2 / max 100 belgi, natijalarni **saralash qoidasi** (aynan moslik →
+   boshida moslik → ichida moslik; `archived` eng oxirida).
+2. `TsdService.search(accountId, query)`: `where: { accountId, deletedAt: null, OR: [ name contains
+   (insensitive), article contains, code contains, barcodes has ] }`, `select: TSD_PRODUCT_SELECT`,
+   `take: 30`. **Javob shakli `/tsd/scan` ning `products` elementi bilan AYNAN BIR XIL** bo'lsin
+   (`id, name, code, article, barcodes, uom, archived, homeCell, totalQty, cells`) — buning uchun
+   `scan` ichidagi «hit qurish» mantig'i umumiy funksiyaga (`buildProductHits`) chiqariladi va
+   IKKALA yo'l ham shundan foydalanadi. Sabab: ilova bitta renderer va bitta `PickProductScreen`
+   bilan ishlaydi, ikki xil shakl ikki xil bug beradi.
+3. `TsdController`: `@Get('search')` + `@RequirePermission({ entity: 'product', action: 'view' })`.
+4. `tsd-policy.ts`: `{ prefix: '/tsd/search', methods: ['GET'], exact: true, why: 'narxsiz nom-qidiruv' }`.
+5. **Testlar:** `tsd-search.test.ts` (sof modul: normalizatsiya, saralash, chegaralar) +
+   `tsd.service.test.ts` ga qidiruv holatlari (nom bo'lagi, artikul, arxiv oxirida, `take` chegarasi,
+   **narx maydonlari yo'qligi qulfi**) + `tsd-policy.test.ts` (yangi qator ochiq, `/products` hamon **yopiq**).
+6. **Ishlash tezligi:** `name contains` indekssiz — hisobotda jonliga yaqin hajmda (yoki lokal dev bazada)
+   **o'lchangan vaqt** yozilsin. Sekin bo'lsa `pg_trgm` indeksi taklif qilinadi (migratsiya
+   **bu fazada yozilmaydi** — alohida qaror).
+
+**Vazifalar — ilova.**
+7. `ApiClient` ga `fun search(q: String): JSONArray` (transport mantig'iga tegmasdan).
+8. Yangi `SearchScreen.kt`: qidiruv maydoni (T2 dagi qoidaga bo'ysunadi — avto-yuborish yo'q,
+   «Qidirish» tugmasi/ENT), natijalar kartalari (nom, artikul, jami qoldiq, uy-yacheykasi),
+   `onPick: (JSONObject) -> Unit` callback bilan.
+9. Ulash nuqtalari: **Sanash** (yacheyka ochiq bo'lganda «🔍 Tovar qidirish» → `pick()`),
+   **Joylashtirish** (1-bosqichda «🔍 Qidirish» → `product`), **Bosh menyu** (yangi plitka →
+   natija bosilsa `ScanInfoScreen`, ya'ni «bu nima va qayerda»).
+10. `strings.xml` (uz) + `README.md` «Backend kontrakti» va smoke bandlari.
+
+**Cheklovlar.** Narx maydonlari javobga **hech qanday yo'l bilan** kirmaydi; `TSD_PRODUCT_SELECT`
+kengaytirilmaydi. Multi-hit qoidasi kuchda: qidiruv natijasidan tovarni **ODAM** tanlaydi.
+
+**Qabul mezoni.**
+- api testlari yashil, **yangi testlar soni raqam bilan** hisobotda;
+- `tsd-policy.test.ts` da `/products` hamon 403 ekani qulflangan;
+- `pnpm --filter @moysklad/api typecheck` 0 xato;
+- `assembleDebug` ogohlantirishsiz;
+- qidiruv javobining shakli `/tsd/scan` bilan bir xilligi test bilan qulflangan;
+- o'lchangan qidiruv vaqti hisobotda.
+
+<details><summary><b>T3 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi — §1, §2 va §4 dagi T3 bo'limi,
+   hamda §5 dagi T1/T2 hisobotlari.
+2) Sen FAQAT **T3 — Nom/artikul bo'yicha qidiruv** fazasini bajarasan (server + ilova).
+3) 🔴 NARX QOIDASI: javobga narx maydoni hech qanday yo'l bilan kirmasin; `/products` TSD'ga
+   YOPIQ qolsin va buni test qulflasin. `TSD_PRODUCT_SELECT` kengaytirilmaydi.
+4) `/tsd/scan` ichidagi hit-qurish mantig'ini umumiy funksiyaga chiqarib, qidiruv ham SHU shaklni
+   qaytarsin (ilovada bitta renderer).
+5) Testlar: apps/api vitest (tsd + auth/tsd-policy) va typecheck; ilova tomonda §2 qoida 4 build.
+6) Tugagach §5 ga «### T3 — …» hisobotini yoz: fayllar, yangi testlar SONI, test natijalari raqam bilan,
+   o'lchangan qidiruv vaqti, qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?» javobi, ochiq qolganlar.
+7) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T4 — Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi
+
+**Maqsad.** Omborchi ekranga qaramasdan ham amal o'tgan-o'tmaganini bilsin.
+
+**Vazifalar.**
+1. `Feedback.kt` (yangi): `ok()` — qisqa yuqori ton + 1 ta qisqa tebranish; `fail()` — past ton +
+   ikkita tebranish. `ToneGenerator` yoki `SoundPool`, `Vibrator`/`VibratorManager` (Android 14).
+   Ovoz balandligi ombor shovqiniga mos (media emas, `STREAM_NOTIFICATION`).
+2. Ulash: muvaffaqiyatli skan/tasdiq/saqlash → `ok()`; «Topilmadi», 4xx, «yacheyka topilmadi»,
+   «avval yacheykani skanerlang» → `fail()`.
+3. **Xato banneri:** `Shell` ga `error(text)` qo'shilsin — toast o'rniga ekran tepasida **qizil banner**
+   (bir necha soniya turadi, bosilsa yopiladi). Muvaffaqiyat toast bo'lib qolaveradi.
+   4" ekranda toast ko'zdan qochadi va bu IS-5 klassiga yaqin (jim yo'qotish).
+4. **`keepScreenOn`** — `MainActivity` da oyna bayrog'i; sozlamada emas, doimiy (terminal quvvatda turadi).
+5. Sozlama shart emas, lekin ovozni o'chirish kerak bo'lsa — `config.xml` da bitta bayroq.
+
+**Qabul mezoni.** `assembleDebug` ogohlantirishsiz; hamma xato yo'llari bannerga o'tgani (toast qolgan
+joylar hisobotda sanab o'tilsin); ovoz/tebranish ruxsati manifestda (`VIBRATE`) va u **yagona yangi
+ruxsat** ekani (kamera/lokatsiya YO'Q — G5 qoidasi).
+
+<details><summary><b>T4 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (§1, §2, §4-T4 va §5 hisobotlari).
+2) Sen FAQAT **T4 — Skan javobi: ovoz/tebranish/xato banneri/ekran o'chmasligi** fazasini bajarasan.
+3) Manifestga qo'shiladigan yagona yangi ruxsat — VIBRATE. Kamera/lokatsiya/audio-yozish TAQIQ.
+4) §2 qoida 4 dagi build buyrug'i yashil bo'lsin.
+5) Tugagach §5 ga «### T4 — …» hisobotini yoz (qaysi yo'llar bannerga o'tdi, qaysi toast qoldi va nega,
+   qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?», ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T5 — Miqdor kiritish: kalkulyator va tez tugmalar
+
+**Maqsad.** «12 quti × 24 dona» ni omborchi boshida hisoblamasin.
+
+**Vazifalar.**
+1. `Widgets.kt` dagi `NumberField` ga **ifoda rejimi**: `12*24`, `10+5`, `3*24+6` yozilsa maydon ostida
+   natija ko'rinsin («= 288») va saqlashda AYNAN o'sha son yuborilsin. Sof funksiya
+   `QtyExpression.kt` (`evaluate(text): BigDecimal?`) — faqat `+ - * ( )` va o'nlik nuqta/vergul;
+   bo'linish YO'Q (yaxlitlash siyosati ochilib ketadi).
+2. Noto'g'ri ifoda → saqlash tugmasi **o'chadi** va sabab ko'rinadi (jim 0 yuborilmasin).
+3. Vergul/nuqta ikkalasi ham qabul qilinsin (`14,5` = `14.5`) — jonlida o'nlik miqdorlar bor
+   (kabel/shlang metrlari).
+4. Sanash va Joylashtirish ekranlarida ishlasin; kesim (`CutScreen`) uzunligiga ham tatbiq etilsin.
+5. Testlar: `QtyExpression` sof funksiya — Kotlin unit-test yo'q bo'lsa hisobotda shu ochiq aytilsin
+   va kamida qo'lda tekshirilgan holatlar ro'yxati yozilsin (ilovada test infratuzilmasi yo'qligi —
+   U-reja «Ochiq qolganlar» dagi ma'lum holat).
+
+**Qabul mezoni.** `assembleDebug` ogohlantirishsiz; ifoda natijasi **serverga son bo'lib** ketishi
+(ifoda matni EMAS) kodda ko'rsatilsin; noto'g'ri ifodada saqlash imkonsiz.
+
+<details><summary><b>T5 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (§1, §2, §4-T5 va §5 hisobotlari).
+2) Sen FAQAT **T5 — Miqdor kiritish: kalkulyator va tez tugmalar** fazasini bajarasan.
+3) Bo'linish (/) ATAYLAB qo'llab-quvvatlanmaydi — yaxlitlash siyosati bu fazaning ishi emas.
+   Noto'g'ri ifodada saqlash imkonsiz bo'lsin (jim 0 yuborilmasin).
+4) §2 qoida 4 dagi build yashil bo'lsin.
+5) Tugagach §5 ga «### T5 — …» hisobotini yoz (qo'llab-quvvatlanadigan sintaksis, tekshirilgan holatlar,
+   qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?», ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T6 — Sanash progressi va «qolgan qatorlarni 0 qilib yopish»
+
+**Maqsad.** Yacheyka sanog'i TO'LIQ yopilsin — «sanalmagan qator» tushunchasi ko'rinsin.
+
+**Vazifalar.**
+1. Yacheyka sarlavha-kartasida progress: «**5/12 sanaldi**» (shu sessiyada saqlangan qatorlar soni).
+   Hisob ilova ichida (server sanash sessiyasini bilmaydi — u T11 ning ishi).
+2. Sanalgan qatorda **yashil belgi**, sanalmaganda kulrang — omborchi ko'z bilan ajratsin.
+3. «**Qolganini 0 qilib yopish**» tugmasi: sanalmagan qatorlarni **bittalab** `set 0` bilan yuboradi,
+   har biri uchun tasdiq oynasi EMAS, lekin **oldindan ro'yxat ko'rsatiladi** («N ta qator 0 bo'ladi:
+   …») va omborchi tasdiqlaydi. Xatoga uchragan qatorlar ro'yxatda **qizil** bo'lib qoladi.
+4. 🔴 Bu amal `set 0` bo'lgani uchun serverda **avto-Списание** yozadi — tasdiq oynasida shu ochiq
+   aytilsin («tizimdan chiqim bo'lib yoziladi»), jim bajarilmasin.
+5. Yacheyka almashganda progress nolga tushadi.
+
+**Cheklovlar.** Oflayn navbatga QO'YILMAYDI (sanash qoidasi) — aloqa yo'q bo'lsa amal to'xtaydi va
+qaysi qatorlar yopilmagani ko'rinadi.
+
+**Qabul mezoni.** `assembleDebug` ogohlantirishsiz; tasdiq oynasida chiqim ogohlantirishi bor;
+qisman muvaffaqiyatsizlikda qaysi qator yopilmagani ekranda qoladi (jim yo'qotish yo'q).
+
+<details><summary><b>T6 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (§1, §2, §4-T6 va §5 hisobotlari).
+2) Sen FAQAT **T6 — Sanash progressi va «qolganini 0 qilib yopish»** fazasini bajarasan.
+3) 🔴 `set 0` serverda avto-Списание yozadi — bu tasdiq oynasida OCHIQ aytilsin, jim bajarilmasin.
+   Sanash oflayn navbatga QO'YILMAYDI (qoida o'zgarmaydi).
+4) §2 qoida 4 dagi build yashil bo'lsin.
+5) Tugagach §5 ga «### T6 — …» hisobotini yoz (progress qanday hisoblanadi, qisman xatolikda xulq,
+   qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?», ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T7 — «Oxirgi sanoq» — bir bosishda qaytarish
+
+**Maqsad.** Noto'g'ri kiritilgan son darhol tuzatilsin; hozir u **jim avto-Оприходование** bo'lib qoladi.
+
+**Vazifalar.**
+1. Saqlangandan keyin qator ustida 10–15 soniya turadigan chiziq: «avval **14** edi → **41** qildingiz ·
+   **⟲ qaytarish**». Eski qiymat saqlashdan OLDIN o'qilgan `qty` dan olinadi.
+2. «Qaytarish» — o'sha `set <eski qiymat>` so'rovi (ya'ni yangi hujjat yoziladi, bekor qilish EMAS) —
+   bu matnda ochiq aytilsin («qaytarish ham hujjat yozadi»).
+3. Eski qiymati bo'lmagan (yacheykada yo'q) tovar uchun qaytarish = `set 0`, matn shunga mos bo'lsin.
+4. Ekran/yacheyka almashsa chiziq yo'qoladi (adashib eski qatorga bosilmasin).
+
+**Qabul mezoni.** `assembleDebug` ogohlantirishsiz; qaytarishdan keyin tarkib qayta o'qiladi;
+qaytarish ham xuddi sanash kabi **mutlaq son** semantikasida (delta EMAS).
+
+<details><summary><b>T7 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (§1, §2, §4-T7 va §5 hisobotlari).
+2) Sen FAQAT **T7 — «Oxirgi sanoq» qaytarish** fazasini bajarasan.
+3) Qaytarish — bekor qilish EMAS, yangi `set <eski qiymat>` so'rovi; buni UI matni ham aytsin.
+   Mutlaq son semantikasi buzilmasin.
+4) §2 qoida 4 dagi build yashil bo'lsin.
+5) Tugagach §5 ga «### T7 — …» hisobotini yoz (qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?»,
+   ochiq qolganlar).
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T8 — Jonli qurilma smoke (U4 qarzini yopish) · **kod yozilmaydi**
+
+**Maqsad.** T1–T7 (yoki egasi tanlagan qismi) o'rnatilgan terminalda **haqiqiy** sinovdan o'tsin va
+U-rejaning U4/G5/G6 «QISMAN» statuslari yopilsin.
+
+**Shart.** Bu faza **egasi bilan birga**, qo'lida terminal bo'lganda bajariladi. Agent APK'ni chiqaradi
+(`versionCode` +1 → `tools/publish.sh`), ro'yxat bo'yicha yuritadi va natijani yozadi.
+
+**Ro'yxat (README dagi bandlar + yangi):**
+1. Juftlash → PIN → bosh menyu; versiya raqami to'g'ri.
+2. Skaner: sariq tugma → kod maydonga tushadi (wedge) yoki broadcast keladi; **diagnostika ekranida**
+   manba ko'rinadi (T2).
+3. Bo'sh yacheyka → biriktirilgan tovarlar ro'yxati (T1) → tanlash → sanash → saqlash.
+4. Qo'lda `02-01-01-04` yozish → to'liq kod ketadi (T2).
+5. Nom bo'yicha qidiruv → tovar topiladi → sanash/joylashtirish (T3).
+6. **Narx tekshiruvi:** o'sha token bilan `GET /api/v1/products?search=…` → **403**;
+   `GET /api/v1/tsd/search?q=…` → 200 va javobda narx **yo'q**.
+7. Oflayn: Wi-Fi o'chirilganda joylashtirish navbatga tushadi, qaytgach yuboriladi;
+   sanash esa «aloqa yo'q» deydi va son maydonda TURADI.
+8. Uchma-uch: bitta yig'ish topshirig'i to'liq bajarilib chek **kontrolga** tushadi.
+
+**Qabul mezoni.** Har band bo'yicha ✔/✘ va ✘ larning sababi; U-reja faylidagi U4 statusi ham
+yangilanadi (havola bilan). Ochiq nuqson topilsa — **tuzatish shu fazada QILINMAYDI**, yangi faza
+(T12+) sifatida shu reja oxiriga yoziladi.
+
+<details><summary><b>T8 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2). Bu faza QO'LDA SINOV — egasi bilan birga,
+terminal (iData 95W Pro) qo'lda bo'lganda bajariladi.
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (ayniqsa §4-T8 va §5 hisobotlari)
+   hamda `android/tsd-app/README.md` dagi smoke ro'yxatlarini.
+2) Sen FAQAT **T8 — Jonli qurilma smoke** fazasini bajarasan. Yangi funksiya YOZMAYSAN.
+3) APK chiqarish: `app/build.gradle.kts` da versionCode +1 va versionName oshirilsin, so'ng
+   `bash android/tsd-app/tools/publish.sh "<nima o'zgardi>"`. Egasidan tasdiq so'ra (qoida 9).
+4) Ro'yxatni band-band yurit va natijani AYNAN yoz (topilgan nuqsonni SHU YERDA tuzatma).
+5) Tugagach §5 ga «### T8 — …» hisobotini yoz; topilgan nuqsonlar uchun rejaning §3 jadvaliga
+   yangi faza qatori (T12+) qo'sh va tafsilotini §4 ga yoz. U-reja faylidagi U4 statusini yangila.
+6) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T9 — Release-imzo va tarqatish kanali
+
+**Maqsad.** U-rejadan qolgan **imzo qarzi**ni yopish: hozir APK `~/.android/debug.keystore` bilan
+imzolangan — kalit yo'qolsa har terminalda ilovani o'chirib qayta o'rnatish kerak va **juftlash yo'qoladi**.
+
+**Vazifalar.** Alohida release-keystore yaratish (parol **repoga yozilmaydi** — qoida 11),
+`signingConfigs` + `release` build turi, `publish.sh` ni release APK'ga o'tkazish, kalitning zaxira
+tartibi (qayerda va kim saqlaydi — hujjatda **joylashuv nomi**, sirning o'zi emas), va bir martalik
+o'tish yo'riqnomasi (eski debug-imzoli ilova ustiga release o'rnatilmaydi — o'chirib qayta o'rnatish
+va **qayta juftlash** kerak).
+
+**Qabul mezoni.** Release APK build bo'ladi va o'rnatiladi; `latest.json` zanjiri release bilan
+ishlaydi; zaxira tartibi yozilgan; egasi kalit zaxirasini olganini tasdiqlagan.
+
+<details><summary><b>T9 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` (§2, §4-T9, §5) va U-rejadagi «IMZO QARZI»
+   bandini o'qi.
+2) Sen FAQAT **T9 — Release-imzo va tarqatish kanali** fazasini bajarasan.
+3) 🔴 Parol/kalit repoga YOZILMAYDI (repo public). Hujjatda faqat tartib va joylashuv NOMI bo'ladi.
+4) Eski debug-imzoli ilovadan release'ga o'tish JUFTLASHNI yo'qotadi — o'tish yo'riqnomasi yozilsin
+   va egasiga oldindan aytilsin.
+5) Tugagach §5 ga «### T9 — …» hisobotini yoz. KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T10 — Oflayn o'quv keshi
+
+**Maqsad.** Ombor Wi-Fi'si zaif joyda ilova butunlay «o'lmasin»: **o'qish** yo'llari keshdan ishlasin
+(yozish qoidalari o'zgarmaydi).
+
+**Vazifalar.** Oxirgi ochilgan yacheykalar tarkibi, oxirgi qidiruv natijalari va topshiriq detallarini
+lokal saqlash (`SharedPreferences` yetarli — `ActionQueue` naqshi; Room kiritilmaydi), yoshi bilan
+belgilash («**oflayn ma'lumot · 12 daq oldin**» plashkasi), aloqa qaytganda jim yangilash.
+
+**Cheklovlar.** 🔴 Keshdan **hech qanday yozish qarori chiqmaydi**: sanashda «Tizimda» ustuni kesh
+bo'lsa, saqlash tugmasi ham keshga tayanmaydi (mutlaq son baribir omborchi kiritgan sondan keladi).
+Narx keshda ham yo'q.
+
+**Qabul mezoni.** `assembleDebug` yashil; kesh yoshi ko'rinadi; aloqa yo'q bo'lganda ekran o'qiladi;
+kesh hajmi chegaralangan (masalan 200 yacheyka / 500 tovar) va bu son hisobotda.
+
+<details><summary><b>T10 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` ni TO'LIQ o'qi (§1, §2, §4-T10, §5).
+2) Sen FAQAT **T10 — Oflayn o'quv keshi** fazasini bajarasan.
+3) 🔴 Kesh — faqat O'QISH. Undan yozish qarori chiqmaydi; oflayn navbat qoidalari o'zgarmaydi;
+   keshda narx bo'lishi mumkin emas. Room kiritilmaydi (SharedPreferences yetarli).
+4) §2 qoida 4 dagi build yashil bo'lsin.
+5) Tugagach §5 ga «### T10 — …» hisobotini yoz (nima keshlanadi, hajm chegarasi, yosh belgisi,
+   qabul mezoni ✔/✘, «qaysi oqimni buzishi mumkin?»). KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+### T11 — Inventarizatsiya sessiyasi va farqlar hisoboti
+
+**Maqsad.** Sanash **izli** bo'lsin: kim, qachon, qaysi yacheykalarni sanadi va **farq qancha** —
+hozir avto-Оприходование/Списание jimgina yoziladi va keyin uni hech kim tushuntira olmaydi.
+Bu jonlidagi «Ombor 02 yacheykalarida 361 885 soxta son» muammosining bevosita davosi.
+
+**Doira (server + web + ilova — KATTA).** Bu faza boshlanishidan oldin agent **egasidan qamrovni
+tasdiqlatadi**; ehtimol o'zining alohida rejasiga ajratiladi.
+
+**Eskiz.** `CountSession` (kim/qachon/qaysi ombor), unga bog'langan qatorlar (yacheyka, tovar, tizim
+soni, sanalgan son, farq, yozilgan hujjat), TSD'da «sessiyani boshlash/yopish», web'da farqlar
+hisoboti va «tasdiqlash» oqimi. Mavjud `setCellStock` avto-hujjatlari **saqlanadi** — sessiya ularning
+ustiga izoh qatlami bo'ladi (qoldiq mantig'i o'zgarmasin).
+
+**Qabul mezoni (dastlabki).** Migratsiya idempotent; mavjud sanash yo'li sessiyasiz ham ishlashda
+davom etadi (orqaga moslik); farqlar hisoboti raqamlari `stock_by_cell` bilan mos.
+
+<details><summary><b>T11 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
+
+1) `docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` (§1.3, §2, §4-T11, §5), F-rejadagi
+   inventarizatsiya qoidasini («faqat yacheyka kesimi») va `docs/ops/jonli-holat.md` ni o'qi.
+2) Sen FAQAT **T11 — Inventarizatsiya sessiyasi va farqlar hisoboti** fazasini bajarasan.
+3) 🔴 AVVAL EGASIDAN QAMROVNI TASDIQLAT (savollar: sessiyani kim ochadi/yopadi; farqni kim
+   tasdiqlaydi; mavjud avto-hujjatlar saqlanadimi). Tasdiqsiz kod yozma — bu faza jonli
+   qoldiq mantig'iga tegadi.
+4) Ish katta bo'lsa uni ALOHIDA rejaga ajratib, shu yerga havola qoldir.
+5) Tugagach §5 ga «### T11 — …» hisobotini yoz. KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
+---
+
+## 5. Hisobotlar
+
+> Har faza agenti O'Z sarlavhasi ostiga yozadi. Shablon:
+>
+> ```
+> ### T<N> — <nom> · <HOLAT: TUGADI | QISMAN — nima kutilmoqda> · <sana> · `<commit>`
+>
+> **Nima qilindi:** (fayllar bo'yicha, qaror sabablari bilan)
+> **O'lchandi:** (build/test natijalari RAQAM bilan)
+> **Qabul mezoni:** har band ✔/✘
+> **Qaysi oqimni buzishi mumkin?** (qoida 8 — dalil bilan)
+> **Ochiq qolganlar / keyingi fazaga eslatmalar:**
+> ```
+
+### T0 — Reja tuzildi · 2026-09-03
+
+Reja shu sessiyada tuzildi. Kontekst koddan **o'qib** o'lchandi (taxmin emas):
+`CountScreen.kt`, `PlaceScreen.kt`, `ScanBar.kt`, `ApiClient.kt`, `HomeScreen.kt`, `TaskDetailScreen.kt`,
+`ScanInfoScreen.kt`, `tsd-policy.ts`, `tsd-scan.ts`, `tsd.service.ts`, `store.controller.ts`,
+`store-address.service.ts`, U-reja va G-reja hisobotlari.
+
+**Sessiyaning asosiy topilmasi:** `lookupCellByBarcode` javobi **`{ cells, products, stock }`** —
+ya'ni yacheykaga biriktirilgan tovarlar ro'yxati serverdan **allaqachon kelayapti**, `CountScreen` esa
+uni o'qimaydi. Shuning uchun T1 fazasi serverga umuman tegmaydi va eng arzon fazadir.
+
+**Ikkinchi topilma:** `ScanBar` ning 350 ms avto-yuborishi qo'lda kiritishni **imkonsiz** qiladi —
+rasmdagi holatda omborchining oxirgi zaxira yo'li ham yopiq edi.
+
+**Ochiq qolganlar:** hech bir faza boshlanmagan; `android/tsd-app` da U-rejadan qolgan commit
+qilinmagan ish bor (§2, qoida 6).
+
+### T1 — Yacheykaga biriktirilgan tovarlar (Sanash ekrani) · **TUGADI** · 2026-09-03 · `9c7276e8`
+
+**Nima qilindi**
+
+- **`android/tsd-app/app/src/main/java/uz/sherset/tsd/CountScreen.kt`** (+87 / −3)
+  - Yangi state `bound` (`JSONArray`) — `openCell` da `resp.optJSONArray("products")` dan to'ldiriladi.
+    Bu maydon `cellByBarcode` javobida **allaqachon kelardi**, ekran esa uni o'qimasdan tashlab yuborardi;
+    shuning uchun **qo'shimcha so'rov ham, server o'zgarishi ham qo'shilmadi**.
+  - Yangi yordamchi `boundOnly(): List<JSONObject>` — `bound` dan `stock` (ya'ni `items`) da BO'LMAGANLARINI
+    ajratadi. Ikki guruhda bir tovar ikki marta chizilmaydi (aks holda ikki maydon bitta tovarga ikki xil
+    son berardi — bu `picked` kartasidagi mavjud qoidaning aynan o'zi). Arxivlanganlar `sortedBy` bilan
+    oxiriga suriladi; `sortedBy` **barqaror**, shuning uchun serverning `name` bo'yicha tartibi guruh
+    ichida saqlanadi.
+  - Ekran endi **ikki guruh** chizadi: (a) qoldig'i bor qatorlar — **o'zgarmagan** (sanoq maydoni + Saqlash);
+    (b) `boundOnly()` qatorlari — kulrang (`Palette.SurfaceMuted`) karta, matni «biriktirilgan · qoldiq 0»,
+    arxivlangani bo'lsa ostiga «⚠ arxivlangan». Bosilganda **mavjud `pick(name, id)`** ishlaydi, ya'ni
+    yuqoridagi «sanalayotgan tovar» kartasi ochiladi — yangi sanoq yo'li YARATILMADI.
+  - Ikkinchi guruhda **sanoq maydoni ATAYLAB yo'q**: qoldig'i 0 tovar sanalsa server avto-Оприходование
+    yozadi, shuning uchun u faqat sariq ogohlantirishli `PickedCard` orqali o'tishi kerak.
+  - `count_empty` («Yacheyka bo'sh») endi **faqat ikkala guruh ham bo'sh** bo'lganda chiqadi — aks holda
+    ekran o'zi ko'rsatib turgan ro'yxatni «yo'q» deb aytardi.
+  - Sarlavha-kartaga «**Qoldiqda N · biriktirilgan M**» hisobi. `N + M` — aynan quyida chiziladigan
+    qatorlar soni, ya'ni omborchi ro'yxat tugaganini ko'radi.
+  - Sinf KDoc'iga T1 bandi qo'shildi (fayl uslubiga mos: nima, nega, qanday).
+- **`app/src/main/res/values/strings.xml`** (+4): `count_summary` (`Qoldiqda %1$d · biriktirilgan %2$d`),
+  `count_bound_zero`, `count_archived`. Faqat `uz`.
+- **`README.md`** (+9 / −1): G6 «Qo'lda smoke» ro'yxatiga **8-band (T1)** — bo'sh yacheyka ochilganda
+  biriktirilgan tovar ko'rinishi va uni sanash zanjiri; eski «Narx tekshiruvi» bandi 9 ga surildi.
+
+**Git (§2, qoida 6 bo'yicha)**
+
+T1 boshlanganda `android/tsd-app` da **U-reja ishi commit qilinmagan** edi va T1 aynan o'sha fayllarning
+uchtasiga tegadi (`CountScreen.kt`, `strings.xml`, `README.md`), ya'ni fayl darajasida ajratib bo'lmasdi.
+Shuning uchun:
+
+1. T1 hunklari skript bilan **vaqtincha orqaga qaytarildi**; skriptning to'g'riligi **aylanma tekshiruv**
+   bilan isbotlandi (orqaga → oldinga qo'yilgach uchala fayl `cmp` bo'yicha **bayt-bayt** bir xil chiqdi);
+2. `12613600` — `feat(tsd): u-reja zamonaviy ui ishi (commit qilinmagan holat qamrab olindi)`:
+   **faqat** `android/tsd-app` + `docs/plans/2026-09-01-tsd-zamonaviy-ui.md`, T1 o'zgarishlarisiz;
+3. T1 qayta qo'yildi va `9c7276e8` bilan **uchta fayl** commit qilindi (+ `docs/progress.json` — uni
+   loyihaning **o'z `pre-commit` hook'i** avtomatik `git add` qiladi, begona ish emas).
+
+`apps/api` va `android/manager-app` dagi commit qilinmagan ish (menejer-planshet rejasi) **ATAYLAB
+tegilmadi** — u boshqa rejaga tegishli va hamon commit qilinmagan turibdi.
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 1m** · **36 task, 35 bajarildi** · `w:` / `warning` / `e:` qatorlari — **0 ta** |
+| Server testlari | — | **yugurtirilmadi, chunki server fayllariga tegilmagan** (`git show --stat 9c7276e8` — `apps/` yo'q) |
+
+Ogohlantirishsizlik toza build'da (`clean` bilan) o'lchandi, ya'ni `UP-TO-DATE` task'lar natijani yashirmadi.
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` ogohlantirishsiz | ✔ | toza build, 35 task bajarildi, log'da bitta ham `w:` yo'q |
+| Bo'sh (lekin biriktirilgan tovari bor) yacheykada ro'yxat chiqadi va tanlash ishlaydi — **kodda ko'rsatilsin** | ✔ | `openCell` → `bound = resp.optJSONArray("products")`; `Content()` → `val extras = boundOnly()`; `for (b in extras) { SectionCard(modifier = Modifier.clickable { pick(...) }) }`; `count_empty` sharti endi `items.length() == 0 && extras.isEmpty()`. Jonli qurilmada sinov — **T8** |
+| Yangi tarmoq so'rovi qo'shilmagani aytilsin | ✔ | `CountScreen` dagi `shell.api.*` chaqiruvlari **avvalgidek 4 ta**: `scan`, `cellByBarcode`, `setCellStock`, `cellStock`. `ApiClient.kt` diffda **umuman yo'q** |
+| Server fayllariga bitta bayt ham tegilmagan | ✔ | `9c7276e8` fayllari: 3 ta `android/tsd-app` fayli + hook yozgan `docs/progress.json`. `apps/`, `packages/`, `prisma/` — **yo'q** |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Yangi server maydoni qo'shilmadi, allowlist'ga tegilmadi. Ko'rsatilayotgan `products` massivining
+**yozma isboti**: `store-address.service.ts: getCellProducts` → `select: { id, name, code, barcodes,
+archived }`, javob `map` i esa `{ id, name, code, barcode, archived }`. `buyPrice`/`salePrice`/`sum`
+maydonlari **so'ralmaydi ham, qaytarilmaydi ham** — «ekranda ko'rsatmayapmiz» degan zaif dalilga
+tayanilmadi. Ekranda ham faqat `name` chiziladi.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Sanash semantikasi** — buzilmadi. `save()` ga **umuman tegilmadi**: hamon `setCellStock(..., qty)`,
+  ya'ni `mode: 'set'` (mutlaq son). Ikkinchi guruh qatorining o'zida sonni saqlash tugmasi yo'q — u
+  faqat `pick()` ni chaqiradi.
+- **Oflayn navbat** — buzilmadi. Sanash ilgarigidek navbatga QO'YILMAYDI; `ActionQueue`/`QueueSender`
+  fayllariga tegilmadi (§2, qoida 10).
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi. `onScan` ning `"product"` shoxi o'zgarmadi
+  (`0 → toast`, `1 → pick`, `else → PickProductScreen`). Yangi ro'yxat ham **hech qachon o'zi
+  tanlamaydi** — har qator odamning bosishini kutadi.
+- **Sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» ogohlantirishi** — saqlanib qoldi va aynan
+  biriktirilgan-lekin-qoldiqsiz tovarga ham tushadi (§4 «Cheklovlar» shuni ataylab talab qilgan):
+  `pick()` → `systemQty(id)` `null` qaytaradi → `PickedCard` sariq `WarningContainer` rejimda ochiladi,
+  son maydoni BO'SH qoladi.
+- **Qoldig'i bor yacheykalar** (eski, keng tarqalgan holat) — ko'rinishi deyarli o'zgarmaydi: `products`
+  odatda `stock` ning ichida bo'ladi, `boundOnly()` bo'sh chiqadi va faqat sarlavhadagi
+  «Qoldiqda N · biriktirilgan 0» qatori qo'shiladi.
+- **`products` kelmasa** (eski server, yoki ko'p yacheyka topilgan holat — u yerda javob
+  `products: []`) — `optJSONArray("products") ?: JSONArray()` tufayli ekran **avvalgidek** ishlaydi.
+- **Saqlashdan keyin** `save()` faqat `items` ni yangilaydi, `bound` esa turaveradi. Bu to'g'ri: sanoq
+  biriktirishni o'zgartirmaydi. Yangi sanalgan tovar `items` ga tushgani uchun `boundOnly()` uni
+  avtomatik tashlab yuboradi — qator **ikkinchi guruhdan birinchi guruhga o'tadi**, dublikat bo'lmaydi.
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan.** Qabul mezoni «kodda ko'rsatilsin» deydi va shu bajarildi; haqiqiy
+   iData 95W Pro sinovi — **T8**. README'ga 8-band aynan shu uchun yozildi.
+2. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi** (hamon `0.4.0`/`4`),
+   `tools/publish.sh` chaqirilmadi. Egasi «chiqar» degandagina — o'shanda versiya oshiriladi.
+3. **Boshi berk ko'chaning ikkinchi yarmi ochiq:** T1 faqat **yacheyka yorlig'i skanerlangan** holatni
+   yopadi. Yorliq yirtilgan / skaner o'qimagan bo'lsa yacheykani **qo'lda** kiritishning yo'li hamon
+   yo'q — bu **T2** (`ScanBar` 350 ms avto-yuborishi).
+4. **Yacheykaga biriktirilmagan va qoldig'i ham yo'q tovar** hamon ro'yxatda ko'rinmaydi — uni topish
+   uchun nom/artikul qidiruvi kerak, ya'ni **T3**.
+5. **`bound` ro'yxati saralanishi:** server `name` bo'yicha beradi, arxivlanganlar pastga suriladi.
+   Agar biriktirilgan tovar juda ko'p bo'lsa (o'nlab), 4" ekranda skroll uzayadi — o'lchanmagan;
+   kerak bo'lsa keyingi fazada «faqat birinchi 10 tasi + qidiruv» ko'rib chiqilsin (T3 bilan birga
+   qilingani ma'qul, alohida emas).
+6. **`docs/progress.json`** T1 commitiga loyihaning `pre-commit` hook'i tomonidan qo'shildi — keyingi
+   faza agenti buni «begona fayl» deb o'ylab olib tashlamasin.
+7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi). Keyingi
+   T-faza agenti ham ularni **o'z commitiga qo'shmasin**.
