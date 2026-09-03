@@ -25,6 +25,30 @@ import { describe, expect, it } from 'vitest';
  * toast/alert/Error arguments). Test-ids, query keys, API paths and CSS class
  * names are structurally excluded rather than allow-listed one by one, so the
  * guard cannot be defeated by renaming a `data-test-id`.
+ *
+ * ── NEGA `POS_FILES` va `POS_DONE_FILES` BIRLASHTIRILMADI (FAZA 0, 2026-09-01)
+ *
+ * `i18n-no-hardcoded.test.ts` dagi `POS_DONE_FILES` bilan bu ro'yxat o'xshab
+ * ko'rinadi, lekin ular BOSHQA-BOSHQA invariantlarga xizmat qiladi va a'zolik
+ * mezoni ham boshqa. Umumiy modulga chiqarilsa qo'riqchi ZAIFLASHADI:
+ *
+ *  · Bu ro'yxat kalit MAVJUDLIGINI ham tekshiradi va shuning uchun har bir
+ *    faylning KAMIDA BITTA `t()` chaqiruvi bo'lishini TALAB qiladi
+ *    («no t() calls found in …»). `POS_DONE_FILES` esa reyestr TO'LIQLIGI
+ *    uchun `t()` ishlatmaydigan fayllarni ham saqlaydi — masalan
+ *    `_components/pos-types.ts` (sof tip fayli). Uni bu yerga qo'shish
+ *    testni asossiz qizartirardi, «kamida bitta t()» talabini yumshatish esa
+ *    aynan shu fayl uchun mo'ljallangan bug-klassni ochib qo'yardi.
+ *  · Skanerlar ham har xil: u yerda TypeScript AST bo'yicha (sintaktik
+ *    pozitsiya), bu yerda regex + UZ so'z ro'yxati bo'yicha. Ikkalasi bir-birini
+ *    QOPLAYDI; bitta ro'yxatga tushirish ularni bir xil qamrovga majburlab,
+ *    qo'shaloq tekshiruv foydasini yo'qotardi.
+ *
+ * Shuning uchun ro'yxatlar ALOHIDA qoldi. O'rniga ikkalasi ham FAZA 0 da bir
+ * xil yangi yuzalarni oldi (vozvrat oynasi + mijoz-ekran), va
+ * `i18n-no-hardcoded.test.ts` dagi qochish-qulfi endi uchala POS papkasini
+ * skanerlaydi — ya'ni «papkaga yangi fayl qo'shildi, reyestrga qo'shilmadi»
+ * holati endi qo'lda emas, MEXANIK ravishda tutiladi.
  */
 
 const SRC = join(__dirname, '..');
@@ -56,6 +80,18 @@ const POS_FILES = [
   // A1 avans qabuli). Ro'yxatga qo'shilmasa yangi kalitlar va matnlar
   // qo'riqchidan chetda qolardi — aynan shu fayl uchun mo'ljallangan bug-klass.
   join(SRC, 'components', 'pos', 'customers-panel.tsx'),
+  // FAZA 0 (kassa ikki tilli, 2026-09-01) — qo'riqchi teshigini yopish.
+  // Vozvrat oynasi va mijoz-ekran shu paytgacha IKKALA ro'yxatdan ham
+  // tashqarida edi; natijada vozvrat oynasidagi buzuq belgilar (cp1251 deb
+  // o'qilgan UTF-8) jonli ekranga chiqib ketdi.
+  join(SRC, 'app', '(app)', 'sotuv', '_components', 'vozvrat-mode.tsx'),
+  join(SRC, 'app', 'customer-display', 'page.tsx'),
+  // FAZA 1 (kassa ikki tilli, 2026-09-01) — kioskdagi til almashtirgich.
+  // Ikkala reyestrga ham kiradi: bu yerda kalit MAVJUDLIGI (uz+ru) tekshiriladi,
+  // `i18n-no-hardcoded.test.ts` da esa AST bo'yicha hardcoded matn. Yangi
+  // kalitlar (`pages.pos.language`, `pages.pos.locale_change_failed`) shu
+  // qatorsiz faqat bitta bandlda qolib ketishi mumkin edi.
+  join(SRC, 'components', 'pos', 'pos-locale-toggle.tsx'),
 ];
 
 const rel = (f: string) => f.replace(SRC, 'src').replace(/\\/g, '/');

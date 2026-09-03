@@ -8739,6 +8739,23 @@ model RetailSale {
   externalCode String? @map("external_code") @db.VarChar(50)
   syncId       String? @map("sync_id") @db.Uuid
 
+  /// QOG'OZDAGI chek raqami — kassirning SHU KUNDAGI ketma-ket soni
+  /// (egasi, 2026-09-02: «120 ta sotuv bo'lsa keyingi chek 121»).
+  ///
+  /// `name` (`ТРН-2026-00073`) HUJJAT nomi bo'lib qoladi — tizim ichidagi
+  /// qidiruv, reyestr va moysklad-paritet o'sha ustunda. Bu esa faqat mijoz
+  /// qo'lidagi qog'oz uchun: qisqa va kassirga tushunarli.
+  ///
+  /// 🔴 SAQLANADI, hisoblanmaydi. «Shu kunning nechanchi cheki» ni o'qishda
+  /// sanash mumkin edi-yu, chek BEKOR qilinsa yoki qaytarilsa qolganlarining
+  /// raqami surilib ketardi — mijoz qo'lidagi qog'oz bilan bazadagi raqam
+  /// ajralardi. Chek — moliyaviy hujjat: raqami post() onida MUZLAYDI.
+  ///
+  /// NULL = 2026-09-02 dan OLDINGI cheklar (backfill ataylab yo'q: o'sha
+  /// kunlarning qog'ozida bu raqam umuman chiqmagan). Renderer NULL ko'rsa
+  /// eski xulqqa qaytadi va `name` ni bosadi.
+  receiptNo Int? @map("receipt_no")
+
   // References
   agentId               String? @map("agent_id") @db.Uuid
   agentAccountId        String? @map("agent_account_id") @db.Uuid

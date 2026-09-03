@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import type { ListEnvelope } from '@moysklad/contracts';
 import type { CurrencyCode } from '@moysklad/money/currencies';
 import { Input, formatMoney, noAccidentalClose } from '@moysklad/ui';
@@ -184,9 +185,14 @@ interface Props {
  */
 const POS_ORDER_STATES = ['draft', 'confirmed', 'awaiting_payment'] as const;
 
-function fmtDate(iso: string | null | undefined): string {
+/**
+ * FAZA 3 (2026-09-01): BCP-47 teg PARAMETR bo'lib keladi, ichkarida
+ * `useBcp47()` chaqirilmaydi — bu modul darajasidagi SOF funksiya, hook
+ * emas. Chaqiruvchi komponent tegni bir marta oladi va uzatadi.
+ */
+function fmtDate(iso: string | null | undefined, bcp47: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('uz-UZ', {
+  return new Date(iso).toLocaleDateString(bcp47, {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -206,6 +212,7 @@ export function CustomerCardPanel({
   const tDoc = useTranslations('pages.pos.customer_card_doc');
   const tCommon = useTranslations('common');
   const qc = useQueryClient();
+  const bcp47 = useBcp47();
 
   const [search, setSearch] = useState('');
   const [agent, setAgent] = useState<CustomerCardRow | null>(null);
@@ -543,7 +550,7 @@ export function CustomerCardPanel({
                         <span className="text-[var(--ms-text-muted)] text-xs">
                           {KNOWN_DOC_TYPES.has(e.docType) ? tDoc(e.docType) : e.docType}
                         </span>
-                        <span className="text-[var(--ms-text-muted)]">{fmtDate(e.at)}</span>
+                        <span className="text-[var(--ms-text-muted)]">{fmtDate(e.at, bcp47)}</span>
                         {/* Belgi konvensiyasi serverdan keladi (`increase`) —
                             ekran uni QAYTA hisoblamaydi. */}
                         <span
@@ -603,7 +610,9 @@ export function CustomerCardPanel({
                         className="flex items-center justify-between gap-2 text-sm"
                       >
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-[var(--ms-text-muted)]">{fmtDate(s.moment)}</span>
+                        <span className="text-[var(--ms-text-muted)]">
+                          {fmtDate(s.moment, bcp47)}
+                        </span>
                         <span className="font-medium">{formatMoney(s.sumMinor, currency)}</span>
                         <button
                           type="button"
@@ -636,7 +645,9 @@ export function CustomerCardPanel({
                         className="flex items-center justify-between gap-2 text-sm"
                       >
                         <span className="font-medium">{o.name}</span>
-                        <span className="text-[var(--ms-text-muted)]">{fmtDate(o.moment)}</span>
+                        <span className="text-[var(--ms-text-muted)]">
+                          {fmtDate(o.moment, bcp47)}
+                        </span>
                         <span className="font-medium">{formatMoney(o.sumMinor, currency)}</span>
                         <button
                           type="button"

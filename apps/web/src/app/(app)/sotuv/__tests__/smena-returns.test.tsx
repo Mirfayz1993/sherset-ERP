@@ -12,6 +12,12 @@ import { SESSION, router, salesRoutes } from './harness';
  * kassir qaytarishdan keyin smena jamida hech qanday o'zgarish ko'rmasdi.
  */
 
+// FAZA 1 (kassa ikki tilli, 2026-09-01) — «Smena» ekrani endi `PosLocaleToggle`
+// ni ham chizadi, u esa `useRouter()` chaqiradi. Testda App Router konteksti
+// YO'Q ⇒ dublyorsiz butun sahifa «invariant expected app router to be mounted»
+// bilan yiqiladi (ekran bo'sh qoladi va sabab hech qayerda ko'rinmaydi).
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 vi.mock('@/lib/api-client', () => ({ api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 
 vi.mock('@/lib/auth-store', () => ({

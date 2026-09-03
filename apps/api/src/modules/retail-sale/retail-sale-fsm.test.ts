@@ -113,6 +113,7 @@ function makeService(
 
 function makePostClient(state: string) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -149,6 +150,7 @@ function makePostClient(state: string) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: CASHDESK_ID,
           storeId: STORE_ID,
           salesCount: 0,

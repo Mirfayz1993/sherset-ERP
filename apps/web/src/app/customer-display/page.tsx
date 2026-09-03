@@ -31,8 +31,10 @@
 // Brauzerda sinash (Electron'siz):  /customer-display?demo=1
 
 import './cfd-theme.css';
+import { LOCALE_COOKIE, isLocale } from '@/i18n/config';
 import { api } from '@/lib/api-client';
 import { getAccessToken, refresh } from '@/lib/auth-store';
+import { useBcp47 } from '@/lib/i18n-format';
 import { CART_DRAFTS_STORAGE_KEY, parseCartDrafts } from '@/lib/pos/cart-drafts';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
 import { scaleMinorByQty } from '@moysklad/money';
@@ -52,6 +54,16 @@ const QUEUE_MAX_CARDS = 6;
 /** Savat qatori balandligi (maket) — avto-aylanish masofasi shundan hisoblanadi. */
 const ROW_H = 64;
 const API = '/api/v1';
+/**
+ * Til o'zgarganini tekshirish oralig'i (`useLocaleSync`).
+ *
+ * `QUEUE_POLL_MS` (8 s) QAYTA ISHLATILMAYDI: u `tokenReady` ga bog'liq, til
+ * esa tokendan mustaqil bo'lishi kerak — token kelmasa ham ekran to'g'ri
+ * tilda turishi shart. Qolaversa kassir uchun 2 s «darhol» tuyuladi.
+ */
+const LOCALE_POLL_MS = 2000;
+/** Sikl qo'riqchisi belgisi — QAYSI tilga o'tish uchun reload qilinganini eslaydi. */
+const LOCALE_RELOAD_KEY = 'cfd.localeReloadFor';
 
 // ── IPC shartnomasi — kassir oynasi shu shaklda uzatadi ─────────────────────
 interface CartLineDTO {
@@ -181,8 +193,10 @@ export default function CustomerDisplayPage() {
   }, [demo, demoMode]);
 
   const lines = payload.lines;
-  const { picking, ready, cashDeskName } = useQueue(tokenReady, demo);
+  const { picking, ready, cashDeskName, cashierName } = useQueue(tokenReady, demo);
   const parked = useParkedDrafts(demo);
+  // Kassada til almashtirilsa shu oyna o'zi qayta yuklanadi (sabab hook izohida).
+  useLocaleSync();
 
   // ── 3. Har mahsulot uchun media'ni bir marta yuklab, keshlab qo'yish ──────
   // (karusel 5s'da almashganda "sekin ochilish" bo'lmasin — oldindan preload.)
@@ -241,7 +255,7 @@ export default function CustomerDisplayPage() {
           background: 'var(--cfd-bg)',
         }}
       >
-        <TopBar cashDeskName={cashDeskName} />
+        <TopBar cashDeskName={cashDeskName} cashierName={cashierName} />
         {/* `scale !== null` = mount bo'lgan. Serverda `demo` doim false
             (window yo'q), brauzerda true bo'lishi mumkin — badge'ni SSR
             daraxtiga qo'shsak gidratatsiya nomuvofiqligi chiqadi (jonli
@@ -256,8 +270,9 @@ export default function CustomerDisplayPage() {
             <CartPanel lines={lines} hasQueue={hasQueue} />
             <PaymentPanel lines={lines} discountPct={payload.discountPct} />
           </div>
-          {/* Padding YO'Q — video chetlarigacha to'ladi (egasi: «yarmiga
-              to'liq, ajralib turmasin»). Ichki bloklar o'z joyini o'zi oladi. */}
+          {/* Padding YO'Q — media ekranning yarmiga eniga to'la chiqadi
+              (egasi: «yarmiga to'liq, ajralib turmasin»). Balandlik bo'yicha
+              esa rolik kesilmaydi — `MediaLayer` da `contain`. */}
           <div
             className="box-border flex flex-col"
             style={{
@@ -353,6 +368,118 @@ function useParkedDrafts(demo: boolean): number[] {
 }
 
 /**
+ * `NEXT_LOCALE` cookie qiymati (yo'q yoki buzuq bo'lsa `null`).
+ *
+ * Cookie `httpOnly` EMAS (`middleware.ts`, `app/actions/locale.ts`) — shuning
+ * uchun sahifa uni o'zi o'qiy oladi. `decodeURIComponent` buzuq %-ketma-ketlikda
+ * OTADI; shuning uchun try/catch — mijoz turgan ekran hech qachon oq bo'lib
+ * qolmasligi kerak.
+ */
+function readLocaleCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const part of document.cookie.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== LOCALE_COOKIE) continue;
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Sikl-belgisini o'qiydi. Storage yo'q bo'lsa `null`. */
+function readReloadMark(): string | null {
+  try {
+    return window.sessionStorage.getItem(LOCALE_RELOAD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Belgini yozadi. `false` — yozib bo'lmadi ⇒ reload QILINMAYDI (4-qo'riqchi). */
+function writeReloadMark(locale: string): boolean {
+  try {
+    window.sessionStorage.setItem(LOCALE_RELOAD_KEY, locale);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Belgini o'chiradi (til mos kelganda). Storage yo'q bo'lsa — tozalanadigani ham yo'q. */
+function clearReloadMark(): void {
+  try {
+    window.sessionStorage.removeItem(LOCALE_RELOAD_KEY);
+  } catch {
+    /* storage mavjud emas */
+  }
+}
+
+/**
+ * Kassada til almashtirilganda mijoz-ekran O'ZI ergashadi.
+ *
+ * Sahifaning tili root layout'da SERVER tomonda hal qilinadi
+ * (`app/layout.tsx` → `NextIntlClientProvider`), ya'ni uni yangilash uchun
+ * sahifa server'dan qayta render bo'lishi shart. Shuning uchun bu yerda jonli
+ * almashtirish emas, QAYTA YUKLASH bor — va u xavfsiz: mijoz-ekranda
+ * saqlanadigan holat YO'Q, savatni qobiq `did-finish-load` da qayta yuboradi
+ * (`desktop/main.js`).
+ *
+ * 🔴 Nega cookie POLL, IPC yoki BroadcastChannel EMAS:
+ *   • Yangi IPC maydoni — `main.js` `normalizeCart()` payload'ni oq ro'yxat
+ *     bo'yicha qayta quradi, ya'ni O'RNATILGAN qobiq (v1.9.0) uni tashlab
+ *     yuborardi va yangi `.exe` kerak bo'lardi.
+ *   • `BroadcastChannel` — bu faylda bor, lekin FAQAT brauzer yo'lida (Electron
+ *     yo'li undan oldin `return` qiladi); ikki Electron oynasi orasida hech
+ *     qachon o'lchanmagan. Tasdiqlanmagan mexanizmga tayanilmaydi.
+ *   • Cookie esa umumiyligi JONLIDA isbotlangan: mijoz-oyna auth tokenini aynan
+ *     shu umumiy sessiyadan oladi (`main.js` — `partition` ataylab berilmagan).
+ *     Qolaversa cookie'ni SERVER o'qiydi, ya'ni u yagona haqiqat manbai —
+ *     nusxa saqlanmaydi, demak desinxron bo'lish imkoni ham yo'q.
+ *
+ * Qo'riqchilar — har biri aniq nosozlikni yopadi, O'CHIRMA:
+ *   1. `isLocale` — bo'sh yoki buzuq cookie render tiliga hech qachon teng
+ *      bo'lmaydi, ya'ni tekshiruvsiz har turda CHEKSIZ RELOAD bo'lardi.
+ *      Middleware buni deyarli imkonsiz qiladi, lekin mijoz turgan ekranda
+ *      «deyarli» yetarli emas.
+ *   2. `sessionStorage` belgisi — reload'dan keyin ham mos kelmasa (masalan
+ *      server eski tilni bersa) ikkinchi marta urinilmaydi. Bu `main.js` dagi
+ *      `cfdRetries` naqshining aynan o'zi.
+ *   3. Belgi `cookie === rendered` bo'lganda TOZALANADI — aks holda ikkinchi
+ *      marta til o'zgartirilganda hook boshqa ishlamay qolardi.
+ *   4. Belgini YOZIB BO'LMASA — reload QILINMAYDI (fail-closed). Aks holda
+ *      storage o'chirilgan muhitda har 2 soniyada qayta yuklanadigan ekran
+ *      paydo bo'lardi; eski tilda turgan ekran undan yaxshiroq.
+ *
+ * `sessionStorage`, localStorage EMAS: belgi shu OYNA sessiyasiga tegishli.
+ * localStorage kassir oynasiga ham ko'rinardi va ma'nosiz umumiy holat yaratardi.
+ */
+export function useLocaleSync(): void {
+  const rendered = useLocale();
+
+  useEffect(() => {
+    // Darhol tekshirilmaydi: sahifa hozirgina AYNI shu cookie bilan render
+    // bo'lgan, ya'ni mount paytida ular doim mos keladi.
+    const id = setInterval(() => {
+      const next = readLocaleCookie();
+      if (!isLocale(next)) return; // 1-qo'riqchi
+      if (next === rendered) {
+        clearReloadMark(); // 3-qo'riqchi
+        return;
+      }
+      if (readReloadMark() === next) return; // 2-qo'riqchi
+      if (!writeReloadMark(next)) return; // 4-qo'riqchi
+      window.location.reload();
+    }, LOCALE_POLL_MS);
+
+    return () => clearInterval(id);
+  }, [rendered]);
+}
+
+/**
  * Navbat manbasi — sahifaning O'Z so'rovi (IPC EMAS, sababi fayl boshida).
  *
  * Har turda avval joriy smena-sessiyasi so'raladi: kassirlar bitta qurilmada
@@ -367,16 +494,29 @@ function useParkedDrafts(demo: boolean): number[] {
 function useQueue(
   tokenReady: boolean,
   demo: boolean,
-): { picking: QueueSale[]; ready: QueueSale[]; cashDeskName: string | null } {
+): {
+  picking: QueueSale[];
+  ready: QueueSale[];
+  cashDeskName: string | null;
+  cashierName: string | null;
+} {
   const [picking, setPicking] = useState<QueueSale[]>([]);
   const [ready, setReady] = useState<QueueSale[]>([]);
   const [cashDeskName, setCashDeskName] = useState<string | null>(null);
+  const t = useTranslations('pages.customer_display');
+  // Kassir ismi (egasi, 2026-09-02: «ikkinchi ekranda kassir nomi ham
+  // ko'rinishi kerak»). Backend'ga tegilmadi — `/cashier-sessions/current`
+  // javobida `cashier: { id, name }` ALLAQACHON bor (shartnoma:
+  // packages/contracts/src/cashier-session.ts, `CurrentSessionSchema`), bu
+  // ekran uni shunchaki o'qimasdi.
+  const [cashierName, setCashierName] = useState<string | null>(null);
 
   useEffect(() => {
     if (demo) {
       setPicking(DEMO_PICKING);
       setReady(DEMO_READY);
-      setCashDeskName('Kassa №1');
+      setCashDeskName(t('cash_desk_fallback'));
+      setCashierName(t('cashier_fallback'));
       return;
     }
     if (!tokenReady) return;
@@ -384,11 +524,16 @@ function useQueue(
     let alive = true;
     async function tick(): Promise<void> {
       try {
-        const session = await api.get<{ id?: string; cashDesk?: { name?: string } } | null>(
-          '/cashier-sessions/current',
-        );
+        const session = await api.get<{
+          id?: string;
+          cashDesk?: { name?: string };
+          cashier?: { name?: string };
+        } | null>('/cashier-sessions/current');
         if (!alive) return;
         setCashDeskName(session?.cashDesk?.name ?? null);
+        // Sessiya yopilgan/yo'q bo'lsa `null` — TopBar u holda ismni umuman
+        // chizmaydi (eski kassirning ismi ekranda osilib qolmasin).
+        setCashierName(session?.cashier?.name ?? null);
         if (!session?.id) {
           setPicking([]);
           setReady([]);
@@ -412,9 +557,9 @@ function useQueue(
       alive = false;
       clearInterval(id);
     };
-  }, [tokenReady, demo]);
+  }, [tokenReady, demo, t]);
 
-  return { picking, ready, cashDeskName };
+  return { picking, ready, cashDeskName, cashierName };
 }
 
 /** Miqdorni server sxemasi shakliga keltiradi (`BigInt(1.5)` otilishini yopadi). */
@@ -441,9 +586,15 @@ export function splitDocNo(name: string): { prefix: string; tail: string } {
 // ─────────────────────────────────────────────────────────────────────────────
 // TEPA PANEL — logo · kassa nomi · soat
 // ─────────────────────────────────────────────────────────────────────────────
-function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
+export function TopBar({
+  cashDeskName,
+  cashierName,
+}: {
+  cashDeskName: string | null;
+  cashierName: string | null;
+}) {
   const t = useTranslations('pages.customer_display');
-  const locale = useLocale();
+  const bcp47 = useBcp47();
   // 🔴 Soat `null` dan boshlanadi va faqat mount'dan keyin to'ladi: server va
   // brauzer vaqti bir xil bo'lmasligi mumkin va React gidratatsiya nomuvofiqligi
   // haqida ogohlantirardi (ekran mijoz oldida — konsol xatosi kerak emas).
@@ -478,10 +629,35 @@ function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
         </div>
       </div>
       <div className="flex items-center" style={{ gap: 28 }}>
-        {cashDeskName && (
+        {/* Kassa nomi va KASSIR ISMI (egasi, 2026-09-02). Ikkalasi ham
+            SERVER ma'lumoti — bu yerda tarjima qilinadigan matn YO'Q, shuning
+            uchun yangi i18n kaliti ham kerak emas.
+
+            Ism kassa nomidan KUCHLIROQ ko'rinadi: mijoz uchun «kim xizmat
+            qilyapti» degan savol «qaysi kassa» dan muhimroq. Ikkalasi ham
+            bo'lmasa butun blok (ajratgich chizig'i bilan) chizilmaydi —
+            soat yolg'iz o'zi o'ngda qoladi, maket buzilmaydi. */}
+        {(cashDeskName || cashierName) && (
           <>
-            <div style={{ fontSize: 26, fontWeight: 500, color: 'var(--cfd-muted)' }}>
-              {cashDeskName}
+            <div className="flex items-center" style={{ gap: 12 }}>
+              {cashDeskName && (
+                <div style={{ fontSize: 26, fontWeight: 500, color: 'var(--cfd-muted)' }}>
+                  {cashDeskName}
+                </div>
+              )}
+              {cashDeskName && cashierName && (
+                <div aria-hidden="true" style={{ fontSize: 22, color: 'var(--cfd-dim)' }}>
+                  ·
+                </div>
+              )}
+              {cashierName && (
+                <div
+                  data-test-id="cfd-cashier-name"
+                  style={{ fontSize: 26, fontWeight: 600, color: 'var(--cfd-ink)' }}
+                >
+                  {cashierName}
+                </div>
+              )}
             </div>
             <div style={{ width: 1, height: 34, background: 'var(--cfd-hairline)' }} />
           </>
@@ -491,7 +667,7 @@ function TopBar({ cashDeskName }: { cashDeskName: string | null }) {
           style={{ fontSize: 34, fontWeight: 700, color: 'var(--cfd-ink)' }}
         >
           {now
-            ? now.toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'uz-UZ', {
+            ? now.toLocaleTimeString(bcp47, {
                 hour: '2-digit',
                 minute: '2-digit',
               })
@@ -549,7 +725,7 @@ export function QueuePanel({
   parked: number[];
 }) {
   const t = useTranslations('pages.customer_display');
-  const locale = useLocale();
+  const bcp47 = useBcp47();
   type Card =
     | { kind: 'sale'; key: string; sale: QueueSale; done: boolean }
     | { kind: 'hold'; key: string; at: number };
@@ -572,7 +748,7 @@ export function QueuePanel({
           c.kind === 'sale' ? (
             <QueueCard key={c.key} sale={c.sale} done={c.done} />
           ) : (
-            <HoldCard key={c.key} at={c.at} locale={locale} />
+            <HoldCard key={c.key} at={c.at} bcp47={bcp47} />
           ),
         )}
         {rest > 0 && (
@@ -705,9 +881,9 @@ function QueueCard({ sale, done }: { sale: QueueSale; done: boolean }) {
  * chek raqami YO'Q (u serverga bormagan), POS chipida ham kassir uni vaqt
  * bo'yicha taniydi — mijoz-ekran o'sha tilda gaplashadi.
  */
-function HoldCard({ at, locale }: { at: number; locale: string }) {
+function HoldCard({ at, bcp47 }: { at: number; bcp47: string }) {
   const t = useTranslations('pages.customer_display');
-  const time = new Date(at).toLocaleTimeString(locale === 'ru' ? 'ru-RU' : 'uz-UZ', {
+  const time = new Date(at).toLocaleTimeString(bcp47, {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -1100,7 +1276,9 @@ function FeaturedPanel({
 
   return (
     <>
-      {/* MEDIA — chetlarigacha, RAMKASIZ. Qatlamlar krossfeyd bilan almashadi. */}
+      {/* MEDIA — RAMKASIZ, eniga to'la. Rolik 16:9 bo'lgani uchun `contain`
+          bilan chiziladi (`MediaLayer`): tepa-pastda oq fon qoladi, lekin
+          mahsulot butunicha ko'rinadi. Qatlamlar krossfeyd bilan almashadi. */}
       <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         {stack.map((pid) => (
           <MediaLayer
@@ -1120,18 +1298,6 @@ function FeaturedPanel({
             onEnded={() => setIndex((i) => (i + 1) % Math.max(1, lines.length))}
           />
         ))}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 140,
-            background: 'linear-gradient(to bottom, rgba(255,255,255,0), var(--cfd-bg))',
-            pointerEvents: 'none',
-          }}
-        />
       </div>
 
       {/* Nom + narx — KLASSIK serif; media bilan birga yumshoq kirib keladi. */}
@@ -1220,8 +1386,11 @@ function FeaturedPanel({
  * `onReady` — birinchi ko'rsatiladigan kadr tayyor (krossfeyd signali).
  * `active` — faqat ustki (joriy) qatlamning `ended` hodisasi karuselni suradi:
  * eski qatlam krossfeyd payti tugab qolsa indeks sakramasin.
+ *
+ * Test uchun eksport qilingan (`__tests__/customer-display.test.tsx`) —
+ * `objectFit` qiymati qo'riqchi bilan qulflangan.
  */
-function MediaLayer({
+export function MediaLayer({
   pid,
   name,
   imageUrl,
@@ -1255,6 +1424,14 @@ function MediaLayer({
       {state !== 'no' ? (
         // Ovoz siyosati: muted — avtomatik ijro ovoz bilan bloklanadi,
         // do'konda uzluksiz ovoz esa shovqin.
+        //
+        // 🔴 `contain`, `cover` EMAS (egasi, 2026-09-01: «videolar katta,
+        // mahsulot to'liq ko'rinmayapti»). Sabab: barcha mahsulot roliklari
+        // 1280×720 (16:9), media qutisi esa 960×~734 (≈4:3). `cover`
+        // balandlikka to'ldirib enidan ~26% ni KESIB tashlagan — mahsulotning
+        // chap va o'ng chekkalari ekranga tushmagan. `contain` da rolik
+        // 960×540 bo'lib eniga to'la sig'adi, tepa-pastda oq fon qoladi.
+        // Qaytib `cover` qilinmasin — kesish qaytadi.
         <video
           src={`/media/videos/${pid}.mp4`}
           autoPlay
@@ -1266,7 +1443,7 @@ function MediaLayer({
           onEnded={() => {
             if (active) onEnded();
           }}
-          style={{ ...fill, objectFit: 'cover' }}
+          style={{ ...fill, objectFit: 'contain' }}
         />
       ) : imageUrl ? (
         <img
@@ -1276,6 +1453,9 @@ function MediaLayer({
           style={{ ...fill, objectFit: 'contain', padding: 32, boxSizing: 'border-box' }}
         />
       ) : (
+        // Brend-rolik ham 1280×720 — `cover` da SHERSET yozuvining chetlari
+        // kesilardi. Foni oq (`--cfd-bg` bilan bir xil), shuning uchun
+        // `contain` da qo'shimcha yo'l-yo'l ko'rinmaydi.
         <video
           src="/brand/sherset-loop.mp4"
           autoPlay
@@ -1283,7 +1463,7 @@ function MediaLayer({
           loop
           playsInline
           onLoadedData={onReady}
-          style={{ ...fill, objectFit: 'cover' }}
+          style={{ ...fill, objectFit: 'contain' }}
         />
       )}
     </div>

@@ -32,6 +32,7 @@ import { useFillViewport } from '@/hooks/use-fill-viewport';
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-store';
+import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import {
   CART_DRAFTS_STORAGE_KEY,
@@ -335,6 +336,7 @@ function SalesScreen({
 }) {
   const t = useTranslations('pages.sotuv');
   const tCommon = useTranslations('common');
+  const bcp47 = useBcp47();
   // P4 — smena yoshi. `openMinutes` ni SERVER beradi (chegara MK13
   // registrida), ekran faqat matnga aylantiradi.
   const shiftAge = formatShiftAge(session.openMinutes, t);
@@ -952,15 +954,31 @@ function SalesScreen({
   );
 
   // SOTUVSIZ CHEK (2026-08-16, egasi): savatdan chek — sotuv/hujjat YO'Q,
-  // serverga hech nima yozilmaydi. Chek raqami vaqtdan (haqiqiy cheklar
-  // bilan to'qnashmaydi). Muvaffaqiyatda savat qoralamaga o'tadi — «chekni
-  // o'zgartirish» = chipni ochish → o'zgartirish → yana chiqarish.
+  // serverga hech nima yozilmaydi. Muvaffaqiyatda savat qoralamaga o'tadi —
+  // «chekni o'zgartirish» = chipni ochish → o'zgartirish → yana chiqarish.
+  //
+  // Chek RAQAMI (2026-09-02, egasi) — kassirning shu kundagi ketma-ket soni,
+  // haqiqiy sotuv cheki bilan AYNI hisoblagichdan (`document_sequences`).
+  // Ilgari u soatdan yasalardi (`CHEK-112159` = 11:21:59) va mijoz uchun
+  // hech qanday ma'no bermasdi.
   const printProforma = useCallback(async () => {
     if (cart.length === 0 || cartLocked || payingSale != null) return;
     const now = new Date();
-    const two = (n: number) => n.toString().padStart(2, '0');
+    // 🔴 So'rov yiqilsa chek TO'XTAMAYDI — eski vaqt-raqami zaxira bo'lib
+    // qoladi. Tarmoq uzilgani uchun mijozni qog'ozsiz qoldirish yomonroq
+    // natija; raqam takrorlanmasligini vaqt kafolatlaydi.
+    let number: string;
+    try {
+      const allocated = await api.post<{ number: number }>('/retail-sales/receipt-number', {
+        sessionId: session.id,
+      });
+      number = String(allocated.number);
+    } catch {
+      const two = (n: number) => n.toString().padStart(2, '0');
+      number = `CHEK-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+    }
     const input = cartToProformaReceipt(cart, discountPct, {
-      number: `CHEK-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`,
+      number,
       moment: now.toISOString(),
       cashierName: session.cashier.name,
       organization: { name: session.organization.name },
@@ -1007,7 +1025,7 @@ function SalesScreen({
     () =>
       cartDrafts.map((d) => ({
         id: d.id,
-        timeLabel: new Date(d.createdAt).toLocaleTimeString('uz-UZ', {
+        timeLabel: new Date(d.createdAt).toLocaleTimeString(bcp47, {
           hour: '2-digit',
           minute: '2-digit',
         }),
@@ -1020,7 +1038,7 @@ function SalesScreen({
           })),
         ),
       })),
-    [cartDrafts],
+    [cartDrafts, bcp47],
   );
 
   /**

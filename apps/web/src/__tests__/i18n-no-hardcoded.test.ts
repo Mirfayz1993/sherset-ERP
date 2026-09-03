@@ -278,6 +278,10 @@ const POS_DONE_FILES = [
   'components/pos/shell-version-badge.tsx',
   // K3 (bo'linadigan tovar) — kassirga bo'lak tarkibi va taklif.
   'components/pos/piece-offer-panel.tsx',
+  // FAZA 1 (kassa ikki tilli, 2026-09-01) — kioskdagi til almashtirgich.
+  // Faza 0 da yoyilgan qochish-qulfi bu faylni MEXANIK talab qiladi:
+  // `components/pos/` ichidagi har bir `.tsx` shu ro'yxatda turishi shart.
+  'components/pos/pos-locale-toggle.tsx',
   'app/(app)/sotuv/page.tsx',
   // F1 (POS redizayn) — page.tsx dan ajratilgan rejim-komponentlar.
   'app/(app)/sotuv/_components/smena-mode.tsx',
@@ -286,8 +290,30 @@ const POS_DONE_FILES = [
   'app/(app)/sotuv/_components/navbat-mode.tsx',
   'app/(app)/sotuv/_components/sotuv-mode.tsx',
   'app/(app)/sotuv/_components/use-print-outcome.ts',
+  // FAZA 0 (kassa ikki tilli, 2026-09-01) — reyestr teshigini yopish. Qochish-
+  // qulfi ilgari faqat `components/pos/` ni ko'rar edi, shuning uchun bu uch
+  // fayl qo'riqchidan tashqarida qolgan va `vozvrat-mode.tsx` ekranga buzuq
+  // belgilar bilan chiqib ketgan (UTF-8 matn cp1251 deb o'qilgan: U+203A va
+  // U+00B7 o'rniga kirill baytlari `D0 B2 D0 82 D1 94` / `D0 92 C2 B7`).
+  // Skaner kirillni tutadi ⇒ reyestrga kirgach bu sinf jimgina o'tolmaydi.
+  'app/(app)/sotuv/_components/vozvrat-mode.tsx',
+  // Tip fayli — skaner unda foydalanuvchi pozitsiyasi topmaydi; reyestrda
+  // TO'LIQLIK uchun turadi (papkadagi hech bir fayl «ro'yxatsiz» bo'lmasin).
+  'app/(app)/sotuv/_components/pos-types.ts',
+  // Mijoz-ekran (CFD) — POS bilan bir relizda chiqadi va mijoz KO'RADI.
+  'app/customer-display/page.tsx',
   'app/kassa-kirish/page.tsx',
 ];
+
+/**
+ * Qochish-qulfi qamrab oladigan papkalar (`POS_DONE_FILES` bilan bir shakl —
+ * WEB_SRC ga nisbatan, oldinga-slash bilan).
+ *
+ * Qulf `.tsx` fayllarni talab qiladi: aynan ular foydalanuvchi yuzasini
+ * chizadi. `.ts` yordamchilari reyestrga qo'lda kiritiladi (masalan
+ * `use-print-outcome.ts`) — ular qulf tomonidan MAJBURLANMAYDI.
+ */
+const POS_GUARDED_DIRS = ['components/pos', 'app/(app)/sotuv/_components', 'app/customer-display'];
 
 /** Foydalanuvchi ko'radigan JSX atributlari. */
 const POS_UI_ATTRS = new Set([
@@ -332,6 +358,10 @@ const POS_ALLOWED: Record<string, string> = {
   // F2 — header matn-logotipi. Brend nomi ikkala tilda ham AYNAN shu yozuvda
   // turadi (tarjima qilinsa brend buziladi); public/ da rasm-asset yo'q.
   SHERSET: 'brend logotipi — tarjima qilinmaydi',
+  // CFD `?demo=1` nishoni (`customer-display/page.tsx`) — ishlab chiqish/stend
+  // rejimini ajratish uchun. Jonli ekranda hech qachon chizilmaydi, ya'ni
+  // foydalanuvchi ko'rmaydi ⇒ tarjima qilinmaydi.
+  DEMO: '?demo=1 ishlab chiqish nishoni — foydalanuvchi ko’rmaydi',
 };
 
 interface PosLeak {
@@ -452,23 +482,43 @@ describe('POS (kassa) i18n — zero hardcoded user-facing text', () => {
   });
 
   /**
-   * Reyestr TESHIGI qulfi: `components/pos/` ga YANGI fayl qo'shilsa, u
+   * Reyestr TESHIGI qulfi: qo'riqlanadigan papkaga YANGI fayl qo'shilsa, u
    * ro'yxatda bo'lmagani uchun skanerdan jimgina chetda qolardi — ya'ni
    * guard yangi kod uchun ishlamasdi. Shuning uchun papkadagi har bir
    * komponent ro'yxatda turishi SHART (yangi fayl qo'shgan odam uni ro'yxatga
    * ham qo'shadi yoki gate qizaradi).
+   *
+   * FAZA 0 (2026-09-01): qulf ilgari FAQAT `components/pos/` ni tekshirar edi.
+   * Kassa yuzasi esa uch papkaga bo'lingan — `app/(app)/sotuv/_components/`
+   * (rejim komponentlari) va `app/customer-display/` (mijoz-ekran) qulfdan
+   * tashqarida qolgan. Aynan shu teshik `vozvrat-mode.tsx` ni buzuq belgilar
+   * bilan jonli ekranga o'tkazib yuborgan. Endi uchalasi ham qulf ostida.
    */
   it('no POS component escapes the registry (new files must be registered)', () => {
-    const dir = join(WEB_SRC, 'components', 'pos');
-    const onDisk = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isFile() && e.name.endsWith('.tsx') && !e.name.includes('.test.'))
-      .map((e) => `components/pos/${e.name}`);
     const registry = new Set(POS_DONE_FILES);
-    const unregistered = onDisk.filter((f) => !registry.has(f));
+    const unregistered: string[] = [];
+    for (const dir of POS_GUARDED_DIRS) {
+      const onDisk = readdirSync(join(WEB_SRC, dir), { withFileTypes: true })
+        .filter((e) => e.isFile() && e.name.endsWith('.tsx') && !e.name.includes('.test.'))
+        .map((e) => `${dir}/${e.name}`);
+      unregistered.push(...onDisk.filter((f) => !registry.has(f)));
+    }
     expect(
       unregistered,
       `Unregistered POS components (add them to POS_DONE_FILES):\n${unregistered.join('\n')}`,
     ).toEqual([]);
+  });
+
+  /** Qulfning O'ZI ishlayotganini tasdiqlaydi — papkalar haqiqatan skanerlanadi. */
+  it('the escape lock actually covers all three POS surfaces', () => {
+    for (const dir of POS_GUARDED_DIRS) {
+      const tsx = readdirSync(join(WEB_SRC, dir), { withFileTypes: true }).filter(
+        (e) => e.isFile() && e.name.endsWith('.tsx') && !e.name.includes('.test.'),
+      );
+      expect(tsx.length, `qo'riqlanadigan papka bo'sh yoki ko'chgan: ${dir}`).toBeGreaterThan(0);
+    }
+    expect(POS_GUARDED_DIRS).toContain('app/(app)/sotuv/_components');
+    expect(POS_GUARDED_DIRS).toContain('app/customer-display');
   });
 
   it('has zero hardcoded user-facing strings', () => {

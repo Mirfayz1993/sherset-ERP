@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import { mockDocumentSequence } from '../../prisma/document-sequence.mock.js';
 import { RetailSaleService } from './retail-sale.service.js';
 
 /**
@@ -100,6 +101,7 @@ function makePickingClient(opts: { state?: string; positions?: Array<[string, nu
     quantity,
   }));
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -225,6 +227,7 @@ describe('P3 — «Omborchiga yuborish» tovarni REZERV qiladi', () => {
 
 function makeCancelClient(state: string) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -311,6 +314,7 @@ describe('P3 — bekor qilingan chek rezervni BO‘SHATADI', () => {
 
 function makePostClient(state: string) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -350,6 +354,7 @@ function makePostClient(state: string) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE_ID,
           salesCount: 0,

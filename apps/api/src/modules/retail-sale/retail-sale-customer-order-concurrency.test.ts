@@ -116,6 +116,7 @@ function makeWorld() {
 
   function makeClient(saleId: string) {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -177,6 +178,7 @@ function makeWorld() {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: 'cd-1',
             storeId: STORE_ID,
             salesCount: 0,

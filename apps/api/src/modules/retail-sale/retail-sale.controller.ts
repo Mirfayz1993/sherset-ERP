@@ -63,6 +63,22 @@ export class RetailSaleController {
     return this.sales.create(user.accountId, body);
   }
 
+  /**
+   * SOTUVSIZ CHEK uchun kunlik raqam (2026-09-02, egasi).
+   *
+   * `:id` li POST marshrutlari ikki segmentli, bu esa bitta — to'qnashuv
+   * yo'q, lekin o'qish uchun `create()` dan darhol keyin turadi.
+   *
+   * Ruxsat `create`: qog'ozga chek chiqarish — sotuv qilish huquqining bir
+   * qismi. `view` bilan qo'riqlansa, faqat ko'rish huquqi bor xodim
+   * hisoblagichni surib, kassirning kunlik ketma-ketligida teshik qoldirardi.
+   */
+  @Post('receipt-number')
+  @RequirePermission({ entity: 'retailsale', action: 'create' })
+  async receiptNumber(@CurrentUser() user: AuthenticatedUser, @Body() body: unknown) {
+    return this.sales.allocateReceiptNumber(user.accountId, body);
+  }
+
   @Patch(':id')
   @RequirePermission({ entity: 'retailsale', action: 'update' })
   async update(

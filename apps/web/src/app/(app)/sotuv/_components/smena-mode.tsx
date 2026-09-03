@@ -29,6 +29,8 @@ const COUNT_NUMPAD_USD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0',
 /** Maydon uzunligi chegarasi — 13 xonali summa `bigint` da ham xavfsiz. */
 const COUNT_MAX_LEN = 12;
 
+import { PosLocaleToggle } from '@/components/pos/pos-locale-toggle';
+import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import type { CurrentSession } from '@moysklad/contracts';
 import { formatMoney } from '@moysklad/ui';
@@ -144,6 +146,7 @@ export function SmenaMode({
   // F9 — mijoz kartasi yorliqlari POS komponentlari bilan bir joyda
   // (`pages.pos`), chunki panelning o'zi shu namespace'ni o'qiydi.
   const tPos = useTranslations('pages.pos');
+  const bcp47 = useBcp47();
 
   // ── F5 — yopiq sanoq holat mashinasi ──────────────────────────────────────
   // `idle` = showCloseForm false. Bosqich SHU yerda: sahifa faqat qiymatlarni
@@ -225,7 +228,7 @@ export function SmenaMode({
         <div className="flex justify-between mb-1">
           <span className="text-[var(--ms-text-muted)]">{t('opened_at')}</span>
           <span className="font-medium tabular-nums">
-            {new Date(session.openedAt).toLocaleTimeString('uz-UZ', {
+            {new Date(session.openedAt).toLocaleTimeString(bcp47, {
               hour: '2-digit',
               minute: '2-digit',
             })}
@@ -472,6 +475,19 @@ export function SmenaMode({
           </div>
         </div>
       )}
+
+      {/* FAZA 1 (kassa ikki tilli, 2026-09-01) — til almashtirgich.
+          NEGA AYNAN SHU YERDA: kassa — sensorli ekran. Headerda tursa sotuv
+          paytida barmoq tegib ketardi va mijoz turgan ikkinchi ekran uning
+          oldida yangilanardi. Til — kuniga bir marta qo'yiladigan sozlama,
+          shuning uchun u ataylab QIDIRILADIGAN joyda («Smena» sozlamalari,
+          «Kassirni almashtirish» yonida) turadi.
+          NEGA `workstation` bilan O'RALMAGAN (undan farqli o'laroq): kiosk
+          layout shoxi `isKioskUser(auth.user) || isShersetShell()` bilan
+          ochiladi, ya'ni ODDIY BRAUZERDAGI kiosk-rolli xodim ham AppShell'siz
+          qoladi — `workstation` esa u yerda `false`. O'rab qo'yilsa aynan shu
+          foydalanuvchi yana tilsiz qolardi, ya'ni tuzatilayotgan bug qaytardi. */}
+      <PosLocaleToggle />
 
       {/* F8 (spec §8) — «Kassirni almashtirish». SmenaMode FAQAT ochiq sessiyada
           chiziladi, almashinuv esa har doim TOZA nuqtada (server 409) — shuning

@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import { formatAmountInput, parseAmountToMinor } from '@/lib/pos/parse-amount';
 import type { ListEnvelope } from '@moysklad/contracts';
 import type { CurrencyCode } from '@moysklad/money/currencies';
@@ -153,6 +154,7 @@ export function CustomersPanel({
   onOpenChek,
 }: Props) {
   const t = useTranslations('pages.pos');
+  const bcp47 = useBcp47();
 
   const [search, setSearch] = useState('');
   const [agent, setAgent] = useState<CustomerCardRow | null>(null);
@@ -459,7 +461,7 @@ export function CustomersPanel({
                       <div className="min-w-0">
                         <p className="truncate font-medium text-[16px]">{r.name}</p>
                         <p className="text-[13px] text-[var(--ms-text-muted)]">
-                          {new Date(r.moment).toLocaleDateString('uz-UZ', {
+                          {new Date(r.moment).toLocaleDateString(bcp47, {
                             day: '2-digit',
                             month: '2-digit',
                             year: '2-digit',
@@ -782,12 +784,12 @@ export function CustomersPanel({
                         </span>
                       </div>
                       <span className="text-[14px] text-[var(--ms-text-muted)]">
-                        {new Date(sale.moment).toLocaleDateString('uz-UZ', {
+                        {new Date(sale.moment).toLocaleDateString(bcp47, {
                           day: '2-digit',
                           month: '2-digit',
                           year: '2-digit',
                         })}{' '}
-                        {new Date(sale.moment).toLocaleTimeString('uz-UZ', {
+                        {new Date(sale.moment).toLocaleTimeString(bcp47, {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}

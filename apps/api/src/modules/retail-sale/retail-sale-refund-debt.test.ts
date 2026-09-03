@@ -132,6 +132,7 @@ function makeHarness(opts: {
     cashierSession: {
       findFirst: vi.fn(async () => ({
         id: SESSION_ID,
+        cashierId: 'cashier-1',
         cashDeskId: CASHDESK_ID,
         storeId: STORE_ID,
         cashDesk: { currency: 'UZS' },
@@ -161,6 +162,7 @@ function makeHarness(opts: {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: CASHDESK_ID,
           storeId: STORE_ID,
           cashDesk: { currency: 'UZS' },

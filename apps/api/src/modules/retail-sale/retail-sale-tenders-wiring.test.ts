@@ -88,6 +88,7 @@ function makeHarness(
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: CASHDESK_ID,
           storeId: 'store-1',
           salesCount: 0,

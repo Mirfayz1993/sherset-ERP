@@ -115,6 +115,7 @@ function makeHarness(
           ? null
           : {
               id: CUR_SESSION_ID,
+              cashierId: 'cashier-1',
               cashDeskId: CUR_CASHDESK_ID,
               storeId: STORE_ID,
               cashDesk: { currency: 'UZS' },
@@ -135,6 +136,7 @@ function makeHarness(
           id: ORIG_SESSION_ID,
           // F6: sukut 'closed' — asl smena holati endi to'siq EMAS.
           state: opts.originalSessionState ?? 'closed',
+          cashierId: 'cashier-1',
           cashDeskId: ORIG_CASHDESK_ID,
           storeId: STORE_ID,
           cashDesk: { currency: 'UZS' },

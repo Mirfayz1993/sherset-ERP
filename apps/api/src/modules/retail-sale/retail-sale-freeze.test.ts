@@ -61,6 +61,7 @@ function makeHarness(opts: {
 }) {
   const positionUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -119,6 +120,7 @@ function makeHarness(opts: {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: CASHDESK_ID,
           storeId: STORE_ID,
           salesCount: 0,

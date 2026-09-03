@@ -93,6 +93,7 @@ function makeService(client: unknown, stock: ReturnType<typeof makeStockStub>) {
 
 function makePostHarness(opts: { stores: unknown[] }) {
   const tx = {
+    documentSequence: mockDocumentSequence(),
     // G4 — post() endi ajratmani YACHEYKA kesimida quradi va saqlaydi.
     stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
     retailSalePositionAllocation: {
@@ -134,6 +135,7 @@ function makePostHarness(opts: { stores: unknown[] }) {
         session: {
           id: SESSION_ID,
           state: 'open',
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE_UN,
           salesCount: 0,
@@ -398,6 +400,7 @@ describe('G4 — post(): ajratma deltaga va jadvalga tushadi', () => {
 describe('F6 — sendToPicking(): rezerv kaskad omborida', () => {
   it('hold post() ayiradigan omborda (07) yoziladi', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -454,6 +457,7 @@ describe('F6 — sendToPicking(): rezerv kaskad omborida', () => {
 describe('F6 — cancel(): qulf hold HAQIQATAN turgan omborga', () => {
   it('rezerv 07 da yozilgan bo‘lsa, qulf ham 07 da (smena omborida emas)', async () => {
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -506,6 +510,7 @@ describe('F6 — refund(): qaytgan tovar kaskad omboriga kiradi', () => {
   it('kirim deltasi 07 ga (sotuv ayirgan ombor), smena omboriga emas', async () => {
     const stockApplyDeltas = vi.fn().mockResolvedValue(undefined);
     const tx = {
+      documentSequence: mockDocumentSequence(),
       // G4 — post() ajratmani yacheyka kesimida quradi va saqlaydi.
       stockByCell: { findMany: vi.fn().mockResolvedValue([]) },
       retailSalePositionAllocation: {
@@ -537,6 +542,7 @@ describe('F6 — refund(): qaytgan tovar kaskad omboriga kiradi', () => {
       cashierSession: {
         findFirst: vi.fn(async () => ({
           id: SESSION_ID,
+          cashierId: 'cashier-1',
           cashDeskId: 'cd-1',
           storeId: STORE_UN,
           cashDesk: { currency: 'UZS' },
@@ -557,6 +563,7 @@ describe('F6 — refund(): qaytgan tovar kaskad omboriga kiradi', () => {
           session: {
             id: SESSION_ID,
             state: 'open',
+            cashierId: 'cashier-1',
             cashDeskId: 'cd-1',
             storeId: STORE_UN,
             cashDesk: { currency: 'UZS' },

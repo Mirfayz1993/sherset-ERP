@@ -1596,6 +1596,8 @@
     "customer_display": {
       "cart_empty": "Xaridlaringiz shu yerda ko'rinadi",
       "cart_title": "SIZNING XARIDINGIZ",
+      "cash_desk_fallback": "Kassa №1",
+      "cashier_fallback": "Demo Kassir",
       "discount": "Chegirma",
       "in_queue": "navbatda",
       "items_count": "{count, plural, other {# ta mahsulot}}",
@@ -9435,6 +9437,8 @@
       "header_conn_ok": "Server bilan aloqa bor",
       "header_sales": "{n} ta savdo · {sum}",
       "header_shift_age": "{age} ochiq",
+      "language": "Til",
+      "locale_change_failed": "Tilni o'zgartirib bo'lmadi",
       "new_customer": "+ Yangi mijoz",
       "new_customer_name_placeholder": "Ism Familiya / Tashkilot nomi",
       "not_found": "Topilmadi",

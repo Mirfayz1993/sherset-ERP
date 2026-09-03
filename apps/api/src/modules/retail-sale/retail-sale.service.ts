@@ -90,6 +90,9 @@ import {
   planSaleAuditEvents,
 } from './cashier-audit.js';
 import { computePositions } from './compute-positions.js';
+// Kunlik chek raqami (kassir bo'yicha) — kalit shakli va Toshkent kun
+// chegarasi sof modulda, testi bilan (`daily-receipt-number.test.ts`).
+import { dailyReceiptSequenceKey } from './daily-receipt-number.js';
 import {
   type FrozenPrices,
   type SalePricesJson,
@@ -135,6 +138,7 @@ import {
 import { formatQty, parseQty, planReceiptEdit } from './retail-sale-edit-plan.js';
 import { allowedFrom, canTransition, transitionRejection } from './retail-sale-fsm.js';
 import {
+  AllocateReceiptNumberSchema,
   ControlEditSchema,
   ControlQueueFilterSchema,
   CreateRetailSaleSchema,
@@ -808,6 +812,9 @@ export class RetailSaleService {
           select: {
             id: true,
             state: true,
+            // Kunlik chek raqami HAR KASSIR uchun alohida sanaladi (2026-09-02,
+            // egasi) — hisoblagich kaliti aynan shu ustundan quriladi.
+            cashierId: true,
             cashDeskId: true,
             storeId: true,
             salesCount: true,
@@ -1036,6 +1043,28 @@ export class RetailSaleService {
     const postedAt = new Date();
 
     const posted = await this.prisma.client.$transaction(async (tx) => {
+      // ── QOG'OZDAGI chek raqami: kassirning SHU KUNDAGI ketma-ket soni ──
+      //
+      // Egasi (2026-09-02): «120 ta sotuv bo'lsa keyingi chek 121», har kassir
+      // uchun alohida. Atomik `increment` (`document_sequences`) — ikki kassa
+      // parallel post qilsa ham bir raqam ikki chekka tushmaydi.
+      //
+      // 🔴 O'RNI MUHIM — flip'dan OLDIN va AYNI tranzaksiyada. Keyin qo'yilsa
+      // ikkinchi yozuv kerak bo'lardi; tashqarida bo'lsa esa post yiqilganda
+      // raqam yeb ketilardi (endi rollback hisoblagichni ham qaytaradi, ya'ni
+      // kunlik ketma-ketlikda TESHIK qolmaydi).
+      //
+      // Instant `postedAt` — kun chegarasi (Asia/Tashkent) va `posted_at`
+      // ustuni bir xil ondan chiqsin: yarim tunda post bo'lgan chek bazada
+      // bir kunga, qog'ozda boshqa kunning raqamiga tushib qolmasin.
+      const receiptNo = await allocateDocumentNumber(
+        tx,
+        accountId,
+        dailyReceiptSequenceKey(sale.session.cashierId, postedAt),
+        // Seed 0 — kalit har kun YANGI, ya'ni hisoblagich 1 dan boshlanadi.
+        async () => 0,
+      );
+
       // Atomic state guard: only a postable state ('draft' | 'ready') → 'posted'.
       // Two concurrent posts on the same receipt would otherwise both succeed
       // (both reads see the pre-state, both updates flip 'posted' → 'posted' as
@@ -1048,6 +1077,9 @@ export class RetailSaleService {
         data: {
           state: 'posted',
           postedAt,
+          // Chek raqami post onida MUZLAYDI: keyin bekor/qaytarish bo'lsa ham
+          // mijoz qo'lidagi qog'oz bazadagi qator bilan bir xil qoladi.
+          receiptNo,
           // To'lov oynasida tanlangan mijoz CHEKKA YOZILADI — qarzli
           // to'lovda ham (SALES-04: qaytarishda qarz kimniki ekani chekdan
           // o'qiladi), NAQD/KARTA to'lovda ham. Ilgari shart
@@ -1992,6 +2024,45 @@ export class RetailSaleService {
     }
 
     return this.prisma.client.retailSale.findUniqueOrThrow({ where: { id, accountId } });
+  }
+
+  /**
+   * SOTUVSIZ CHEK uchun kunlik raqam — kassirning shu kundagi keyingisi.
+   *
+   * Sotuvsiz chek (proforma, 2026-08-16) serverda hujjat YARATMAYDI, shuning
+   * uchun raqami hech qayerda saqlanmaydi: bu yo'l faqat hisoblagichni
+   * suradi va sonni qaytaradi. Ya'ni chiqarilgan har bir qog'oz — haqiqiy
+   * sotuv cheki ham, sotuvsiz chek ham — kassirning kunlik ketma-ketligida
+   * O'Z raqamini oladi va ikkitasiga bir raqam tushmaydi.
+   *
+   * 🔴 Qayta chop etishda YANGI raqam chiqadi (haqiqiy chekda esa muzlagan
+   * raqam qaytadi). Bu ATAYLAB: sotuvsiz chek hujjat emas — egasining oqimi
+   * «chipni och → o'zgartir → yana chiqar», ya'ni har bosilgan varaq alohida
+   * qog'oz. Aks holda hisoblagich bo'yicha nima muzlashini saqlaydigan joy
+   * kerak bo'lardi — u esa aynan «hujjat yaratmaydi» qoidasini buzardi.
+   *
+   * Smena yopiq bo'lsa — 400: yopilgan smenaga chek chiqarish, hatto sotuvsiz
+   * bo'lsa ham, Z-hisobot bilan qog'ozni ajratib yuboradi.
+   */
+  async allocateReceiptNumber(accountId: string, raw: unknown): Promise<{ number: number }> {
+    const parsed = AllocateReceiptNumberSchema.parse(raw);
+    const session = await this.prisma.client.cashierSession.findFirst({
+      where: { id: parsed.sessionId, accountId },
+      select: { cashierId: true, state: true },
+    });
+    if (!session) throw new NotFoundException(`CashierSession ${parsed.sessionId} not found`);
+    if (session.state !== 'open') {
+      throw new BadRequestException(`Session is ${session.state}. Cannot issue a receipt number.`);
+    }
+
+    const number = await allocateDocumentNumber(
+      this.prisma.client,
+      accountId,
+      dailyReceiptSequenceKey(session.cashierId, new Date()),
+      // Seed 0 — kalit har kun YANGI, hisoblagich 1 dan boshlanadi (post() bilan bir xil).
+      async () => 0,
+    );
+    return { number };
   }
 
   /**

@@ -42,6 +42,11 @@ interface PositionDetail {
 interface RetailSaleDetail {
   id: string;
   name: string;
+  /**
+   * Kunlik chek raqami (2026-09-02) — `buildReceiptModel` uni `docNumber`
+   * qilib oladi. Eski cheklarda `null`/yo'q ⇒ shablon `name` ga qaytadi.
+   */
+  receiptNo?: number | null;
   state: string;
   moment: string;
   sumMinor: string;

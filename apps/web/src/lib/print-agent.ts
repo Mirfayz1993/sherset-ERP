@@ -352,7 +352,7 @@ th,td{border:1.5px solid #000;padding:1px 2px;vertical-align:top}
 th{text-align:center;font-weight:700}
 .c{text-align:center}
 .nm{font-size:11px;font-weight:700;word-break:break-word}
-.qty{font-size:11px;font-weight:700}
+.qty{font-size:11px;font-weight:700;white-space:nowrap}
 .cell{white-space:nowrap;font-weight:800;font-variant-numeric:tabular-nums}
 .total{margin-top:3px;font-size:12px;font-weight:700}
 .brand{margin-top:12px;border-top:1px solid #000;padding-top:3px;font-size:11px;font-weight:700;font-style:italic}
@@ -367,7 +367,7 @@ th{text-align:center;font-weight:700}
 ${res.comment?.trim() ? `<div>Комментарий: ${escapeHtml(res.comment)}</div>` : ''}
 </div>
 ${sheet.groupLabel != null ? `<div class="grp">${escapeHtml(sheet.groupLabel)}</div>` : ''}
-<table><thead><tr><th style="width:5mm">№</th><th>Наименование</th><th style="width:7mm">Ед.изм</th><th style="width:8mm">Кол-во</th><th style="width:19mm">Yacheyka</th></tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr><th style="width:7mm">№</th><th>Наименование</th><th style="width:7mm">Ед.изм</th><th style="width:11mm">Кол-во</th><th style="width:17mm">Yacheyka</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="total">Всего наименований ${sheet.lines.length}</div>
 <div class="brand">${RECEIPT_BRAND}</div>
 </body></html>`;
@@ -577,8 +577,8 @@ export function buildReceiptHtml(sale: ReceiptSale): string {
   const rowsHtml = m.rows
     .map(
       (r) =>
-        `<tr><td class="c">${r.index}</td><td class="c nm">${e(r.name)}</td>` +
-        `<td class="c">${e(r.uom)}</td><td class="c">${e(r.qty)}</td>` +
+        `<tr><td class="c nw">${r.index}</td><td class="c nm">${e(r.name)}</td>` +
+        `<td class="c">${e(r.uom)}</td><td class="c nw">${e(r.qty)}</td>` +
         `<td class="r">${e(r.price)}</td><td class="r">${e(r.sum)}</td></tr>`,
     )
     .join('');
@@ -617,6 +617,12 @@ table{width:100%;border-collapse:collapse;margin-top:4px;font-size:11px}
 td{border:1px solid #000;padding:2px 3px;vertical-align:middle;overflow-wrap:anywhere}
 .c{text-align:center}
 .r{text-align:right;white-space:nowrap}
+/* № va «Soni» — RAQAM ustunlari. td dagi overflow-wrap:anywhere («Nomi»
+   uchun kerak) ularga ham tegib, 200 ni «20»+«0» qilib SINDIRARDI (egasining
+   fotosi, 2026-09-02: CHEK-112159, «Gofra ko'k 32x» qatori). nowrap sinish
+   NUQTASINI umuman yo'q qiladi — cheklov 4 xona emas, ixtiyoriy uzunlik;
+   auto-layout ustunni raqam bo'yi kengaytiradi, «Nomi» qolganini oladi. */
+.nw{white-space:nowrap}
 .nm{text-align:center}
 .tot{font-weight:700;font-size:13px}
 .sub{font-size:10px}
@@ -635,7 +641,7 @@ ${m.buyerPhone ? `<div>${e(RECEIPT_LABELS.phone)}: ${e(m.buyerPhone)}</div>` : '
 ${m.comment.trim() ? `<div>${e(RECEIPT_LABELS.comment)}: ${e(m.comment)}</div>` : ''}
 </div>
 <table>
-<tr><td class="c">№</td><td class="c">${e(RECEIPT_LABELS.colName)}</td><td class="c">${e(RECEIPT_LABELS.colUom)}</td><td class="c">${e(RECEIPT_LABELS.colQty)}</td><td class="c">${e(RECEIPT_LABELS.colPrice)}</td><td class="c">${e(RECEIPT_LABELS.colSum)}</td></tr>
+<tr><td class="c nw">№</td><td class="c">${e(RECEIPT_LABELS.colName)}</td><td class="c">${e(RECEIPT_LABELS.colUom)}</td><td class="c nw">${e(RECEIPT_LABELS.colQty)}</td><td class="c">${e(RECEIPT_LABELS.colPrice)}</td><td class="c">${e(RECEIPT_LABELS.colSum)}</td></tr>
 ${rowsHtml}
 ${totalsHtml}
 ${payHtml}

@@ -18,6 +18,7 @@
  */
 
 import { api } from '@/lib/api-client';
+import { useBcp47 } from '@/lib/i18n-format';
 import { formatMoney } from '@moysklad/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Package, Receipt, RotateCcw, User, X } from 'lucide-react';
@@ -62,6 +63,7 @@ export function VozvratMode({
   onCopyToCart: (positions: ChekDetailPosition[]) => void;
 }) {
   const t = useTranslations('pages.sotuv');
+  const bcp47 = useBcp47();
 
   const [tab, setTab] = useState<VozvratTab>('product');
   const [search, setSearch] = useState('');
@@ -342,7 +344,7 @@ export function VozvratMode({
                     {/* Egasi: «cheklar SANASI bilan chiqsin» — vaqt emas,
                         to'liq sana (eski cheklar ham topiladi). */}
                     <span className="shrink-0 text-[14px] tabular-nums text-[var(--ms-text-muted)]">
-                      {new Date(sale.moment).toLocaleString('uz-UZ', {
+                      {new Date(sale.moment).toLocaleString(bcp47, {
                         day: '2-digit',
                         month: '2-digit',
                         year: '2-digit',
