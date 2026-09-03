@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -119,7 +119,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | Faza | Nima | Server ishi | Prioritet | Holat |
 |---|---|---|---|---|
 | **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | **TUGADI** |
-| **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | REJA |
+| **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | **TUGADI** |
 | **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | REJA |
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | REJA |
 | **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | REJA |
@@ -749,3 +749,149 @@ tayanilmadi. Ekranda ham faqat `name` chiziladi.
    faza agenti buni «begona fayl» deb o'ylab olib tashlamasin.
 7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi). Keyingi
    T-faza agenti ham ularni **o'z commitiga qo'shmasin**.
+
+### T2 — Qo'lda kiritish (`ScanBar` 350 ms tuzog'i) · **TUGADI** · 2026-09-03 · `da2d7daa`
+
+**Nima qilindi**
+
+- **`android/tsd-app/app/src/main/java/uz/sherset/tsd/ScanBar.kt`** (+130 / −8)
+  - Yangi `private class TypingWatch(humanGapMs)` — belgilar orasidagi intervallarni yig'adi va
+    **o'rtacha** qiymat bo'yicha «skaner / odam» qarorini beradi:
+    `isHuman = edited || (gaps > 0 && averageGapMs >= humanGapMs)`.
+    - **`edited`** — matn qisqarsa (backspace) darhol «odam». Skaner hech qachon tahrir qilmaydi,
+      shuning uchun bu eng ishonchli bitta signal.
+    - **Birinchi belgining intervali hisoblanmaydi** (`lastAt == 0L`) — undan oldin belgi yo'q,
+      aks holda «maydon ochilgandan beri o'tgan vaqt» interval deb o'lchanardi va HAR kiritish
+      «odam» chiqardi.
+    - Bitta `onValueChange` da bir nechta belgi kelsa (skaner burst'i yoki qo'yish), o'lchangan
+      interval o'sha belgilar soniga **bo'linadi** (`gaps += added`) — koalesatsiya skanerni
+      sun'iy «sekin» qilib ko'rsatmasin.
+  - `submit()` endi `reset()` orqali `value`, `TypingWatch` va `human` ni **birga** tozalaydi —
+    keyingi kiritish o'lchovi oldingisining qoldig'i bilan aralashmasin.
+  - Avto-yuborish shoxi: `LaunchedEffect(value, human) { if (!human && length >= 3) { delay(350); submit() } }`.
+    `human` **kalitga qo'shildi**, shuning uchun odam yozayotgani aniqlangan zahoti kutayotgan
+    korutina bekor bo'ladi va qayta boshlanmaydi. **350 ms ham, 3 belgi ham, `delay`+`submit`
+    zanjiri ham o'zgarmadi** — zaxira o'chirilmadi, faqat chetlab o'tildi (§4 «Cheklovlar»).
+  - `trailingIcon`: `human == true` bo'lgandagina **⏎** tugmasi (`IconButton` + `Palette.Accent`),
+    `contentDescription` bilan. Bu ham rejim belgisi («endi o'zi yuborilmaydi»), ham bosiladigan
+    tugma — omborchi ekran klaviaturasidan tasdiq tugmasini qidirmasin.
+  - `keyboardActions` ga `onGo`/`onSearch` qo'shildi (`onDone` turibdi): ekran klaviaturasining
+    tasdiq tugmasi qurilma/IME ga qarab uchtasidan biri bo'lib chiqadi. `imeAction` **o'zgartirilmadi**
+    (`Done`) — uni yozish o'rtasida almashtirish IME ni qayta ishga tushiradi va terilayotgan matnni
+    uzishi mumkin.
+  - Sinf KDoc'iga T2 bandi va «nega `onValueChange`» dalili yozildi.
+- **`app/src/main/res/values/config.xml`** (+19): `<integer name="scan_human_gap_ms">50</integer>` —
+  chegara **resursda**, kodda emas (§4 T2 vazifa 1: qurilma almashsa kod o'zgarmasin). Izohda
+  ikkala shox va sozlash yo'li yozilgan.
+- **`app/src/main/java/uz/sherset/tsd/Diagnostics.kt`** (+37 / −4): yangi `lastInput` (Compose state,
+  `private set`) va `input(human, length, avgGapMs)`. Jurnalga yangi `IN` turi qo'shildi.
+  🔴 **Kodning O'ZI yozilmaydi** — faqat manba, uzunlik va o'lchov (§2, qoida 11; jurnalning vazifasi
+  kodni emas, MANBANI ko'rsatish). `clear()` endi `lastInput` ni ham tozalaydi.
+- **`app/src/main/java/uz/sherset/tsd/DiagnosticsScreen.kt`** (+25): «Oxirgi kiritish (skan maydoni)»
+  kartasi — manba + o'lchangan o'rtacha interval + sozlash izohi.
+- **`app/src/main/res/values/strings.xml`** (+8): `scan_submit`, `diag_input`, `diag_input_none`,
+  `diag_input_help`. Faqat `uz`.
+- **`README.md`** (+35 / −1): «Skaner» bo'limiga **«Qo'lda kiritish va manba ajratish (T2)»** kichik
+  bo'limi (jadval bilan: qaysi interval → qaysi xulq, chegara qayerda, nega `onValueChange`,
+  jonlida qanday sozlanadi); «Qo'lda smoke» ro'yxatiga **9-band (T2)**, eski «Narx tekshiruvi» 10 ga surildi.
+
+**Chegara qiymati va u qayerdan o'qiladi**
+
+`res/values/config.xml` → `<integer name="scan_human_gap_ms">50</integer>`, kodda
+`integerResource(R.integer.scan_human_gap_ms)` orqali (`ScanBar.kt`). **50 ms** tanlandi: wedge skaner
+belgilarni odatda 5–30 ms oralig'ida «yozadi», odam esa ekran klaviaturasida 120 ms dan tez tera
+olmaydi — oraliq keng. Jonlida sozlash **USB'siz**: Diagnostika ekranidagi «Oxirgi kiritish» qatori
+skanerning HAQIQIY o'rtacha intervalini raqam bilan ko'rsatadi, chegara o'sha raqamdan yuqori qilinadi.
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 1m 6s** · **36 task, 35 bajarildi** |
+| Ogohlantirish | o'sha buyruq, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza build'da o'lchandi — `UP-TO-DATE` task natijani yashirmadi) |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat da2d7daa` da `apps/` yo'q) |
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` ogohlantirishsiz | ✔ | toza build, 35 task, `w:`/`warning`/`e:` — 0 qator |
+| Sekin yozilgan 11 belgili kod **bir marta va to'liq** yuboriladi | ✔ | 2-belgidayoq `onChange` bitta gap yozadi (odam uchun ≥120 ms) → `human = true`; `LaunchedEffect(value, human)` kaliti o'zgarib kutayotgan korutina bekor bo'ladi va `!human` shartida qayta boshlanmaydi ⇒ 3-belgida avto-yuborish YO'Q. Kod ⏎/Enter bosilganda **bir marta** `submit()` ga tushadi, `reset()` maydonni darhol bo'shatadi ⇒ takror yuborilmaydi |
+| Tez «yozilgan» (skaner) kod avvalgidek 350 ms da yuboriladi | ✔ | o'rtacha 5–30 ms < 50 ⇒ `isHuman = false` ⇒ shart `!human && length >= 3` bajariladi va **o'zgarmagan** `delay(350); submit()` ishlaydi |
+| ENT bilan yuborish ishlaydi va maydon tozalanadi | ✔ | `onPreviewKeyEvent` dagi `Key.Enter`/`Key.NumPadEnter` shoxi **tegilmadi**; `submit()` ichida `reset()` birinchi bo'lib chaqiriladi (`code` undan oldin olinadi) |
+| Diagnostika ekranida manba ko'rinadi | ✔ | `Diagnostics.input(...)` → `lastInput` → `DiagnosticsScreen` dagi «Oxirgi kiritish» kartasi: «SKANER · 13 belgi · o'rtacha 12 ms» ko'rinishida. Jonli qurilmada sinov — **T8** |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Serverga tegilmadi, allowlist'ga tegilmadi, yangi API chaqiruvi qo'shilmadi (`ApiClient.kt` diffda
+umuman yo'q). Narx maydoni bilan aloqasi yo'q.
+
+**Rejadan chekinish (bitta, ochiq aytiladi)**
+
+§4 T2 vazifa 1 «`onPreviewKeyEvent` da oxirgi belgi vaqti» deydi. Amalda o'lchov **`onValueChange`**
+da olindi. Sabab — dalil bilan: **ekran klaviaturasi (IME) matnni `InputConnection` orqali qo'yadi va
+bitta ham `KeyEvent` yubormaydi**. Omborchi kodni aynan ekran klaviaturasida yozadi, ya'ni tugma
+hodisalariga qarab o'lchansa `gaps == 0` bo'lib qolardi → `isHuman = false` → 3-belgidan keyin yana
+yarim kod yuborilardi, ya'ni **T2 tuzatayotgan xatoning o'zi qaytardi**. `onValueChange` esa uchala
+yo'lni ham bir xil ko'radi (ekran klaviaturasi, apparat klaviatura, wedge skaner — ularning hammasi
+matnni o'zgartiradi). Maqsad — «interval o'lchash» — o'zgarmadi, faqat o'lchov nuqtasi ishonchlirog'iga
+ko'chdi.
+
+**Fokus intizomi (§4 T2 vazifa 3 — T3 uchun yozib qoldiriladi)**
+
+- `ScanBar` fokusni **faqat** `LaunchedEffect(screenKey)` da so'raydi, ya'ni **ekran almashgandagina**.
+  T2 da bu shoxga **tegilmadi** va yangi `requestFocus()` qo'shilmadi.
+- Demak ekran ichida boshqa maydon (Sanashdagi `NumberField`, T3 dagi qidiruv maydoni) fokus olsa,
+  `ScanBar` uni **tortib olmaydi** — `screenKey` o'zgarmagani uchun effekt qayta ishlamaydi.
+- 🔴 **T3 uchun teskari tomoni:** fokus boshqa maydonda turganda **wedge skaner o'sha maydonga yozadi**
+  (masalan qidiruv maydoniga yacheyka kodi tushadi). Bu T2 dan oldin ham shunday edi va T2 uni
+  o'zgartirmadi. T3 da qidiruv maydoni qo'shilganda ikkitadan biri tanlansin: (a) qidiruv maydoni
+  ham `TypingWatch` mantig'ini ishlatsin (unda skaner kodi ham qidiruvga tushib, natija chiqadi —
+  zarari yo'q), yoki (b) qidiruv yopilganda fokus `ScanBar` ga QAYTARILSIN. Hozircha hech biri
+  qilinmadi — bu T3 ning qarori.
+- `key(screen) { screen.Content() }` (MainActivity) tufayli ekran almashganda `ScanBar` ning ichki
+  `remember` holati (`value`, `human`, `TypingWatch`) saqlanadi — `ScanBar` `key` blokidan TASHQARIDA.
+  Bu to'g'ri: yarim yozilgan kod ekran o'zgarganda yo'qolmaydi. Lekin `human` ham saqlanadi, ya'ni
+  odam yozib tugatmasdan ekran almashtirsa ⏎ ko'rinib turadi — `submit()` yoki backspace bilan
+  maydon bo'shagach o'z-o'zidan yo'qoladi.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Suffikssiz skaner (U5 muammosi)** — buzilmadi. Yagona shart `!human` qo'shildi; skaner uchun
+  `human` **hech qachon `true`** bo'lmaydi (o'rtacha 5–30 ms, backspace yo'q). `delay(350)` va 3 belgi
+  chegarasi **raqam bilan o'zgarmadi**. Eng yomon holat — g'ayrioddiy SEKIN skaner (o'rtacha ≥50 ms):
+  u «odam» deb tanilib avto-yuborishni yo'qotadi, LEKIN kod maydonda ko'rinib turadi va ⏎ bosiladi
+  (ya'ni jim yo'qolish YO'Q), diagnostika esa aniq raqamni ko'rsatadi va chegara `config.xml` dan
+  ko'tariladi — kod qayta yig'ilmasdan.
+- **Broadcast rejimi** — umuman tegilmadi. `ScannerBridge.kt` diffda **yo'q**; u `MainActivity` da
+  to'g'ridan-to'g'ri `routeScan(code)` chaqiradi, ya'ni `ScanBar` dan, fokusdan va tezlik o'lchovidan
+  **mustaqil**. Broadcast kodi `Diagnostics.input` ga ham tushmaydi (u yerda `BCAST` qatori bor).
+- **Enter bilan yuborish** — `onPreviewKeyEvent` sharti belgi-ba-belgi o'zgarmadi. Enter kelganda
+  `submit()` ishlaydi, `human` qanday bo'lishidan qat'i nazar.
+- **Sanash semantikasi, oflayn navbat, multi-hit** — `ScanBar` faqat **matnni** `onCode` ga uzatadi;
+  `routeScan` va undan keyingi hech nima o'zgarmadi. `ActionQueue`/`QueueSender`/`ApiClient`/
+  `DeviceStore` diffda yo'q (§2, qoida 10).
+- **PIN ekrani** — tegilmadi: `ScanBar` faqat `Stage.Work` dagi `WorkRoot` da chiziladi, PIN raqamlari
+  `dispatchKeyEvent` orqali boradi va `Diagnostics` u yerda ilgarigidek jim (§ mavjud shart
+  `if (stage == Stage.Work)`).
+- **Ekranning balandligi** — ⏎ `trailingIcon` sifatida maydonning ICHIDA chiqadi, maydon balandligi
+  (`heightIn(min = 56.dp)`) o'zgarmaydi, ya'ni 4" ekranda pastdagi ro'yxat siljimaydi.
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan** (chegara ham, ⏎ ham). Qabul mezoni «kodda ko'rsatilsin» deydi va
+   bajarildi; haqiqiy iData 95W Pro sinovi — **T8**. README'ga 9-band aynan shu uchun yozildi va
+   unda skanerning o'lchangan o'rtachasini **yozib olish** talab qilinadi.
+2. **Chegara jonli o'lchov bilan tasdiqlanmagan.** 50 ms — sanoatdagi odatiy oraliqdan olingan
+   taxmin, jonlida o'lchanmagan. T8 da birinchi ish: skanerlab, diagnostikadagi raqamni o'qish.
+   Agar u 50 ga yaqin chiqsa (masalan 35–45), chegarani 2 barobar zaxira bilan qo'yish kerak.
+3. **T3 dagi qidiruv maydoni** o'z `TypingWatch` ini ISHLATMAYDI — u alohida `TextField` bo'ladi va
+   avto-yuborish u yerda umuman bo'lmasligi kerak (§4 T3 vazifa 8 shuni aytadi). Yuqoridagi «Fokus
+   intizomi» bandi T3 uchun ochiq qaror qoldiradi.
+4. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi** (hamon `4`/`0.4.0`),
+   `tools/publish.sh` chaqirilmadi.
+5. **`docs/progress.json`** T2 commitiga ham `pre-commit` hook'i tomonidan qo'shildi (7 fayl) —
+   begona ish emas.
+6. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
+   keyingi T-faza agenti ularni **o'z commitiga qo'shmasin**.
+7. **Ovoz/tebranish hamon yo'q** — odam yozib ⏎ bosgach ham javob faqat toast bilan keladi (T4).
