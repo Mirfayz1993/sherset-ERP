@@ -1,6 +1,16 @@
 package uz.sherset.tsd
 
-import android.widget.LinearLayout
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import java.util.UUID
 
@@ -26,48 +36,69 @@ class ShortageScreen(
     private val line: JSONObject,
 ) : Screen {
 
-    override fun title(ui: Ui): String = ui.str(R.string.shortage_title)
+    // Sukut — TALAB QILINGAN miqdor: eng ko'p uchraydigan holat «umuman
+    // topolmadim». Omborchi qisman topgan bo'lsa sonni kamaytiradi.
+    private var qty by mutableStateOf(line.optString("quantity"))
+    private var note by mutableStateOf("")
 
-    override fun render(body: LinearLayout) {
-        val ui = shell.ui
-        val requested = line.optString("quantity")
+    override fun title(shell: Shell): String = shell.str(R.string.shortage_title)
 
-        body.addView(ui.label(line.optString("productName"), big = true))
-        body.addView(
-            ui.label(
-                ui.str(R.string.shortage_requested, requested) + " · " +
-                    line.optString("binLocation").ifEmpty { ui.str(R.string.no_cell) },
-            ),
-        )
+    @Composable
+    override fun Content() {
+        SectionCard(tint = Palette.WarningContainer, border = Palette.Warning) {
+            CellBadge(line.optString("binLocation").ifEmpty { stringResource(R.string.no_cell) })
+            Spacer(Modifier.height(8.dp))
+            Text(line.optString("productName"), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.shortage_requested, line.optString("quantity")),
+                style = MaterialTheme.typography.bodyLarge,
+                color = Palette.TextMuted,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
 
-        val qty = ui.input(R.string.shortage_qty_hint, numeric = true)
-        // Sukut — TALAB QILINGAN miqdor: eng ko'p uchraydigan holat «umuman
-        // topolmadim». Omborchi qisman topgan bo'lsa sonni kamaytiradi.
-        qty.setText(requested)
-        val note = ui.input(R.string.shortage_note_hint)
+        SectionCard {
+            NumberField(
+                value = qty,
+                onChange = { qty = it },
+                label = stringResource(R.string.shortage_qty_hint),
+            )
+            Spacer(Modifier.height(10.dp))
+            PlainField(
+                value = note,
+                onChange = { note = it },
+                label = stringResource(R.string.shortage_note_hint),
+            )
+            Spacer(Modifier.height(14.dp))
+            PrimaryButton(
+                text = stringResource(R.string.shortage_save),
+                color = Palette.Warning,
+                enabled = qty.trim().isNotEmpty(),
+            ) { send(qty.trim(), note.trim()) }
+        }
+        Spacer(Modifier.height(10.dp))
 
-        body.addView(qty)
-        body.addView(note)
-        body.addView(
-            ui.button(R.string.shortage_save) {
-                send(qty.text.toString().trim(), note.text.toString().trim())
-            },
-        )
         // «Topdim» — belgini olib tashlash (qty = 0). Omborchi keyin tovarni
         // topib olishi normal holat, ya'ni bu yo'l ochiq bo'lishi kerak.
-        body.addView(ui.button(R.string.shortage_clear) { send("0", "") })
-        body.addView(ui.button(R.string.back) { shell.go(TaskDetailScreen(shell, taskId)) })
+        SecondaryButton(
+            text = stringResource(R.string.shortage_clear),
+            color = Palette.Success,
+        ) { send("0", "") }
+        Spacer(Modifier.height(8.dp))
+        SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+            shell.back()
+        }
     }
 
     private fun send(qty: String, note: String) {
-        val ui = shell.ui
         if (qty.isEmpty()) {
-            ui.toast(R.string.shortage_qty_hint)
+            shell.toast(R.string.shortage_qty_hint)
             return
         }
         val lineId = line.optString("id")
         val opId = UUID.randomUUID().toString()
-        val path = "/restock-tasks/" + taskId + "/lines/" + lineId + "/shortage"
+        val path = "/restock-tasks/$taskId/lines/$lineId/shortage"
         val payload = JSONObject().put("qty", qty).put("clientOpId", opId)
         if (note.isNotEmpty()) payload.put("note", note)
 
@@ -75,14 +106,15 @@ class ShortageScreen(
             try {
                 shell.api.send("POST", path, payload)
                 shell.main {
-                    ui.toast(R.string.shortage_saved)
-                    shell.go(TaskDetailScreen(shell, taskId))
+                    shell.toast(R.string.shortage_saved)
+                    shell.back()
                 }
             } catch (e: ApiClient.ApiException) {
                 if (e.retriable) {
-                    shell.enqueue("POST", path, payload, ui.str(R.string.op_shortage))
+                    shell.enqueue("POST", path, payload, shell.str(R.string.op_shortage))
+                    shell.main { shell.back() }
                 } else {
-                    shell.main { ui.toast(e.message ?: "") }
+                    shell.toast(e.message ?: "")
                 }
             }
         }

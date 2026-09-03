@@ -55,7 +55,9 @@
     <string name="task_kind_picking">Yig\'ish</string>
     <string name="task_kind_restock">Joylashtirish</string>
     <string name="task_done_control">Hammasi yopildi — chek KONTROLGA tushdi</string>
-    <string name="line_confirm">Oldim / joyladim</string>
+    <string name="task_progress">%1$d / %2$d qator bajarildi</string>
+    <string name="line_qty">Miqdor: %1$s</string>
+    <string name="line_confirm">Oldim</string>
     <string name="line_confirmed">Qator tasdiqlandi</string>
     <string name="line_shortage">Topolmadim</string>
 
@@ -90,11 +92,44 @@
     <string name="count_step_cell">YACHEYKA yorlig\'ini skanerlang</string>
     <string name="count_empty">Yacheyka bo\'sh</string>
     <string name="count_qty_hint">Sanalgan son</string>
+    <string name="count_system_qty">Tizimda</string>
+    <string name="count_scan_product_tip">Tovar shtrixini skanerlang yoki ro\'yxatdan tanlang</string>
+    <string name="count_scanned">Sanalayotgan tovar</string>
+    <string name="count_not_in_cell">⚠ Bu tovar yacheykada yo\'q — sanalgan son KIRIM bo\'lib yoziladi</string>
+    <string name="count_cancel">Bekor qilish</string>
+    <string name="count_need_cell_first">Avval YACHEYKA yorlig\'ini skanerlang</string>
     <string name="count_save">Saqlash</string>
     <string name="count_saved">Sanoq saqlandi</string>
     <string name="count_offline">Aloqa yo\'q — sanoq saqlanmadi, qayta urinib ko\'ring</string>
 
+    <!-- 0.2.0 — bosh ekran (plitkali menyu, egasining tanlovi 2026-09-01) -->
+    <string name="home_title">Bosh ekran</string>
+    <string name="home_scan_tip">Istalgan joyda shtrix yoki yacheyka yorlig\'ini skanerlang</string>
+
+    <!-- Skaner diagnostikasi -->
+    <string name="diag_title">Skaner diagnostikasi</string>
+    <string name="diag_help">Skan tugmasini bosing. Quyida KEY (klaviatura rejimi) yoki BCAST (broadcast rejimi) qatori chiqsa — skaner ilovaga yetib kelyapti. Hech nima chiqmasa, kod qurilmadan umuman chiqmayapti: skaner sozlamasida chiqish rejimini «klaviatura + Enter» yoki «broadcast» qiling.</string>
+    <string name="diag_listening">Tinglanayotgan broadcast aksiyalari:</string>
+    <string name="diag_clipboard">Buferni o\'qish</string>
+    <string name="diag_clear">Tozalash</string>
+    <string name="diag_empty">Hali hech narsa kelmadi</string>
+
+    <!-- Yangilanish (qurilmadan) -->
+    <string name="update_available">Yangi versiya bor</string>
+    <string name="update_download">Yuklab olish</string>
+    <string name="update_downloading">Yuklanmoqda… %1$d%%</string>
+    <string name="update_ready_note">O\'rnatilgach ilova qayta ishga tushadi. Juftlash va navbat saqlanadi.</string>
+    <string name="update_install">O\'rnatish</string>
+    <string name="update_failed">Yangilanmadi</string>
+    <string name="update_retry">Qayta urinish</string>
+    <string name="update_check">Versiya %1$s · yangilanishni tekshirish</string>
+    <string name="update_up_to_date">Eng so\'nggi versiya o\'rnatilgan</string>
+    <string name="update_check_failed">Serverga ulanib bo\'lmadi</string>
+    <string name="update_needs_permission">Ruxsat bering: «Noma\'lum manbalardan o\'rnatish» → so\'ng «O\'rnatish»ni yana bosing</string>
+
     <!-- Oflayn navbat -->
+    <string name="queue_title">Navbat</string>
+    <string name="queue_empty">Navbat bo\'sh — hamma amal yuborilgan</string>
     <string name="queue_pending">Navbatda: %1$d ta amal</string>
     <string name="queue_send">Navbatni yuborish</string>
     <string name="queue_sent">Yuborildi: %1$d, rad etildi: %2$d</string>
@@ -107,8 +142,8 @@
     <!-- K4 — bo'linadigan tovar kesimi (kabel/sim/shlang) -->
     <string name="cut_button">✂ Kesish</string>
     <string name="cut_title">Bo\'lakni kesish</string>
-    <string name="cut_need">Kerak: %1$s</string>
-    <string name="cut_agreed">Mijoz bilan kelishilgan: %1$s</string>
+    <string name="cut_need_label">Kerak</string>
+    <string name="cut_agreed_label">Mijoz bilan kelishilgan</string>
     <string name="cut_pick_source">Qaysi bo\'lakdan kesasiz?</string>
     <string name="cut_no_pieces">Bu tovarda bo\'lak reyestri bo\'sh</string>
     <string name="cut_whole_roll">Butun rulon</string>

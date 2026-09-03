@@ -1,7 +1,22 @@
 package uz.sherset.tsd
 
-import android.widget.EditText
-import android.widget.LinearLayout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -38,60 +53,111 @@ class CutScreen(
 ) : Screen {
 
     /** Tanlangan manba (skan yoki ro'yxatdan bosish). */
-    private var source: JSONObject? = null
-    private var cutInput: EditText? = null
-    private var remainingInput: EditText? = null
+    private var source by mutableStateOf<JSONObject?>(null)
+    private var cutLength by mutableStateOf("")
+    private var remaining by mutableStateOf("")
 
-    override fun title(ui: Ui): String = ui.str(R.string.cut_title)
+    override fun title(shell: Shell): String = shell.str(R.string.cut_title)
 
-    override fun render(body: LinearLayout) {
-        val ui = shell.ui
+    @Composable
+    override fun Content() {
         val options = line.optJSONArray("pieceOptions") ?: JSONArray()
 
-        body.addView(ui.label(line.optString("productName"), big = true))
-        body.addView(ui.label(ui.str(R.string.cut_need, needText())))
+        SectionCard {
+            Text(line.optString("productName"), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            InfoRow(label = stringResource(R.string.cut_need_label), value = needText())
 
-        // Kassirning mijoz bilan kelishuvi («150 + 30») — omborchi nimani
-        // kesishini SHU qatordan biladi (K3 da u faqat savatda qolardi).
-        val agreed = line.optJSONArray("agreedLengths") ?: JSONArray()
-        if (agreed.length() > 1) {
-            val parts = (0 until agreed.length()).joinToString(" + ") { agreed.optString(it) }
-            body.addView(ui.label(ui.str(R.string.cut_agreed, parts)))
+            // Kassirning mijoz bilan kelishuvi («150 + 30») — omborchi nimani
+            // kesishini SHU qatordan biladi (K3 da u faqat savatda qolardi).
+            val agreed = line.optJSONArray("agreedLengths") ?: JSONArray()
+            if (agreed.length() > 1) {
+                val parts = (0 until agreed.length()).joinToString(" + ") { agreed.optString(it) }
+                InfoRow(label = stringResource(R.string.cut_agreed_label), value = parts)
+            }
         }
+        Spacer(Modifier.height(12.dp))
 
         val src = source
         if (src == null) {
-            body.addView(ui.label(ui.str(R.string.cut_pick_source), big = true))
+            Text(
+                stringResource(R.string.cut_pick_source),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (options.length() == 0) {
+                EmptyState(stringResource(R.string.cut_no_pieces))
+            }
             for (i in 0 until options.length()) {
                 val p = options.optJSONObject(i) ?: continue
-                body.addView(ui.button(pieceLabel(ui, p)) { pick(p) })
+                SectionCard(modifier = Modifier.clickable { pick(p) }) { PieceRow(p) }
+                Spacer(Modifier.height(8.dp))
             }
-            if (options.length() == 0) body.addView(ui.label(ui.str(R.string.cut_no_pieces)))
-            body.addView(ui.button(R.string.back) { shell.go(TaskDetailScreen(shell, taskId)) })
+            SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+                shell.back()
+            }
             return
         }
 
-        body.addView(ui.label(pieceLabel(ui, src), big = true))
+        SectionCard(tint = Palette.PrimaryContainer, border = MaterialTheme.colorScheme.primary) {
+            PieceRow(src)
+        }
+        Spacer(Modifier.height(12.dp))
 
-        val cut = ui.input(R.string.cut_length_hint, numeric = true)
-        // Sukut — hali QOPLANMAGAN miqdor: eng ko'p uchraydigan holat «mijoz
-        // so'raganini bitta bo'lakdan kesish».
-        cut.setText(needText())
-        body.addView(cut)
-        cutInput = cut
+        SectionCard {
+            NumberField(
+                value = cutLength,
+                onChange = { cutLength = it },
+                label = stringResource(R.string.cut_length_hint),
+            )
+            Spacer(Modifier.height(10.dp))
+            NumberField(
+                value = remaining,
+                onChange = { remaining = it },
+                label = stringResource(R.string.cut_remaining_hint),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.cut_remaining_note),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton(
+                text = stringResource(R.string.cut_submit),
+                color = Palette.CellText,
+                enabled = cutLength.trim().isNotEmpty(),
+            ) { send(cutLength.trim(), remaining.trim()) }
+        }
+        Spacer(Modifier.height(10.dp))
+        SecondaryButton(text = stringResource(R.string.cut_change_source)) { source = null }
+        Spacer(Modifier.height(8.dp))
+        SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+            shell.back()
+        }
+    }
 
-        val remaining = ui.input(R.string.cut_remaining_hint, numeric = true)
-        body.addView(remaining)
-        remainingInput = remaining
-
-        body.addView(ui.label(ui.str(R.string.cut_remaining_note)))
-        body.addView(
-            ui.button(R.string.cut_submit) {
-                send(cut.text.toString().trim(), remaining.text.toString().trim())
-            },
+    /** «BLK-000041 · 250 · 02-01-03-04» (butun rulonda yorliq YO'Q — K-Q3). */
+    @Composable
+    private fun PieceRow(p: JSONObject) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CellBadge(p.optString("label").ifEmpty { stringResource(R.string.cut_whole_roll) })
+            Text(
+                p.optString("length"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            p.optString("cellName").ifEmpty { stringResource(R.string.no_cell) },
+            color = Palette.TextMuted,
+            style = MaterialTheme.typography.bodyMedium,
         )
-        body.addView(ui.button(R.string.cut_change_source) { source = null; shell.go(this) })
-        body.addView(ui.button(R.string.back) { shell.go(TaskDetailScreen(shell, taskId)) })
     }
 
     /**
@@ -100,7 +166,6 @@ class CutScreen(
      * beradi va jimgina noto'g'ri bo'lakni tanlamaydi (K-reja 7.3).
      */
     override fun onScan(code: String): Boolean {
-        val ui = shell.ui
         val options = line.optJSONArray("pieceOptions") ?: JSONArray()
         val wanted = code.trim().uppercase()
         for (i in 0 until options.length()) {
@@ -110,13 +175,15 @@ class CutScreen(
                 return true
             }
         }
-        ui.toast(R.string.cut_piece_not_in_line)
+        shell.toast(R.string.cut_piece_not_in_line)
         return true
     }
 
     private fun pick(p: JSONObject) {
         source = p
-        shell.go(this)
+        // Sukut — hali QOPLANMAGAN miqdor: eng ko'p uchraydigan holat «mijoz
+        // so'raganini bitta bo'lakdan kesish».
+        cutLength = needText()
     }
 
     /** Hali qoplanmagan miqdor: qator miqdori − kesilgan bo'laklar. */
@@ -131,21 +198,13 @@ class CutScreen(
         return if (need <= 0) "0" else trim(need)
     }
 
-    /** «BLK-000041 · 250 · 02-01-03-04» (butun rulonda yorliq YO'Q — K-Q3). */
-    private fun pieceLabel(ui: Ui, p: JSONObject): String {
-        val label = p.optString("label").ifEmpty { ui.str(R.string.cut_whole_roll) }
-        val cell = p.optString("cellName").ifEmpty { ui.str(R.string.no_cell) }
-        return label + " · " + p.optString("length") + " · " + cell
-    }
-
     private fun trim(v: Double): String =
         if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 
-    private fun send(cut: String, remaining: String) {
-        val ui = shell.ui
+    private fun send(cut: String, remainingInput: String) {
         val src = source ?: return
         if (cut.isEmpty()) {
-            ui.toast(R.string.cut_length_hint)
+            shell.toast(R.string.cut_length_hint)
             return
         }
         val opId = UUID.randomUUID().toString()
@@ -157,7 +216,7 @@ class CutScreen(
                     src.optString("id"),
                     null,
                     cut,
-                    remaining.ifEmpty { null },
+                    remainingInput.ifEmpty { null },
                     opId,
                 )
                 val labels = resp.optJSONArray("labels") ?: JSONArray()
@@ -168,18 +227,18 @@ class CutScreen(
                     // «yorliq bilan tugaydi» sharti shu bilan bajariladi:
                     // raqam BERILGAN va u bo'lakda yozilgan.
                     val text = (0 until labels.length()).joinToString(", ") { labels.optString(it) }
-                    ui.toast(
-                        if (text.isEmpty()) ui.str(R.string.cut_saved)
-                        else ui.str(R.string.cut_saved_labels, text),
+                    shell.toast(
+                        if (text.isEmpty()) shell.str(R.string.cut_saved)
+                        else shell.str(R.string.cut_saved_labels, text),
                     )
-                    shell.go(TaskDetailScreen(shell, taskId))
+                    shell.back()
                 }
             } catch (e: ApiClient.ApiException) {
                 // Oflayn navbat YO'Q (sinf izohi): yorliq raqamini server
                 // beradi, ya'ni aloqasiz kesim yozib bo'lmaydi.
-                shell.main {
-                    ui.toast(if (e.retriable) ui.str(R.string.cut_offline) else (e.message ?: ""))
-                }
+                shell.toast(
+                    if (e.retriable) shell.str(R.string.cut_offline) else (e.message ?: ""),
+                )
             }
         }
     }

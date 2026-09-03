@@ -1,11 +1,15 @@
 # Sherset TSD — omborchi qo'l terminali
 
-> **Holat:** ISH EKRANLARI TAYYOR (G6). Auth va skelet — G5.
-> **BUILD-VERIFIED** (2026-08-25): `assembleDebug` ogohlantirishsiz o'tdi,
-> `app-debug.apk` ≈ 7,1 MB. Toolchain shu mashinada: JDK 17 va Android SDK
-> `D:/dev` da (Gradle 8.7 alohida yuklab olindi — repo'da wrapper yo'q).
-> **JONLI QURILMADA sinalmagan** — terminal hali yo'q (qoida 11).
-> Reja: [`docs/plans/2026-08-23-omborchi-tsd-mijozlar.md`](../../docs/plans/2026-08-23-omborchi-tsd-mijozlar.md) → G5, G6.
+> **Holat:** UI **0.2.0 — Jetpack Compose** (U-reja, 2026-09-01). Mantiq G5/G6
+> dan aynan ko'chdi, server shartnomasi o'zgarmadi.
+> **BUILD-VERIFIED** (2026-09-01): `assembleDebug` ogohlantirishsiz o'tdi,
+> `app-debug.apk` ≈ 12,9 MB (Compose bilan 7,1 → 12,9 MB). Toolchain shu
+> mashinada: JDK 17 va Android SDK `D:/dev` da (Gradle 8.7 alohida —
+> repo'da wrapper yo'q).
+> **Qurilma:** iData 95W Pro (Android 14, 4" 480×800, fizik klaviatura +
+> apparat skaner) — **jonli smoke hali o'tkazilmagan** (qoida 11).
+> Rejalar: [`docs/plans/2026-09-01-tsd-zamonaviy-ui.md`](../../docs/plans/2026-09-01-tsd-zamonaviy-ui.md) (UI),
+> [`docs/plans/2026-08-23-omborchi-tsd-mijozlar.md`](../../docs/plans/2026-08-23-omborchi-tsd-mijozlar.md) (G5, G6 — mantiq).
 
 ## Nima qiladi (G5 doirasi)
 
@@ -19,21 +23,23 @@
    `GET /admin/stores/cells/by-barcode`. Multi-hit tanlovi majburiy.
 5. **Oflayn amal navbati** — `ActionQueue.kt` (FIFO, `clientOpId` bilan).
 
-## Ish ekranlari (G6 doirasi)
+## Ish ekranlari (G6 mantig'i, 0.2.0 dizayni)
 
 Har ekran alohida faylda va `Shell` interfeysi orqali ishlaydi — `Activity` ni
-KO'RMAYDI. Skan avval JORIY ekranga beriladi (u bosqichga qarab talqin qiladi),
-ekran uni yemasa umumiy narxsiz skan-ma'lumot ochiladi.
+KO'RMAYDI (`Shell.kt`). Skan avval JORIY ekranga beriladi (u bosqichga qarab
+talqin qiladi), ekran uni yemasa umumiy narxsiz skan-ma'lumot ochiladi.
 
 | Ekran | Fayl | Nima qiladi |
 |---|---|---|
-| Topshiriqlar | `TaskListScreen.kt` | `picking` + `restock` bitta navbatda; kartada `qolgan / jami` va ⚠ yetishmovchilik soni |
+| **Bosh menyu** | `HomeScreen.kt` | 4 plitka: Topshiriqlar · Joylashtirish · Sanash · Navbat (egasining tanlovi, 2026-09-01) |
+| Topshiriqlar | `TaskListScreen.kt` | `picking` + `restock` bitta navbatda; kartada progress-chiziq va ⚠ yetishmovchilik soni |
 | Topshiriq detali | `TaskDetailScreen.kt` | Qatorlar **yacheyka marshruti** tartibida (saralashni SERVER qiladi); qo'lda tasdiq, skan bilan tasdiq |
 | Yetishmovchilik | `ShortageScreen.kt` | «Javonda shuncha topolmadim» — MUTLAQ son; chek tarkibi O'ZGARMAYDI |
 | Joylashtirish | `PlaceScreen.kt` | tovar → manba (yacheyka **yoki** yacheykasiz qoldiq) → maqsad yacheyka → miqdor |
 | Sanash | `CountScreen.kt` | Yacheyka yorlig'i → tarkib → mutlaq sanoq (`mode: 'set'`) |
 | Skan ma'lumoti | `ScanInfoScreen.kt` | Nom, jami qoldiq, yacheykalar — **narxsiz** |
 | Multi-hit tanlovi | `PickProductScreen.kt` | Shtrix bir nechta tovarga tegishli bo'lsa TANLOVNI ODAM qiladi |
+| **Navbat** | `QueueScreen.kt` | Kutayotgan amallar soni + **RAD ETILGANLAR** ro'yxati (sabab bilan) |
 
 **Navbatni bo'shatish** — `QueueSender.kt`: qat'iy ketma-ket, tarmoq/5xx da
 navbat JOYIDA qoladi, 4xx da amal navbatdan chiqadi va **sabab bilan** ekranda
@@ -48,6 +54,8 @@ o'z-o'zidan `done` bo'ladi va chek KONTROL navbatiga tushadi (G2) — TSD chekni
 | Endpoint | Metod | Izoh |
 |---|---|---|
 | `/auth/tsd-device/pair` | POST | Admin (JWT + `employee.update`). Kalit FAQAT shu javobda. |
+| `/auth/tsd-devices` | GET | **0.2.0** — terminallar ro'yxati (nom, ombor, oxirgi ko'rinish, APK versiyasi, qulf/bekor holati). Kalit/xesh QAYTMAYDI. |
+| `/auth/tsd-device/:id/revoke` | POST | **0.2.0** — yo'qolgan terminalni bekor qilish (idempotent; ochiq sessiya keyingi refresh'da o'ladi) |
 | `/auth/tsd-login` | POST | `{deviceId, deviceSecret, pin, appVersion?}` → `{accessToken, refreshToken, user, device}` |
 | `/auth/refresh` | POST | Sessiya uzaytirish; terminal bekor qilingan bo'lsa 401 |
 | `/restock-tasks` | GET | «Mening topshiriqlarim» |
@@ -73,19 +81,65 @@ omborchiga»*. `GET /products` to'liq tovar qatorini (`buyPrice`, `minPrice`,
 o'rniga `GET /tsd/scan` bor va uning ustunlari `tsd-scan.ts` da **oq ro'yxat**
 bilan sanab chiqilgan. Ekranda ko'rsatmaslik himoya emas: token haqiqiy.
 
-## Skaner
+## Skaner (iData 95W Pro)
 
-`ScannerBridge.kt` ikki rejimni birga ushlaydi:
+Ikki rejim BIRGA yashaydi — ikkalasi ham yoqilgan bo'lishi zarar qilmaydi:
 
-- **klaviatura-wedge** — sukut, hamma terminalda sozlashsiz ishlaydi;
-- **broadcast** (DataWedge / Urovo / Newland) — model aniqlangach
-  `res/values/config.xml` dagi `scanner_broadcast_action` to'ldiriladi,
-  **kod o'zgarmaydi**.
+- **klaviatura-wedge** (`ScanBar.kt`) — sukut. Skaner kodni ekrandagi maydonga
+  «yozadi» va Enter yuboradi. Terminalning skan sozlamalarida chiqish
+  **klaviatura** va **suffiks = Enter** bo'lsa ilova hech qanday sozlashsiz
+  ishlaydi. Sharti: maydon FOKUSDA bo'lishi — shuning uchun skan maydoni har
+  doim tepada va ekran almashganda fokus unga qaytariladi.
+- **broadcast** (`ScannerBridge.kt`) — `res/values/config.xml` dagi
+  `scanner_broadcast_action`/`_extra` bilan, **kod o'zgarmaydi**.
+  ⚠️ Hozir iData'ning odatiy `android.intent.action.SCANRESULT` / `value`
+  yozilgan — **qurilmada tekshirilishi kerak** (skan sozlamalari ilovasida
+  ko'rsatiladi). Nomi noto'g'ri bo'lsa zarari yo'q: qabul qiluvchi jim turadi
+  va wedge rejimi ishlayveradi.
+
+**Farqi:** wedge fokusga bog'liq (dialog ochilsa yoki fokus ketsa skan
+yo'qoladi), broadcast esa fokusdan mustaqil — shuning uchun maqsad broadcast,
+wedge esa zaxira.
+
+## Yangilanish (qurilmadan) — 0.3.0
+
+Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
+(`Updater.kt` + `UpdateCard.kt`):
+
+1. Ilova har ochilganda `GET /downloads/tsd/latest.json` ni o'qiydi (**API
+   emas**, nginx statikasi — tokensiz, juftlashdan oldin ham ishlaydi).
+2. `versionCode` o'rnatilganidan katta bo'lsa bosh ekranda karta chiqadi.
+3. «Yuklab olish» → APK keshga tushadi va **SHA-256 tekshiriladi** (mos
+   kelmasa o'rnatilmaydi: ombor Wi-Fi'sida yarim yuklangan fayl «buzilgan
+   paket» xatosini berardi).
+4. «O'rnatish» → tizim o'rnatuvchisi ochiladi. Android 8+ da ilovaga «noma'lum
+   manbalardan o'rnatish» huquqi kerak — yo'q bo'lsa ilova aynan o'sha sozlama
+   ekranini ochadi (jim yiqilish emas).
+
+Yangilanish **avtomatik emas**: ikkala tugmani ham omborchi bosadi, chunki
+o'rnatish ilovani qayta ishga tushiradi va yarim bajarilgan yig'ish/sanash
+uzilardi. Bosh ekranning pastida o'rnatilgan versiya ko'rinib turadi va
+o'sha yerdan qo'lda tekshirish ham mumkin.
+
+**Yangi versiya chiqarish:**
+
+```sh
+# 1) app/build.gradle.kts — versionCode +1 VA versionName oshiriladi
+# 2) bitta buyruq: build → APK → latest.json → tekshiruv
+bash android/tsd-app/tools/publish.sh "nima o'zgardi"
+```
+
+🔴 **IMZO — eng muhim shart.** Yangilanish faqat **ayni kalit** bilan
+imzolangan APK ustiga tushadi. Hozir debug-kalit ishlatiladi
+(`~/.android/debug.keystore`, sertifikat `b8ae71fd…`, **2056** gacha), ya'ni
+**build doim shu mashinada** qilinishi kerak va **kalit zaxiralanishi shart**.
+Kalit yo'qolsa har terminalda ilovani o'chirib qayta o'rnatish kerak bo'ladi —
+va **juftlash yo'qoladi** (qurilma qayta juftlanadi).
 
 ## Build
 
-**2026-08-25 da shu mashinada BAJARILDI va o'tdi** (`BUILD SUCCESSFUL`,
-ogohlantirishsiz, `app-debug.apk` ≈ 7,1 MB).
+**2026-09-01 da shu mashinada BAJARILDI va o'tdi** (`BUILD SUCCESSFUL`,
+ogohlantirishsiz, `app-debug.apk` ≈ 12,9 MB — Compose bilan 7,1 MB dan o'sdi).
 
 1. **JDK 17** va **Android SDK** (platform `android-34`). Shu mashinada ular
    `D:/dev/java/jdk-17` va `D:/dev/android-sdk` da.
@@ -184,24 +238,58 @@ bo'laklar kiritilgan (K2 ekrani, `/omborchi/bolaklar`).
    qolsin (kesim oflayn navbatga ATAYLAB qo'yilmaydi: yorliq raqamini server
    beradi).
 
+## Qo'lda smoke (0.2.0 UI — iData 95W Pro'da BIRINCHI o'rnatish)
+
+Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
+
+Bu ro'yxat yuqoridagi G5/G6/K4 smoke'laridan OLDIN bajariladi — u qurilma va
+ilova bir-birini «ko'ryaptimi» degan savolga javob beradi.
+
+1. **O'rnatish:** «Noma'lum manbalar» yoqilgan holda `app-debug.apk` ni
+   o'rnating → ilova ochilsin, «Terminalni ulash» ekrani chiqsin.
+2. **Skaner rejimini ANIQLANG (eng muhim band):** juftlashdan keyin istalgan
+   ekranda shtrix skanerlang.
+   - Kod tepadagi maydonga yozilib, so'ng qidiruv ketsa → **wedge ishlayapti**.
+   - Hech nima bo'lmasa: terminalning skan sozlamalarida chiqishni
+     «klaviatura» + suffiks «Enter» qiling.
+   - Broadcast'ni yoqmoqchi bo'lsangiz: o'sha sozlamalardagi **action** va
+     **extra** nomlarini yozib oling → `config.xml` ga qo'ying → qayta build.
+3. **Fizik klaviatura:** PIN ekranida raqamlarni **qurilma tugmalaridan**
+   tering → nuqtalar to'lsin; **ENT** bosilganda kirish bo'lsin; **⌫** o'chirsin.
+4. **Plitkali menyu:** to'rt plitka ham ochilsin va «Orqaga» bosh menyuga
+   qaytarsin.
+5. **Navbat plitkasi:** Wi-Fi ni o'chirib bitta amal qiling → plitkada son
+   chiqsin; Wi-Fi qaytgach «Navbat» ekranidan «Yuborish» → son yo'qolsin.
+6. **O'qilishi:** 4" ekranda tugmalar qo'lqop bilan bosilsinmi, matn qo'l
+   uzunligidan o'qilsinmi — omborchining o'zi aytsin.
+
 ## Fayl xaritasi
 
 ```
 app/src/main/AndroidManifest.xml           — ruxsatlar (kamera/lokatsiya YO'Q)
 app/src/main/res/values/
    config.xml                              — api_base_url + skaner broadcast aksiyasi
-   dimens.xml                              — tegish nishonlari (56/64dp)
    strings.xml                             — matnlar (uz; ru kerak bo'lsa values-ru)
 app/src/main/java/uz/sherset/tsd/
+   — o'zgarmagan qatlam (G5/G6, server bilan muloqot) —
    DeviceStore.kt                          — SHIFRLANGAN kalit/refresh saqlash
    ApiClient.kt                            — allowlist ichidagi endpointlar
    ActionQueue.kt                          — oflayn FIFO amal navbati
-   ScannerBridge.kt                        — wedge + broadcast skaner
-   QueueSender.kt                          — navbatni bo'shatish (G6)
-   Ui.kt                                   — vidjetlar + `Shell`/`Screen` shartnomasi
+   QueueSender.kt                          — navbatni bo'shatish
+   ScannerBridge.kt                        — broadcast skaner ko'prigi (ko'p vendor)
+   Updater.kt                              — qurilmadan yangilash (manifest+sha256+o'rnatish)
+   — dizayn qatlami (0.2.0, Compose) —
+   Theme.kt                                — ranglar, tipografika, shakllar
+   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar
+   Shell.kt                                — `Shell`/`Screen` shartnomasi
+   ScanBar.kt                              — doim fokusdagi klaviatura-wedge maydoni
+   AuthScreens.kt                          — juftlash + PIN (raqamlagich)
    MainActivity.kt                         — qobiq: juftlash → PIN → router → skan marshruti
+   HomeScreen.kt                           — plitkali bosh menyu
+   UpdateCard.kt                           — yangilanish kartasi (holat mashinasi)
    TaskListScreen.kt · TaskDetailScreen.kt · ShortageScreen.kt
    PlaceScreen.kt · CountScreen.kt · ScanInfoScreen.kt · PickProductScreen.kt
+   QueueScreen.kt                          — oflayn navbat + rad etilganlar
    CutScreen.kt                            — K4: bo'linadigan tovar kesimi
-app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi
+app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose)
 ```

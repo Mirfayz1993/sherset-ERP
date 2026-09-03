@@ -4,10 +4,20 @@
     <string name="api_base_url">https://erp.sherset.uz/api/v1</string>
 
     <!--
-      DataWedge/Urovo/Newland broadcast action'i. TSD MODELI ANIQLANGACH shu
-      yerda o'zgartiriladi — kod tegilmaydi (`ScannerBridge.kt`).
-      Bo'sh qoldirilsa ilova faqat klaviatura-wedge rejimida ishlaydi.
+      Yangilanish manifesti (`Updater.kt`). API EMAS — nginx statikasi
+      (`/var/www/kassa-downloads/tsd/latest.json`), tokensiz o'qiladi.
+      Shakli: {versionCode, versionName, url, sha256, notes}.
     -->
-    <string name="scanner_broadcast_action"></string>
-    <string name="scanner_broadcast_extra">com.symbol.datawedge.data_string</string>
+    <string name="update_manifest_url">https://erp.sherset.uz/downloads/tsd/latest.json</string>
+
+    <!--
+      Skaner BROADCAST aksiyalari — vergul bilan, ILOVA HAMMASINI BIRDAN
+      tinglaydi (`ScannerBridge.kt` izohi). Aniq nomini bilish SHART EMAS:
+      terminal sozlamasida broadcast yoqilgan bo'lsa, qaysi biri kelsa o'sha
+      ishlaydi, qolganlari jim turadi.
+
+      Ro'yxat: iData / Urovo / Chainway / Newland / Zebra DataWedge / Honeywell.
+      Yangi terminal kelsa — faqat shu qatorga qo'shiladi, kod tegilmaydi.
+    -->
+    <string name="scanner_broadcast_actions">android.intent.action.SCANRESULT,android.intent.ACTION_DECODE_DATA,com.android.server.scannerservice.broadcast,com.android.server.scannerservice.broadcast_data,nlscan.action.SCANNER_RESULT,com.symbol.datawedge.api.RESULT_ACTION,scanner.rcv.message,com.honeywell.decode.intent.action.EDIT_DATA,device.scanner.RESULT,com.idata.scan.RESULT</string>
 </resources>

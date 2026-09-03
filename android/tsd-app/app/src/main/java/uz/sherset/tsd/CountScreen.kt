@@ -1,6 +1,18 @@
 package uz.sherset.tsd
 
-import android.widget.LinearLayout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -20,92 +32,273 @@ import org.json.JSONObject
  * yagona tranzaksiyada emas), ya'ni idempotentlik kaliti u yerda ishlamaydi.
  * Aloqa yo'q bo'lsa ekran «aloqa yo'q, qayta urinib ko'ring» deydi va son
  * maydonda TURADI — jim yo'qotish yo'q (IS-5).
+ *
+ * 🔵 **TOVAR SHTRIXINI SKANERLASH (egasi, 2026-09-01).** Ilgari bu ekran
+ * FAQAT yacheyka yorlig'ini tanirdi va tovar shtrixi skanerlansa «Yacheyka
+ * topilmadi» chiqardi. Endi skan `/tsd/scan` bilan TASNIFLANADI:
+ *   · yacheyka → tarkibi ochiladi (yoki keyingi yacheykaga o'tiladi);
+ *   · tovar    → yuqorida «sanalayotgan tovar» kartasi ochiladi.
+ * Nega kerak: yacheykada o'nlab qator bo'lishi mumkin, 4" ekranda kerakligini
+ * qidirish sanashning o'zidan uzoq davom etardi.
+ *
+ * 🔴 **Yacheykada YO'Q tovar ham sanaladi va bu ATAYLAB.** Server buni
+ * qo'llaydi (`setCellStock` har qanday tovarni oladi, `oldQty = 0`), ya'ni
+ * javonda turgan lekin tizimda ko'rinmagan tovar sanalganda avto
+ * Оприходование yoziladi — aynan shuning uchun ekran buni OCHIQ ogohlantirish
+ * bilan ko'rsatadi («kirim bo'lib yoziladi»), jimgina qo'shib qo'ymaydi.
  */
 class CountScreen(private val shell: Shell) : Screen {
 
-    private var cell: JSONObject? = null
-    private var items: JSONArray = JSONArray()
+    private var cell by mutableStateOf<JSONObject?>(null)
+    private var items by mutableStateOf(JSONArray())
 
-    override fun title(ui: Ui): String = ui.str(R.string.count_title)
+    /** Skanerlangan (yoki ro'yxatdan bosilgan) tovar — yuqoridagi karta. */
+    private var picked by mutableStateOf<JSONObject?>(null)
+    private var pickedQty by mutableStateOf("")
 
-    override fun render(body: LinearLayout) {
-        val ui = shell.ui
+    /** Kiritilgan sonlar: `assortmentId → son`. Saqlashdan keyin ham TURADI. */
+    private val counts = mutableStateMapOf<String, String>()
+
+    override fun title(shell: Shell): String = shell.str(R.string.count_title)
+
+    @Composable
+    override fun Content() {
         val c = cell
         if (c == null) {
-            body.addView(ui.label(ui.str(R.string.count_step_cell), big = true))
-            body.addView(ui.button(R.string.back) { shell.go(TaskListScreen(shell)) })
+            SectionCard {
+                Text(
+                    stringResource(R.string.count_step_cell),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+                shell.back()
+            }
             return
         }
 
-        body.addView(
-            ui.label(
-                c.optString("name") + " · " + c.optString("storeName"),
-                big = true,
-            ),
-        )
+        SectionCard(tint = Palette.PrimaryContainer, border = MaterialTheme.colorScheme.primary) {
+            CellBadge(c.optString("name"))
+            Spacer(Modifier.height(6.dp))
+            Text(c.optString("storeName"), color = Palette.TextMuted)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        val p = picked
+        if (p != null) {
+            PickedCard(c, p)
+            Spacer(Modifier.height(10.dp))
+        } else {
+            Text(
+                stringResource(R.string.count_scan_product_tip),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(10.dp))
+        }
+
         if (items.length() == 0) {
-            body.addView(ui.label(ui.str(R.string.count_empty)))
+            EmptyState(stringResource(R.string.count_empty))
         }
         for (i in 0 until items.length()) {
             val it = items.optJSONObject(i) ?: continue
-            // NARX YO'Q: bu javob narx maydonini umuman qaytarmaydi.
-            body.addView(ui.label(it.optString("name"), big = true))
-            val qty = ui.input(R.string.count_qty_hint, numeric = true)
-            qty.setText(it.optString("qty"))
-            body.addView(qty)
-            body.addView(
-                ui.button(R.string.count_save) {
-                    save(c, it.optString("assortmentId"), qty.text.toString().trim())
-                },
-            )
+            val assortmentId = it.optString("assortmentId")
+            // Yuqorida ochilgan tovar ro'yxatda IKKINCHI marta chizilmaydi —
+            // ikki maydon bir tovarga ikki xil son berishga yo'l ochardi.
+            if (assortmentId == p?.optString("id")) continue
+            SectionCard(modifier = Modifier.clickable { pick(it.optString("name"), assortmentId) }) {
+                // NARX YO'Q: bu javob narx maydonini umuman qaytarmaydi.
+                Text(it.optString("name"), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                InfoRow(
+                    label = stringResource(R.string.count_system_qty),
+                    value = it.optString("qty"),
+                )
+                Spacer(Modifier.height(10.dp))
+                NumberField(
+                    value = counts[assortmentId] ?: it.optString("qty"),
+                    onChange = { v -> counts[assortmentId] = v },
+                    label = stringResource(R.string.count_qty_hint),
+                )
+                Spacer(Modifier.height(10.dp))
+                PrimaryButton(text = stringResource(R.string.count_save)) {
+                    save(c, assortmentId, (counts[assortmentId] ?: it.optString("qty")).trim())
+                }
+            }
+            Spacer(Modifier.height(10.dp))
         }
-        body.addView(ui.button(R.string.restart) { reset() })
+
+        SecondaryButton(text = stringResource(R.string.restart), color = Palette.TextMuted) {
+            reset()
+        }
+    }
+
+    /** Skanerlangan tovar kartasi — ekranning tepasida, maydoni tayyor. */
+    @Composable
+    private fun PickedCard(c: JSONObject, p: JSONObject) {
+        val assortmentId = p.optString("id")
+        val inCell = systemQty(assortmentId)
+
+        SectionCard(
+            tint = if (inCell == null) Palette.WarningContainer else Palette.SuccessContainer,
+            border = if (inCell == null) Palette.Warning else Palette.Success,
+        ) {
+            Text(
+                stringResource(R.string.count_scanned),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(p.optString("name"), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            if (inCell != null) {
+                InfoRow(label = stringResource(R.string.count_system_qty), value = inCell)
+            } else {
+                // 🔴 Yangi qator — sanash KIRIM hujjatini yozadi. Omborchi buni
+                // oldindan bilishi kerak (jim qo'shish IS-5 klassi bo'lardi).
+                Text(
+                    stringResource(R.string.count_not_in_cell),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Palette.Warning,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            NumberField(
+                value = pickedQty,
+                onChange = { pickedQty = it },
+                label = stringResource(R.string.count_qty_hint),
+            )
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton(
+                text = stringResource(R.string.count_save),
+                color = if (inCell == null) Palette.Warning else Palette.Success,
+                enabled = pickedQty.trim().isNotEmpty(),
+            ) { save(c, assortmentId, pickedQty.trim()) }
+            Spacer(Modifier.height(8.dp))
+            SecondaryButton(
+                text = stringResource(R.string.count_cancel),
+                color = Palette.TextMuted,
+            ) {
+                picked = null
+                pickedQty = ""
+            }
+        }
+    }
+
+    /** Shu yacheykadagi tizim qoldig'i, tovar ro'yxatda bo'lmasa `null`. */
+    private fun systemQty(assortmentId: String): String? {
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            if (it.optString("assortmentId") == assortmentId) return it.optString("qty")
+        }
+        return null
+    }
+
+    private fun pick(name: String, assortmentId: String) {
+        picked = JSONObject().put("id", assortmentId).put("name", name)
+        // Ro'yxatdagi tovarda sukut — tizim qoldig'i (omborchi ko'pincha uni
+        // tasdiqlaydi); yacheykada yo'q tovarda maydon BO'SH qoladi, chunki
+        // «0» taklif qilish sanashning ma'nosini yo'qotardi.
+        pickedQty = systemQty(assortmentId) ?: ""
     }
 
     private fun reset() {
         cell = null
         items = JSONArray()
-        shell.go(CountScreen(shell))
+        counts.clear()
+        picked = null
+        pickedQty = ""
     }
 
+    /**
+     * Skan bosqichga qarab talqin qilinadi (`PlaceScreen` naqshi): avval
+     * `/tsd/scan` kodni TASNIFLAYDI, keyin yacheyka yoki tovar yo'liga ketadi.
+     */
     override fun onScan(code: String): Boolean {
-        val ui = shell.ui
         shell.io {
-            val resp = shell.api.cellByBarcode(code)
-            val cells = resp.optJSONArray("cells") ?: JSONArray()
-            shell.main {
-                when (cells.length()) {
-                    0 -> ui.toast(R.string.cell_not_found)
-                    1 -> {
-                        cell = cells.getJSONObject(0)
-                        items = resp.optJSONArray("stock") ?: JSONArray()
-                        shell.go(this)
+            val hit = shell.api.scan(code)
+            when (hit.optString("kind")) {
+                "cell" -> openCell(code)
+                "product" -> {
+                    if (cell == null) {
+                        // Yacheykasiz sanoq ma'nosiz: son QAYSI yacheykaga
+                        // yozilishi noma'lum bo'lardi.
+                        shell.toast(R.string.count_need_cell_first)
+                    } else {
+                        val products = hit.optJSONArray("products") ?: JSONArray()
+                        shell.main {
+                            when (products.length()) {
+                                0 -> shell.toast(R.string.scan_none)
+                                1 -> {
+                                    val pr = products.getJSONObject(0)
+                                    pick(pr.optString("name"), pr.optString("id"))
+                                }
+                                // Multi-hit: TANLOVNI ODAM qiladi (G-reja
+                                // majburiy qoidasi) — shtrixlar unikal emas.
+                                else -> shell.go(
+                                    PickProductScreen(shell, products) { pr ->
+                                        pick(pr.optString("name"), pr.optString("id"))
+                                        shell.back()
+                                    },
+                                )
+                            }
+                        }
                     }
-                    // Ikki javonda bir xil yorliq — ilova TANLAMAYDI, aks holda
-                    // sanoq noto'g'ri yacheykaga yozilardi.
-                    else -> ui.toast(R.string.cell_ambiguous)
                 }
+                "piece" -> shell.toast(R.string.scan_piece)
+                else -> shell.toast(R.string.scan_none)
             }
         }
         return true
     }
 
+    /** Yacheyka yorlig'i — tarkibini ochadi (yoki keyingi yacheykaga o'tadi). */
+    private fun openCell(code: String) {
+        val resp = shell.api.cellByBarcode(code)
+        val cells = resp.optJSONArray("cells") ?: JSONArray()
+        shell.main {
+            when (cells.length()) {
+                0 -> shell.toast(R.string.cell_not_found)
+                1 -> {
+                    cell = cells.getJSONObject(0)
+                    items = resp.optJSONArray("stock") ?: JSONArray()
+                    counts.clear()
+                    picked = null
+                    pickedQty = ""
+                }
+                // Ikki javonda bir xil yorliq — ilova TANLAMAYDI, aks holda
+                // sanoq noto'g'ri yacheykaga yozilardi.
+                else -> shell.toast(R.string.cell_ambiguous)
+            }
+        }
+    }
+
     private fun save(c: JSONObject, assortmentId: String, qty: String) {
-        val ui = shell.ui
         if (qty.isEmpty()) {
-            ui.toast(R.string.count_qty_hint)
+            shell.toast(R.string.count_qty_hint)
             return
         }
         shell.io {
             try {
                 shell.api.setCellStock(c.optString("storeId"), c.optString("id"), assortmentId, qty)
-                shell.main { ui.toast(R.string.count_saved) }
-            } catch (e: ApiClient.ApiException) {
+                // Tarkib QAYTA O'QILADI: aks holda «Tizimda» ustuni eski sonni
+                // ko'rsatib turardi va yangi sanalgan tovar ro'yxatda umuman
+                // paydo bo'lmasdi.
+                val fresh = shell.api.cellStock(c.optString("storeId"), c.optString("id"))
                 shell.main {
-                    ui.toast(
-                        if (e.retriable) ui.str(R.string.count_offline) else (e.message ?: ""),
-                    )
+                    items = fresh.optJSONArray("items") ?: items
+                    counts.remove(assortmentId)
+                    if (picked?.optString("id") == assortmentId) {
+                        picked = null
+                        pickedQty = ""
+                    }
+                    shell.toast(R.string.count_saved)
                 }
+            } catch (e: ApiClient.ApiException) {
+                shell.toast(
+                    if (e.retriable) shell.str(R.string.count_offline) else (e.message ?: ""),
+                )
             }
         }
     }

@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+      Ilovani QURILMANING O'ZIDAN yangilash (`Updater.kt`). Terminal Play
+      Store'da emas — APK `/downloads/tsd/` kanalidan keladi, ya'ni yangilanish
+      uchun ilova o'rnatuvchini ocha olishi kerak.
+      ⚠️ Bu ruxsatning O'ZI yetmaydi: Android 8+ da foydalanuvchi «noma'lum
+      manbalardan o'rnatish»ni SHU ilovaga alohida yoqadi. `Updater.install`
+      buni tekshiradi va kerak bo'lsa aynan o'sha sozlama ekranini ochadi.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!--
       🔴 KAMERA RUXSATI ATAYLAB YO'Q. TSD — apparat skanerli terminal:
       kod klaviatura-wedge yoki DataWedge broadcast bilan keladi. Kamera
       ruxsati so'ralsa u ombor xodimining qurilmasida ortiqcha huquq bo'lardi.
@@ -31,6 +41,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Yuklab olingan APK'ni o'rnatuvchiga UZATISH uchun. `file://` URI
+          Android 7 dan boshlab `FileUriExposedException` beradi, shuning uchun
+          fayl `content://` orqali beriladi (`Updater.install`).
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

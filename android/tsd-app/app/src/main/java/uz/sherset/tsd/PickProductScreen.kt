@@ -1,6 +1,14 @@
 package uz.sherset.tsd
 
-import android.widget.LinearLayout
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -21,26 +29,44 @@ class PickProductScreen(
     private val onPicked: (JSONObject) -> Unit,
 ) : Screen {
 
-    override fun title(ui: Ui): String = ui.str(R.string.scan_multi)
+    override fun title(shell: Shell): String = shell.str(R.string.scan_multi)
 
-    override fun render(body: LinearLayout) {
-        val ui = shell.ui
-        body.addView(ui.label(ui.str(R.string.scan_multi), big = true))
+    @Composable
+    override fun Content() {
+        SectionCard(tint = Palette.WarningContainer, border = Palette.Warning) {
+            Text(
+                stringResource(R.string.scan_multi),
+                style = MaterialTheme.typography.titleMedium,
+                color = Palette.Warning,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+
         for (i in 0 until products.length()) {
             val p = products.optJSONObject(i) ?: continue
-            body.addView(ui.button(label(ui, p)) { onPicked(p) })
+            SectionCard(modifier = Modifier.clickable { onPicked(p) }) {
+                Text(p.optString("name"), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                InfoRow(
+                    label = whereText(p),
+                    value = p.optString("totalQty"),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
         }
-        body.addView(ui.button(R.string.back) { shell.back() })
+
+        SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+            shell.back()
+        }
     }
 
-    /** «Nom · jami qoldiq · birinchi yacheyka» — NARX YO'Q. */
-    private fun label(ui: Ui, p: JSONObject): String {
+    /** Birinchi yacheyka, bo'lmasa uy-yacheykasi tavsiyasi. */
+    @Composable
+    private fun whereText(p: JSONObject): String {
         val cells = p.optJSONArray("cells") ?: JSONArray()
-        val where = if (cells.length() > 0) {
-            cells.optJSONObject(0)?.optString("cellName").orEmpty()
-        } else {
-            p.optString("homeCell").ifEmpty { ui.str(R.string.no_cell) }
+        if (cells.length() > 0) {
+            return cells.optJSONObject(0)?.optString("cellName").orEmpty()
         }
-        return p.optString("name") + "\n" + p.optString("totalQty") + " · " + where
+        return p.optString("homeCell").ifEmpty { stringResource(R.string.no_cell) }
     }
 }

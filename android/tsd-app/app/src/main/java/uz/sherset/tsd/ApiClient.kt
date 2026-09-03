@@ -1,11 +1,15 @@
 package uz.sherset.tsd
 
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,17 +29,57 @@ import java.util.concurrent.TimeUnit
  */
 class ApiClient(private val baseUrl: String) {
 
+    /**
+     * 🔴 COOKIE IDORASI — 2026-09-02 da jonli terminalda topilgan nuqson.
+     *
+     * Access-token 15 daqiqada tugaydi va shundan keyin HAR BIR so'rov 401
+     * berardi: terminal «skanerlab bo'lmayapti» holatiga tushardi va yagona
+     * chora ilovani qayta ochish edi. Ikki sabab ustma-ust edi:
+     *   1. `refresh` HECH QACHON chaqirilmasdi (G5 da saqlanardi, ishlatilmasdi);
+     *   2. chaqirilganda ham ishlamasdi — server refresh-tokenni FAQAT
+     *      cookie'dan o'qiydi (`auth.controller.ts: req.cookies[ms_rt]`),
+     *      klient esa uni javob TANASIDA yuborardi, OkHttp'da esa cookie
+     *      idorasi umuman yo'q edi ⇒ cookie login'dan keyin tashlanardi.
+     *
+     * Shuning uchun endi oddiy xotira-idora bor: login qo'ygan `ms_rt`
+     * saqlanadi va `/auth/refresh` ga o'zi qaytadi. Rotatsiyada server yangi
+     * cookie beradi va u shu yerda ustiga yoziladi — ya'ni zanjir uzilmaydi.
+     * DISKKA yozilmaydi: ilova qayta ochilganda PIN baribir so'raladi.
+     */
+    private val cookieStore = ConcurrentHashMap<String, MutableMap<String, Cookie>>()
+
+    private val jar = object : CookieJar {
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            val host = cookieStore.getOrPut(url.host) { ConcurrentHashMap() }
+            for (c in cookies) host[c.name] = c
+        }
+
+        override fun loadForRequest(url: HttpUrl): List<Cookie> {
+            val host = cookieStore[url.host] ?: return emptyList()
+            val now = System.currentTimeMillis()
+            return host.values.filter { it.expiresAt > now && it.matches(url) }
+        }
+    }
+
     private val http = OkHttpClient.Builder()
         // Ombor Wi-Fi'si zaif — uzun timeout qayta urinishdan yaxshiroq
         // (qayta urinish ikki marta tasdiqlashga olib kelishi mumkin).
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .cookieJar(jar)
         .build()
 
     private val json = "application/json; charset=utf-8".toMediaType()
 
     @Volatile
     var accessToken: String? = null
+
+    /**
+     * Sessiyani tiklab bo'lmadi (refresh ham 401) — ilova PIN ekraniga
+     * qaytadi. Xom «HTTP 401» omborchiga hech nima demaydi.
+     */
+    @Volatile
+    var onSessionLost: (() -> Unit)? = null
 
     class ApiException(val code: Int, message: String) : Exception(message) {
         /**
@@ -65,13 +109,23 @@ class ApiClient(private val baseUrl: String) {
         return resp
     }
 
-    /** Sessiyani uzaytirish. Terminal bekor qilingan bo'lsa 401 → qayta PIN. */
-    fun refresh(refreshToken: String): JSONObject {
-        val body = JSONObject().put("refreshToken", refreshToken)
-        val resp = post("/auth/refresh", body, auth = false)
+    /**
+     * Sessiyani uzaytirish. Refresh-token TANADA emas, COOKIE'da ketadi —
+     * server uni faqat shu yerdan o'qiydi (`auth.controller.ts`).
+     * Terminal bekor qilingan bo'lsa (`revokedAt`) server 401 beradi va
+     * sessiya o'ladi — bu ATAYLAB: yo'qolgan terminal o'zini tiklay olmasin.
+     */
+    @Synchronized
+    fun renewSession(): Boolean {
+        // `allowRefresh = false` — refresh'ning o'zi 401 bersa yana refresh
+        // chaqirilib cheksiz halqa hosil bo'lardi.
+        val resp = runCatching {
+            exec("POST", "/auth/refresh", "{}", auth = false, allowRefresh = false)
+        }.getOrNull() ?: return false
         val t = resp.optString("accessToken")
-        if (t.isNotEmpty()) accessToken = t
-        return resp
+        if (t.isEmpty()) return false
+        accessToken = t
+        return true
     }
 
     // ── Topshiriqlar ────────────────────────────────────────────────────────
@@ -241,28 +295,56 @@ class ApiClient(private val baseUrl: String) {
 
     private fun enc(s: String): String = java.net.URLEncoder.encode(s, "UTF-8")
 
-    private fun get(path: String): JSONObject =
-        exec(Request.Builder().url(baseUrl.trimEnd('/') + path).get(), auth = true)
+    private fun get(path: String): JSONObject = exec("GET", path, null, auth = true)
 
     private fun post(path: String, body: JSONObject, auth: Boolean = true): JSONObject =
-        exec(
-            Request.Builder().url(baseUrl.trimEnd('/') + path)
-                .post(body.toString().toRequestBody(json)),
-            auth,
-        )
+        exec("POST", path, body.toString(), auth)
 
     private fun put(path: String, body: JSONObject): JSONObject =
-        exec(
-            Request.Builder().url(baseUrl.trimEnd('/') + path)
-                .put(body.toString().toRequestBody(json)),
-            auth = true,
-        )
+        exec("PUT", path, body.toString(), auth = true)
 
-    private fun exec(builder: Request.Builder, auth: Boolean): JSONObject {
-        if (auth) accessToken?.let { builder.header("Authorization", "Bearer " + it) }
+    /**
+     * So'rovni bajaradi va 401 da sessiyani BIR MARTA tiklab qayta yuboradi.
+     *
+     * So'rov `Builder` emas, bo'laklari bilan uzatiladi — aynan shuning uchun
+     * uni qayta qurib takrorlash mumkin (bir marta `build()` qilingan so'rovni
+     * ikkinchi marta yuborib bo'lmaydi).
+     *
+     * 🔴 Takrorlash XAVFSIZ: qoldiqni siljitadigan har amal `clientOpId` bilan
+     * ketadi va server uni tranzaksiya ichida da'vo qiladi
+     * (`shared/client-op.ts`) — ya'ni birinchi urinish serverga yetib borgan
+     * bo'lsa ham ikkinchisi ishni TAKRORLAMAYDI.
+     */
+    private fun exec(
+        method: String,
+        path: String,
+        body: String?,
+        auth: Boolean,
+        allowRefresh: Boolean = true,
+    ): JSONObject {
+        val builder = Request.Builder().url(baseUrl.trimEnd('/') + path)
+        when (method) {
+            "GET" -> builder.get()
+            "POST" -> builder.post((body ?: "{}").toRequestBody(json))
+            "PUT" -> builder.put((body ?: "{}").toRequestBody(json))
+            else -> throw ApiException(400, "Noma'lum metod: $method")
+        }
+        if (auth) accessToken?.let { builder.header("Authorization", "Bearer $it") }
+
         try {
             http.newCall(builder.build()).execute().use { r ->
                 val text = r.body?.string().orEmpty()
+                if (r.code == 401 && auth && allowRefresh) {
+                    // Access-token muddati tugagan bo'lishi mumkin. Tiklab
+                    // ko'ramiz; muvaffaqiyatli bo'lsa so'rov QAYTA yuboriladi
+                    // va omborchi hech narsa sezmaydi.
+                    return if (renewSession()) {
+                        exec(method, path, body, auth, allowRefresh = false)
+                    } else {
+                        onSessionLost?.invoke()
+                        throw ApiException(401, "Sessiya tugadi — PIN bilan qayta kiring")
+                    }
+                }
                 if (!r.isSuccessful) throw ApiException(r.code, "HTTP " + r.code + ": " + text)
                 return if (text.isBlank()) JSONObject() else JSONObject(text)
             }

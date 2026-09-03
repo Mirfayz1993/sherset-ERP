@@ -1,6 +1,23 @@
 package uz.sherset.tsd
 
-import android.widget.LinearLayout
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -24,22 +41,10 @@ class TaskDetailScreen(
     private val taskId: String,
 ) : Screen {
 
-    private var task: JSONObject? = null
+    private var task by mutableStateOf<JSONObject?>(null)
+    private var loading by mutableStateOf(true)
 
-    override fun title(ui: Ui): String = ui.str(R.string.task_title)
-
-    override fun render(body: LinearLayout) {
-        val ui = shell.ui
-        body.addView(ui.button(R.string.back) { shell.go(TaskListScreen(shell)) })
-        shell.setStatus(ui.str(R.string.loading))
-        shell.io {
-            val t = shell.api.task(taskId)
-            shell.main {
-                task = t
-                renderTask(body, t)
-            }
-        }
-    }
+    override fun title(shell: Shell): String = shell.str(R.string.task_title)
 
     /**
      * Skan qatorni tasdiqlaydi (`confirm-scan`) — omborchi tovarni javondan
@@ -47,76 +52,142 @@ class TaskDetailScreen(
      * bo'lsa ilova O'ZI birortasini tanlamaydi.
      */
     override fun onScan(code: String): Boolean {
-        val ui = shell.ui
+        shell.toast(R.string.scan_working)
         shell.io {
             val hit = shell.api.scan(code)
             shell.main { onScanResult(hit) }
         }
-        ui.toast(R.string.scan_working)
         return true
     }
 
     private fun onScanResult(hit: JSONObject) {
-        val ui = shell.ui
         val products = hit.optJSONArray("products") ?: JSONArray()
         when {
-            hit.optString("kind") == "piece" -> ui.toast(R.string.scan_piece)
-            products.length() == 0 -> ui.toast(R.string.scan_none)
+            hit.optString("kind") == "piece" -> shell.toast(R.string.scan_piece)
+            products.length() == 0 -> shell.toast(R.string.scan_none)
             products.length() == 1 -> confirmByProduct(products.getJSONObject(0).optString("id"))
             else -> {
                 // Multi-hit: TANLOVNI ODAM qiladi (G-reja majburiy qoidasi).
-                shell.go(PickProductScreen(shell, products) { p -> confirmByProduct(p.optString("id")) })
+                shell.go(
+                    PickProductScreen(shell, products) { p ->
+                        shell.back()
+                        confirmByProduct(p.optString("id"))
+                    },
+                )
             }
         }
     }
 
-    private fun confirmByProduct(productId: String) {
-        val ui = shell.ui
-        val opId = UUID.randomUUID().toString()
-        shell.io {
-            try {
-                shell.api.confirmScan(taskId, productId, opId)
-                shell.main {
-                    ui.toast(R.string.line_confirmed)
-                    shell.go(TaskDetailScreen(shell, taskId))
-                }
-            } catch (e: ApiClient.ApiException) {
-                if (e.retriable) {
-                    shell.enqueue(
-                        "POST",
-                        "/restock-tasks/" + taskId + "/confirm-scan",
-                        JSONObject().put("productId", productId).put("clientOpId", opId),
-                        ui.str(R.string.op_confirm_scan),
-                    )
-                } else {
-                    shell.main { ui.toast(e.message ?: "") }
-                }
-            }
-        }
-    }
+    @Composable
+    override fun Content() {
+        LaunchedEffect(Unit) { load() }
 
-    private fun renderTask(body: LinearLayout, t: JSONObject) {
-        val ui = shell.ui
-        shell.setStatus(t.optString("sourceName").ifEmpty { ui.str(R.string.task_title) })
+        val t = task
+        if (loading || t == null) {
+            EmptyState(stringResource(R.string.loading))
+            return
+        }
 
         val lines = t.optJSONArray("lines") ?: JSONArray()
         var open = 0
         for (i in 0 until lines.length()) {
             val l = lines.optJSONObject(i) ?: continue
-            if (isClosed(l)) continue
-            open++
+            if (!isClosed(l)) open++
         }
+        val total = lines.length()
+        val done = total - open
+
+        SectionCard {
+            Text(
+                t.optString("sourceName").ifEmpty { stringResource(R.string.task_title) },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { if (total == 0) 0f else done.toFloat() / total.toFloat() },
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                color = if (open == 0) Palette.Success else MaterialTheme.colorScheme.primary,
+                trackColor = Palette.SurfaceMuted,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.task_progress, done, total),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
 
         if (open == 0) {
             // Hamma qator yopilgan — chek endi KONTROLDA (G2 zanjiri).
-            body.addView(ui.label(ui.str(R.string.task_done_control), big = true))
+            SectionCard(tint = Palette.SuccessContainer, border = Palette.Success) {
+                Text(
+                    stringResource(R.string.task_done_control),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Palette.Success,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
         }
 
         for (i in 0 until lines.length()) {
             val l = lines.optJSONObject(i) ?: continue
-            body.addView(ui.label(lineLabel(ui, l), big = true))
-            if (isClosed(l)) continue
-            val lineId = l.optString("id")
+            LineCard(l)
+            Spacer(Modifier.height(10.dp))
+        }
+
+        SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
+            shell.back()
+        }
+    }
+
+    @Composable
+    private fun LineCard(l: JSONObject) {
+        val closed = isClosed(l)
+        val confirmed = !l.isNull("confirmedAt")
+        val shortageQty = if (l.isNull("shortageQty")) null else l.optString("shortageQty")
+
+        SectionCard(
+            tint = when {
+                confirmed -> Palette.SuccessContainer
+                shortageQty != null -> Palette.WarningContainer
+                else -> Palette.Surface
+            },
+            border = when {
+                confirmed -> Palette.Success
+                shortageQty != null -> Palette.Warning
+                else -> Palette.Border
+            },
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CellBadge(l.optString("binLocation").ifEmpty { stringResource(R.string.no_cell) })
+                when {
+                    confirmed -> Pill("✔", Palette.SuccessContainer, Palette.Success)
+                    shortageQty != null ->
+                        Pill("⚠ $shortageQty", Palette.WarningContainer, Palette.Warning)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            // NARX YO'Q: server bu javobda narx maydonini umuman bermaydi.
+            Text(
+                l.optString("productName"),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.line_qty, l.optString("quantity")),
+                style = MaterialTheme.typography.bodyLarge,
+                color = Palette.TextMuted,
+            )
+
+            if (closed) return@SectionCard
+
+            Spacer(Modifier.height(12.dp))
             // K4 — bo'linadigan tovar: qator KESIMSIZ yopilmaydi (server ham
             // rad etadi). Tugma FAQAT reyestrda manba bor bo'lganda chiqadi:
             // reyestr bo'sh bo'lsa qator odatdagidek tasdiqlanadi (K3 ning
@@ -124,32 +195,81 @@ class TaskDetailScreen(
             if (l.optBoolean("pieceTracked") &&
                 (l.optJSONArray("pieceOptions")?.length() ?: 0) > 0
             ) {
-                body.addView(ui.button(R.string.cut_button) { shell.go(CutScreen(shell, taskId, l)) })
+                PrimaryButton(
+                    text = stringResource(R.string.cut_button),
+                    color = Palette.CellText,
+                ) { shell.go(CutScreen(shell, taskId, l)) }
+                Spacer(Modifier.height(8.dp))
             }
-            body.addView(ui.button(R.string.line_confirm) { confirmLine(lineId) })
-            body.addView(ui.button(R.string.line_shortage) {
-                shell.go(ShortageScreen(shell, taskId, l))
-            })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PrimaryButton(
+                    text = stringResource(R.string.line_confirm),
+                    modifier = Modifier.weight(1f),
+                    color = Palette.Success,
+                ) { confirmLine(l.optString("id")) }
+                SecondaryButton(
+                    text = stringResource(R.string.line_shortage),
+                    modifier = Modifier.weight(1f),
+                    color = Palette.Warning,
+                ) { shell.go(ShortageScreen(shell, taskId, l)) }
+            }
+        }
+    }
+
+    private fun load() {
+        loading = true
+        shell.io {
+            val t = shell.api.task(taskId)
+            shell.main {
+                task = t
+                loading = false
+            }
+        }
+    }
+
+    private fun confirmByProduct(productId: String) {
+        val opId = UUID.randomUUID().toString()
+        shell.io {
+            try {
+                shell.api.confirmScan(taskId, productId, opId)
+                shell.main {
+                    shell.toast(R.string.line_confirmed)
+                    load()
+                }
+            } catch (e: ApiClient.ApiException) {
+                if (e.retriable) {
+                    shell.enqueue(
+                        "POST",
+                        "/restock-tasks/$taskId/confirm-scan",
+                        JSONObject().put("productId", productId).put("clientOpId", opId),
+                        shell.str(R.string.op_confirm_scan),
+                    )
+                } else {
+                    shell.toast(e.message ?: "")
+                }
+            }
         }
     }
 
     private fun confirmLine(lineId: String) {
-        val ui = shell.ui
         val opId = UUID.randomUUID().toString()
-        val path = "/restock-tasks/" + taskId + "/lines/" + lineId + "/confirm"
+        val path = "/restock-tasks/$taskId/lines/$lineId/confirm"
         val payload = JSONObject().put("clientOpId", opId)
         shell.io {
             try {
                 shell.api.send("POST", path, payload)
                 shell.main {
-                    ui.toast(R.string.line_confirmed)
-                    shell.go(TaskDetailScreen(shell, taskId))
+                    shell.toast(R.string.line_confirmed)
+                    load()
                 }
             } catch (e: ApiClient.ApiException) {
                 if (e.retriable) {
-                    shell.enqueue("POST", path, payload, ui.str(R.string.op_confirm_line))
+                    shell.enqueue("POST", path, payload, shell.str(R.string.op_confirm_line))
                 } else {
-                    shell.main { ui.toast(e.message ?: "") }
+                    shell.toast(e.message ?: "")
                 }
             }
         }
@@ -157,15 +277,4 @@ class TaskDetailScreen(
 
     private fun isClosed(l: JSONObject): Boolean =
         !l.isNull("confirmedAt") || !l.isNull("shortageQty")
-
-    /** «01-02-03-05 · Kabel 2×2.5 · 10 dona» (+ holat belgisi). NARX YO'Q. */
-    private fun lineLabel(ui: Ui, l: JSONObject): String {
-        val bin = l.optString("binLocation").ifEmpty { ui.str(R.string.no_cell) }
-        val mark = when {
-            !l.isNull("confirmedAt") -> "✔ "
-            !l.isNull("shortageQty") -> "⚠ " + l.optString("shortageQty") + " "
-            else -> ""
-        }
-        return mark + bin + " · " + l.optString("productName") + " · " + l.optString("quantity")
-    }
 }
