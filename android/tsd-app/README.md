@@ -101,6 +101,31 @@ Ikki rejim BIRGA yashaydi — ikkalasi ham yoqilgan bo'lishi zarar qilmaydi:
 yo'qoladi), broadcast esa fokusdan mustaqil — shuning uchun maqsad broadcast,
 wedge esa zaxira.
 
+### Qo'lda kiritish va manba ajratish (T2)
+
+Skan maydoniga kod **qo'lda** ham yoziladi (yorliq yirtilgan, skaner o'qimadi).
+Buning yo'lida ikkita bir-biriga zid talab bor va `ScanBar.kt` ularni belgilar
+orasidagi **o'rtacha intervalni** o'lchab ajratadi:
+
+| O'rtacha interval | Manba | Xulq |
+|---|---|---|
+| `< scan_human_gap_ms` (50 ms) | **skaner** | 350 ms jimlikdan keyin kod **o'zi** yuboriladi — suffikssiz skaner zaxirasi (U5), **o'chirilmagan** |
+| `≥ scan_human_gap_ms` | **odam** | avto-yuborish o'chadi; maydonning o'ng tomonida **⏎** tugmasi chiqadi, kod faqat ⏎ / Enter bilan yuboriladi |
+
+- Chegara — `res/values/config.xml` dagi **`scan_human_gap_ms`** (kod emas,
+  resurs: qurilma almashsa faqat shu raqam o'zgaradi).
+- O'lchov `onValueChange` da olinadi, `onPreviewKeyEvent` da EMAS: **ekran
+  klaviaturasi bitta ham `KeyEvent` yubormaydi**, ya'ni tugma hodisalariga
+  qarab o'lchansa omborchi «skaner» deb tanilardi.
+- Qaror **o'rtacha** bo'yicha (eng katta interval bo'yicha emas) — skan
+  o'rtasidagi bitta GC pauzasi skanerni «odam» ga aylantirib qo'ymasin.
+- Backspace bosilsa manba darhol **odam** bo'ladi (skaner tahrir qilmaydi).
+- Sozlash: **Diagnostika** ekranidagi «Oxirgi kiritish» qatori oxirgi kodning
+  manbasini va **o'lchangan o'rtacha intervalini** ko'rsatadi. Skaner «ODAM»
+  deb tanilsa — chegarani o'sha raqamdan yuqori qiling. Broadcast rejimi bu
+  shoxdan **mustaqil**: `ScannerBridge` fokusdan ham, tezlikdan ham qat'i
+  nazar ishlayveradi.
+
 ## Yangilanish (qurilmadan) — 0.3.0
 
 Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
@@ -209,7 +234,15 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
    «Qoldiqda 0 · biriktirilgan 1» ko'rinsin → qatorni bosing → yuqorida
    sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» kartasi ochilsin →
    son kiriting → saqlang → qator endi qoldiq guruhida ko'rinsin.
-9. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+9. **Qo'lda kiritish (T2):** Sanash ekranida yacheyka kodini (`02-01-01-04`)
+   klaviaturadan **sekin** yozing → 3-belgidan keyin HECH NIMA yuborilmasin,
+   o'ng tomonda **⏎** chiqsin → ⏎ ni bosing → yacheyka TO'LIQ kod bo'yicha
+   ochilsin. So'ng o'sha yacheyka yorlig'ini **skanerlang** (suffiks Enter
+   YO'Q rejimida ham) → kod avvalgidek o'zi yuborilsin. Diagnostika ekranida
+   ikkala urinish ham «ODAM …» / «SKANER …» bo'lib ko'rinsin; skaner «ODAM»
+   deb tanilsa `config.xml` dagi `scan_human_gap_ms` ni ko'rsatilgan
+   o'rtachadan yuqori qo'ying.
+10. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
 
 ## Qo'lda smoke (K4 qabul mezoni — BO'LINADIGAN TOVAR KESIMI)
 

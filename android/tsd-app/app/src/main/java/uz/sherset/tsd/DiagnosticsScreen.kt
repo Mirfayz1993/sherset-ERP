@@ -40,6 +40,31 @@ class DiagnosticsScreen(private val shell: Shell) : Screen {
         }
         Spacer(Modifier.height(10.dp))
 
+        // T2 — manba ajratish natijasi. Qurilma USB'siz bo'lgani uchun
+        // `scan_human_gap_ms` chegarasini FAQAT shu qatorga qarab sozlash
+        // mumkin: skaner «ODAM» deb tanilsa, uning haqiqiy o'rtacha
+        // intervali shu yerda raqam bilan turadi.
+        SectionCard {
+            Text(
+                stringResource(R.string.diag_input),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                Diagnostics.lastInput ?: stringResource(R.string.diag_input_none),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.diag_input_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = Palette.TextMuted,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+
         SectionCard(tint = Palette.SurfaceMuted) {
             Text(
                 stringResource(R.string.diag_listening),

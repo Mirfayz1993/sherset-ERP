@@ -2,7 +2,10 @@ package uz.sherset.tsd
 
 import android.content.Intent
 import android.view.KeyEvent
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -21,7 +24,9 @@ import java.util.Locale
  * signalni yozadi —
  *   · `KEY`   — klaviatura-wedge rejimi (tugma hodisalari);
  *   · `BCAST` — broadcast rejimi (aksiya + intent ichidagi HAMMA maydon);
- *   · `CLIP`  — buferga yozadigan rejim (qo'lda tekshiriladi).
+ *   · `CLIP`  — buferga yozadigan rejim (qo'lda tekshiriladi);
+ *   · `IN`    — `ScanBar` kodni yuborganda: manba SKANER deb topildimi
+ *               yoki ODAM deb, o'lchangan o'rtacha interval bilan (T2).
  * Uchalasidan biri ham chiqmasa — skaner umuman ilovaga yubormayapti va
  * javob qurilma sozlamalarida.
  *
@@ -31,6 +36,17 @@ object Diagnostics {
 
     /** Compose to'g'ridan-to'g'ri kuzatadi. */
     val events = mutableStateListOf<String>()
+
+    /**
+     * Oxirgi kiritish `ScanBar` da SKANER deb topildimi yoki ODAM deb —
+     * o'lchangan o'rtacha interval bilan (T2). `null` = hali kiritilmagan.
+     *
+     * Bu qator jonlida chegarani (`scan_human_gap_ms`) USB'siz sozlash uchun:
+     * skaner «ODAM» deb tanilsa, bu yerda uning HAQIQIY o'rtacha intervali
+     * ko'rinadi va chegara `config.xml` da o'sha raqamdan yuqori qo'yiladi.
+     */
+    var lastInput by mutableStateOf<String?>(null)
+        private set
 
     private const val MAX = 50
     private val clock = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
@@ -42,7 +58,24 @@ object Diagnostics {
     }
 
     @Synchronized
-    fun clear() = events.clear()
+    fun clear() {
+        events.clear()
+        lastInput = null
+    }
+
+    /**
+     * `ScanBar` kodni yuborganda chaqiriladi. 🔴 Kodning O'ZI yozilmaydi —
+     * faqat manba, uzunlik va o'lchov (§2, qoida 11: maxfiy ma'lumot
+     * jurnalga tushmasin; yacheyka kodi maxfiy emas, lekin bu jurnalning
+     * vazifasi kodni emas, MANBANI ko'rsatish).
+     */
+    @Synchronized
+    fun input(human: Boolean, length: Int, avgGapMs: Long) {
+        val kind = if (human) "ODAM" else "SKANER"
+        val gap = if (avgGapMs < 0) "—" else "$avgGapMs ms"
+        lastInput = "$kind · $length belgi · o'rtacha $gap"
+        log("IN $kind len=$length avg=$gap")
+    }
 
     /**
      * Tugma hodisasi. Wedge skaner kodni AYNAN shu yo'l bilan «yozadi»,

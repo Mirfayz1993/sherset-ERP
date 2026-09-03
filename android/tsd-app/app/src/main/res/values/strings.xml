@@ -28,6 +28,9 @@
     <string name="tasks_refresh">Yangilash</string>
 
     <string name="scan_hint">Shtrix yoki yacheyka kodi</string>
+    <!-- T2: qo'lda yozilayotgani aniqlanganda maydonning o'ng tomonida
+         chiqadigan ⏎ tugmasining ekran o'quvchisi uchun nomi. -->
+    <string name="scan_submit">Yuborish</string>
     <string name="scan_multi">Bir nechta tovar topildi — birini tanlang</string>
     <string name="scan_none">Topilmadi</string>
     <!-- K4 gacha bu «hozircha qo'llab-quvvatlanmaydi» edi; endi bo'lak
@@ -117,6 +120,11 @@
     <string name="diag_clipboard">Buferni o\'qish</string>
     <string name="diag_clear">Tozalash</string>
     <string name="diag_empty">Hali hech narsa kelmadi</string>
+    <!-- T2: skan maydoniga oxirgi tushgan kod SKANER deb topildimi yoki ODAM
+         deb — jonlida chegarani USB\'siz sozlash uchun. -->
+    <string name="diag_input">Oxirgi kiritish (skan maydoni)</string>
+    <string name="diag_input_none">Hali kiritilmadi</string>
+    <string name="diag_input_help">SKANER = kod 350 ms jimlikdan keyin o\'zi yuboriladi. ODAM = avto-yuborish o\'chgan, ⏎ bosiladi. Skaner «ODAM» deb tanilsa, config.xml dagi scan_human_gap_ms ni shu yerdagi o\'rtacha intervaldan yuqori qiling.</string>
 
     <!-- Yangilanish (qurilmadan) -->
     <string name="update_available">Yangi versiya bor</string>

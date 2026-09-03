@@ -20,4 +20,23 @@
       Yangi terminal kelsa — faqat shu qatorga qo'shiladi, kod tegilmaydi.
     -->
     <string name="scanner_broadcast_actions">android.intent.action.SCANRESULT,android.intent.ACTION_DECODE_DATA,com.android.server.scannerservice.broadcast,com.android.server.scannerservice.broadcast_data,nlscan.action.SCANNER_RESULT,com.symbol.datawedge.api.RESULT_ACTION,scanner.rcv.message,com.honeywell.decode.intent.action.EDIT_DATA,device.scanner.RESULT,com.idata.scan.RESULT</string>
+
+    <!--
+      T2 — SKANERNI ODAMDAN AJRATISH CHEGARASI (ms).
+
+      `ScanBar` skan maydoniga tushayotgan belgilar orasidagi O'RTACHA
+      intervalni o'lchaydi:
+        · o'rtacha < shu raqam  → SKANER: 350 ms jimlikdan keyin kod O'ZI
+          yuboriladi (U5 dagi suffikssiz skaner zaxirasi — o'chirilmagan);
+        · o'rtacha ≥ shu raqam  → ODAM: avto-yuborish o'chadi, kodni faqat
+          ⏎ tugmasi yoki Enter yuboradi (aks holda qo'lda yozilgan
+          `02-01-01-04` ning birinchi 3 belgisi yuborilardi).
+
+      50 ms — wedge skaner belgilarni odatda 5–30 ms oralig'ida «yozadi»,
+      odam esa ekran klaviaturasida 120 ms dan tez tera olmaydi. Sekin
+      skaner «ODAM» deb tanilsa: diagnostika ekranidagi «Oxirgi kiritish»
+      qatorida uning HAQIQIY o'rtacha intervali ko'rinadi — chegara shu
+      raqamdan yuqori qilinadi. Qurilma almashsa KOD o'zgarmaydi.
+    -->
+    <integer name="scan_human_gap_ms">50</integer>
 </resources>
