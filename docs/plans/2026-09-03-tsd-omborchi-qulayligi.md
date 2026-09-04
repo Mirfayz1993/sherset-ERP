@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -120,7 +120,7 @@ o'qib tasdiqlangan (taxmin emas):**
 |---|---|---|---|---|
 | **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | **TUGADI** |
 | **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | **TUGADI** |
-| **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | REJA |
+| **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | **TUGADI** |
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | REJA |
 | **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | REJA |
 | **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | REJA |
@@ -895,3 +895,232 @@ ko'chdi.
 6. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
    keyingi T-faza agenti ularni **o'z commitiga qo'shmasin**.
 7. **Ovoz/tebranish hamon yo'q** — odam yozib ⏎ bosgach ham javob faqat toast bilan keladi (T4).
+### T3 — Nom/artikul bo'yicha qidiruv (`GET /tsd/search`) · **TUGADI** · 2026-09-04 · `1086d253`
+
+**Nima qilindi**
+
+*Server (`apps/api`)*
+
+- **`src/modules/tsd/tsd-search.ts`** (YANGI, 124 qator) — SOF modul (Prisma yo'q, Nest yo'q):
+  - `normalizeSearchQuery` — chekka bo'shliqlarni oladi, ichkilarini bittaga siqadi, `SEARCH_MAX_LEN`
+    gacha KESADI (rad etmaydi) va **`%` bilan `\` ni olib tashlaydi**. Oxirgisi topilma, taxmin emas:
+    Prisma'ning `contains` filtri qiymatni `ILIKE '%' || $1 || '%'` naqshiga qo'yadi va LIKE
+    metabelgilarini **ekranlamaydi** — ya'ni omborchi bitta `%` yozsa filtr ma'nosini yo'qotib,
+    tasodifiy 30 ta tovar qaytarardi. `_` esa ATAYLAB qoldirildi: u artikullarda haqiqatan uchraydi
+    (`KAB_2x1.5`) va bitta belgiga mos kelgani uchun zarari yo'q.
+  - `SEARCH_MIN_LEN = 2`, `SEARCH_MAX_LEN = 100`, `SEARCH_TAKE = 30` — uchalasi ham izohda sababi bilan.
+  - `searchRank` + `sortSearchHits` — «aynan moslik → boshida moslik → ichida moslik», **arxivlangan
+    esa bosqichdan QAT'I NAZAR eng oxirida**. Teng kalitlarda `Array.prototype.sort` barqarorligiga
+    tayaniladi, ya'ni serverning `name asc` tartibi guruh ichida saqlanadi (T1 dagi `sortedBy`
+    qarorining aynan o'zi). Kirish massivi o'zgartirilmaydi.
+- **`src/modules/tsd/tsd.service.ts`** (+129 / −31):
+  - 🔴 **`buildProductHits` ajratildi** (reja vazifasi 2 va prompt bandi 4). `scan` ichidagi
+    «hit qurish» mantig'i — `Stock`/`StockByCell` so'rovlari va `{id, name, code, article, barcodes,
+    uom, archived, homeCell, totalQty, cells}` shakli — endi BITTA private metodda va IKKALA yo'l
+    ham shundan foydalanadi. `scan` ning xulqi bunda **zarracha o'zgarmadi** (mavjud 10 ta testi
+    tegilmasdan yashil qoldi).
+  - `search(accountId, rawQuery)` — `where: { accountId, deletedAt: null, OR: [name contains
+    insensitive, article contains, code contains, barcodes has] }`, `select: TSD_PRODUCT_SELECT`,
+    `take: 30`, `orderBy: [{archived: 'asc'}, {name: 'asc'}]`.
+    - `orderBy` reja matnida yo'q edi, lekin **kerak**: `take` DB tomonda kesadi, tartibsiz `take`
+      esa har so'rovda BOSHQA 30 tani olib kelardi. Nozik saralash (bosqichlar) xotirada, kesilgan
+      to'plam ustida.
+    - Javob: `{ query, products, truncated }`. `truncated` — ro'yxat kesilganini AYTADI; jim kesish
+      omborchini «bazada boshqa yo'q» deb adashtirardi (IS-5 klassi).
+    - 🔴 `pickExactHits` bu yerda **ataylab chaqirilmaydi**: u skanerlangan token uchun («aynan mos
+      kelgan shtrix ustun»), qidiruv so'rovi esa ataylab noaniq. Multi-hit qoidasi kuchda — bitta
+      natija qaytganda ham ro'yxat qaytadi, tanlovni ODAM qiladi.
+  - `TsdSearchQuerySchema` — xom `q` uchun `max(1000)`. Ikki chegara ikki xil vazifada: `1000` —
+    mudofaa (uzun matn umuman qabul qilinmasin), `SEARCH_MAX_LEN = 100` — ma'noli chegara va u rad
+    ETMAYDI, KESADI (omborchi tasodifan uzun matn qo'ysa ishi uzilmasin).
+  - `TsdProductRow` interfeysi — `buildProductHits` kirishi; **narx maydoni turda ham yo'q**, ya'ni
+    kimdir `select` ga narx ustuni qo'shsa TypeScript uni bu turdan o'tkazmaydi.
+- **`src/modules/tsd/tsd.controller.ts`** (+20 / −5): `@Get('search')` +
+  `@RequirePermission({ entity: 'product', action: 'view' })` — `scan` bilan AYNI ruxsat.
+- **`src/modules/auth/tsd-policy.ts`** (+13 / −2):
+  `{ prefix: '/tsd/search', methods: ['GET'], exact: true, why: 'narxsiz nom-qidiruv' }`.
+  Alohida qator, chunki `/tsd/scan` **`exact`** va uning ostiga yangi yo'l qo'shib bo'lmaydi
+  (bu ataylab — `exact` yangi sub-yo'l jimgina ochilishining oldini oladi).
+
+*Ilova (`android/tsd-app`)*
+
+- **`SearchScreen.kt`** (YANGI, 148 qator): `PlainField` + «Qidirish» tugmasi, `busy` holati,
+  «Topilmadi», `truncated` ogohlantirishi, natijalar `ProductHitCard` bilan. Xato yo'lida `busy`
+  ALBATTA tushiriladi (aks holda ekran «Qidirilmoqda…» da qotib qolardi). **Avto-yuborish YO'Q** —
+  T2 qoidasi: so'rov faqat tugma yoki klaviaturaning tasdiq tugmasi bilan ketadi.
+- **`Widgets.kt`** (+63): 🔴 **`ProductHitCard` — YAGONA renderer** (prompt bandi 4 ning ilova
+  tomoni). Nom, artikul (yangi), arxiv belgisi (yangi), «qayerda» (birinchi yacheyka, bo'lmasa
+  uy-yacheykasi TAVSIYA sifatida — `ScanInfoScreen` dagi mavjud qoida) va jami qoldiq.
+- **`PickProductScreen.kt`** (+7 / −18): o'z chizuvchisi va `whereText` i olib tashlanib
+  `ProductHitCard` ga o'tdi. Xulq o'zgarmadi, ustiga **artikul va arxiv belgisi qo'shildi** —
+  multi-hit tanlovida aynan ular ikki o'xshash tovarni ajratadi.
+- **`ApiClient.kt`** (+17 / −1): `fun search(q: String): JSONObject`.
+- **`CountScreen.kt`** (+18): yacheyka OCHIQ bo'lgandagina «🔍 Tovar qidirish» tugmasi → mavjud
+  `pick()` ga tushadi (yangi sanoq yo'li yaratilmadi).
+- **`PlaceScreen.kt`** (+12): 1-bosqichda «🔍 Tovar qidirish» → `product` ga tushadi, oqim
+  odatdagidek 2-bosqichga o'tadi.
+- **`HomeScreen.kt`** (+38): beshinchi plitka «🔍 Tovar qidirish» → natija bosilsa NARXSIZ
+  `ScanInfoScreen`. Qidiruv elementi skan javobi bilan AYNI shaklda bo'lgani uchun uni
+  `{kind: 'product', products: [p]}` ga o'rash yetdi — **yangi tarmoq so'rovi yo'q**.
+- **`strings.xml`** (+12, faqat `uz`), **`README.md`** (+27 / −4): «Backend kontrakti» jadvaliga
+  `/tsd/search` qatori, «Nega narx yo'q» ga T3 bandi, G6 smoke ro'yxatiga **10-band (T3)**
+  (eski «Narx tekshiruvi» 11 ga surildi va unga `curl` tekshiruvi qo'shildi), fayl xaritasi.
+
+**Yangi testlar — 35 ta**
+
+| Fayl | Yangi testlar | Nima qulflanadi |
+|---|---|---|
+| `tsd-search.test.ts` (YANGI) | **18** | normalizatsiya (`%`/`\` olinishi, `_` qolishi, kesish), chegaralar, `searchRank` bosqichlari, arxiv ustunligi, barqarorlik, kirishga tegmaslik |
+| `tsd.service.test.ts` | **15** | oq ro'yxat, narxsiz javob, `OR` tarkibi, tenant, `take`+`orderBy`, tozalash, uzun so'rov, qisqa so'rov 400 (**va DB ga umuman bormasligi**), bo'sh natija (qoldiq so'rovlari ketmasligi), arxiv oxirida, `truncated`, multi-hit, **shakl `/tsd/scan` bilan AYNI** |
+| `tsd-policy.test.ts` | **2** | `/tsd/search` GET ochiq · `exact` · POST/PUT/DELETE yopiq · segment chegarasi; **`/products` HAMON YOPIQ** (`?search=` bilan ham) |
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| API testlari | `npx vitest run src/modules/tsd src/modules/auth/tsd-policy.test.ts` | **4 fayl · 79 test · 79 yashil · 0 qizil** (1.62s) |
+| Typecheck | `pnpm --filter @moysklad/api typecheck` | **0 xato** (exit 0) |
+| Biome | `npx biome check` (+ pre-commit hook) | toza |
+| Ilova build | `gradle --no-daemon clean assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 46s** · **36 task, 35 bajarildi** |
+| Ogohlantirish | o'sha buyruq, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build'da o'lchandi) |
+
+**Qidiruv tezligi — JONLI bazada o'lchandi (FAQAT O'QISH)**
+
+Lokal dev bazasi yo'q (`psql`/`docker` mashinada yo'q), shuning uchun o'lchov jonli VPS'da
+(`13.140.157.10`, baza `sherset_v2`) `EXPLAIN (ANALYZE, BUFFERS)` bilan qilindi. **Hech nima
+o'zgartirilmagan** — faqat `SELECT`/`EXPLAIN` (§2 qoida 12: jonliga skript YOZILMADI).
+
+- Hajm: **4 635 tirik + 399 arxivlangan tovar** (`deleted_at IS NULL`).
+- `TsdService.search` ning aynan so'rovi (`name/article/code ILIKE '%q%' OR barcodes @> ...`,
+  `ORDER BY archived, name LIMIT 30`):
+
+| So'rov | Execution Time | Qaytdi |
+|---|---|---|
+| `kabel` (sovuq) | **13.30 ms** | 30 (54 mos keldi) |
+| `kabel` (takror) | **12.36 ms** | 30 |
+| `uz` (2 belgi — eng yomon holat) | **13.06 ms** | 30 |
+| `shlang` | **12.85 ms** | 30 |
+
+- Reja plani: `Seq Scan on products` (5 139 qator) → `Sort` → `Limit`, `Buffers: shared hit=561`
+  (diskka bormaydi), planning 4.7 ms.
+- **`pg_trgm` migratsiyasi KERAK EMAS va yozilmadi** — reja shuni ochiq qoldirgan edi. Ikki sabab:
+  1. **Indeks ALLAQACHON bor:** `products_name_trgm_idx` (GIN `gin_trgm_ops`), migratsiya
+     `20260723150000_trgm_search_indexes` da; `products_barcodes_gin_idx` ham bor.
+  2. Planner shu hajmda uni **ATAYLAB ishlatmaydi**: 5 ming qatorda to'rt shoxli `OR` uchun to'liq
+     ko'rib chiqish bitmap-OR dan arzon. 13 ms — omborchi uchun sezilmaydigan vaqt (Germaniya↔UZ
+     tarmoq kechikishi ~90–120 ms, ya'ni so'rovning o'zi umumiy vaqtning **~10%** i ham emas).
+  Tovarlar soni bir necha o'n mingga chiqsa planner o'zi indeksga o'tadi — kod o'zgarmaydi.
+
+**Narx qoidasi (§2, qoida 3) — YOZMA ISBOT**
+
+1. **`select` oq ro'yxati kengaytirilmadi.** `TSD_PRODUCT_SELECT` diffda **umuman yo'q**
+   (`git show 1086d253 -- apps/api/src/modules/tsd/tsd-scan.ts` → bo'sh). Qidiruv aynan shu
+   obyektni ishlatadi.
+2. **Javob shakli umumiy.** `search` o'zining javob quruvchisiga EGA EMAS — u `buildProductHits`
+   ga boradi, ya'ni unga narx maydonini qo'shib yuborish uchun `scan` ni ham buzish kerak bo'lardi
+   va buni ikkita mavjud test darhol ushlardi.
+3. **Qo'shimcha so'rovlar narxsiz jadvallarga:** `Stock` (`assortmentId, qty`) va `StockByCell`
+   (`assortmentId, storeId, cellId, qty, store.name, cell.name`) — bu jadvallarda narx ustuni
+   **umuman yo'q**.
+4. **Test qulflari:** `tsd.service.test.ts` — `select` da `price|cost|margin` yo'qligi + javobning
+   `JSON.stringify` i `price|cost|margin|narx` ga mos kelmasligi; `tsd-policy.test.ts` — yangi
+   `«🔴 T3 — nom-qidiruv qo'shilgach ham /products YOPIQ QOLDI»` testi `/products` va
+   `/api/v1/products?search=kabel` uchun `false` ni qulflaydi.
+5. «Ekranda ko'rsatmayapmiz» degan zaif dalilga **tayanilmadi** — yuqoridagi to'rttasi ham
+   ekrandan mustaqil.
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| api testlari yashil, yangi testlar soni raqam bilan | ✔ | **79/79 yashil**, yangi **35** ta (18 + 15 + 2 — yuqoridagi jadval) |
+| `tsd-policy.test.ts` da `/products` hamon 403 ekani qulflangan | ✔ | yangi test: `/products`, `/api/v1/products?search=kabel`, `?limit=1&search=k` → `false`; `/tsd/search` → `true` |
+| `pnpm --filter @moysklad/api typecheck` 0 xato | ✔ | exit 0, chiqishda bitta ham `error TS` yo'q |
+| `assembleDebug` ogohlantirishsiz | ✔ | toza build, 35 task, `w:`/`warning`/`e:` — **0 qator** |
+| Javob shakli `/tsd/scan` bilan bir xilligi test bilan qulflangan | ✔ | `«T3 qabul mezoni — javob SHAKLI /tsd/scan bilan AYNI»`: `Object.keys(...).sort()` tengligi **va** `expect(b).toEqual(a)` |
+| O'lchangan qidiruv vaqti hisobotda | ✔ | jonli `sherset_v2`, 5 034 tovar, **12.4–13.3 ms** (yuqoridagi jadval) |
+
+**Rejadan chekinishlar (ikkita, ochiq aytiladi)**
+
+1. **`ApiClient.search` `JSONObject` qaytaradi, `JSONArray` emas** (reja vazifa 7 `JSONArray` degan).
+   Sabab: javobdagi `truncated` bayrog'i ilovaga YETIB BORISHI kerak. `JSONArray` qaytarilsa u
+   yo'qolardi va omborchi 30 tadan ko'p mos kelgan holatda «bazada boshqa yo'q» deb o'ylab, bor
+   tovarni qaytadan kiritib yuborardi — bu aynan IS-5 (jim yo'qotish) klassi. Ekran `products` ni
+   baribir bitta qatorda oladi (`resp.optJSONArray("products")`).
+2. **`PickProductScreen` ning chizish qismi o'zgardi** (o'z kartasi → `ProductHitCard`). Bu «yo'l-yo'lakay
+   tuzatish» emas, prompt bandi 4 ning to'g'ridan-to'g'ri talabi («ilovada bitta renderer»): ikkita
+   chizuvchi qolsa server tomonda shakl birlashtirilgani ma'nosini yo'qotardi. Tanlash mantig'iga
+   (`onPicked`, multi-hit qoidasi) tegilmadi.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **`/tsd/scan` (butun skan oqimi)** — buzilmadi va bu **o'lchangan**: `scan` ning mavjud **10 ta
+  testi bitta ham o'zgartirilmasdan** yashil qoldi (`tsd-scan.test.ts` ham tegilmadi, 12/12).
+  Refaktoring faqat kodni KO'CHIRDI: `where`, `take: 20`, `pickExactHits`, `kind` shoxlari
+  (`piece`/`cell`/`none`/`product`) va javob maydonlari — hammasi bayt-baytga aynan o'sha.
+- **Sanash semantikasi** — buzilmadi. `CountScreen.save()` ga **umuman tegilmadi**: hamon
+  `setCellStock(..., qty)`, ya'ni `mode: 'set'` (mutlaq son). Qidiruv natijasi mavjud `pick()` ga
+  tushadi, ya'ni **sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» ogohlantirishi ishlashda davom
+  etadi** (`systemQty(id)` `null` qaytaradi → `PickedCard` `WarningContainer` rejimda ochiladi).
+- **Oflayn navbat** — buzilmadi. `ActionQueue`/`QueueSender`/`DeviceStore`/`ScannerBridge` diffda
+  **umuman yo'q** (§2, qoida 10). `ApiClient` ga faqat bitta yangi metod qo'shildi, transport
+  qismiga (cookie idorasi, `exec`, 401-refresh) **tegilmadi**.
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi va **kuchaytirildi**: qidiruv bitta natija
+  qaytarganda ham ro'yxat ko'rsatiladi (`pickExactHits` ataylab chaqirilmaydi), ya'ni ilova bu
+  yo'lda hech qachon o'zi tanlamaydi. `PickProductScreen` ning tanlash mantig'i o'zgarmadi.
+- **Fokus intizomi (T2 ochiq qoldirgan qaror — javob shu)** — T2 hisoboti ikkita variantdan birini
+  tanlashni so'ragan edi. Tanlov: **(a)**, ya'ni maxsus hech nima qilinmaydi, va sabab o'lchangan:
+  - `SearchScreen` ochilganda `screenKey` o'zgaradi ⇒ `ScanBar` fokusni oladi (odatdagidek);
+  - omborchi qidiruv maydoniga tegsa fokus u yerga o'tadi va `ScanBar` uni **ORQAGA TORTMAYDI**
+    (`LaunchedEffect(screenKey)` qayta ishlamaydi — T2 da shu ataylab qoldirilgan);
+  - shu holatda skanerlansa kod **qidiruv maydoniga** tushadi — va bu zararsiz, chunki
+    `/tsd/search` ning `OR` ida `barcodes: { has: q }` bor: shtrix bo'yicha qidiruv shu tovarni
+    TOPADI. Ya'ni eng yomon holat ham ishlaydigan yo'lga tushadi, boshi berk ko'chaga emas.
+  - `SearchScreen` `onScan` ni **ushlamaydi**, ya'ni fokus `ScanBar` da bo'lganda skan avvalgidek
+    umumiy narxsiz `ScanInfoScreen` ni ochadi.
+- **Qidiruv maydonida 350 ms avto-yuborish** — YO'Q va bo'lishi mumkin ham emas: u `ScanBar` ning
+  ichki mantig'i, `SearchScreen` esa oddiy `PlainField` ishlatadi (T2 hisoboti bandi 3 shuni talab
+  qilgan edi).
+- **Bosh ekran plitkalari** — to'rttadan beshtaga chiqdi; «Navbat» plitkasi uchinchi qatorga tushdi
+  va yonida bo'sh yarim ustun qoldirildi (aks holda u ustidagilardan ikki barobar keng ko'rinardi).
+  Plitkaning `badge` mantig'i (kutayotgan + rad etilganlar soni) **o'zgarmadi**.
+- **Brauzerdan `/tsd/search`** — `product.view` ruxsati borlar chaqira oladi; javob narxsiz, ya'ni
+  zararsiz (bu `scan` da ham shunday va uning izohida ochiq yozilgan).
+- **Eski ilova + yangi server** — `/tsd/search` ni hech kim chaqirmaydi, boshqa hech nima o'zgarmadi.
+  **Yangi ilova + eski server** — `/tsd/search` 403/404 beradi, ekran toast ko'rsatadi va `busy`
+  tushadi (qotib qolmaydi); qolgan ekranlar ishlayveradi.
+
+**Git (§2, qoida 6)**
+
+`1086d253` — **17 fayl** (16 ta T3 fayli + `docs/progress.json`, uni loyihaning `pre-commit` hook'i
+o'zi qo'shadi). `apps/api/src/modules/auth/{auth.controller,auth.schema,tsd-device.service}.ts`,
+`apps/api/src/modules/permissions/*`, `apps/api/src/scripts/seed-role-templates.ts`,
+`android/manager-app/` va `docs/plans/2026-09-02-menejer-planshet-apk.md` — **menejer-planshet
+rejasiga tegishli, tegilmadi va commit qilinmadi** (T1/T2 hisobotlaridagi eslatma bajarildi).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan.** Qabul mezoni «kodda ko'rsatilsin» deydi va bajarildi; haqiqiy
+   iData 95W Pro sinovi — **T8**. README'ning G6 smoke ro'yxatiga **10-band** aynan shu uchun
+   yozildi (uchala ulash nuqtasi + `curl` narx tekshiruvi bilan).
+2. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi** (hamon `4`/`0.4.0`),
+   `tools/publish.sh` chaqirilmadi. Egasi «chiqar» degandagina.
+3. **`take: 30` saralashdan OLDIN ishlaydi.** Ya'ni 30 tadan ko'p mos kelsa, «aynan moslik» 31-o'rinda
+   turgan tovar ro'yxatga umuman tushmaydi (DB tartibi `name asc`). Bu bilib qilingan savdo:
+   muqobili — hammasini olib xotirada saralash (jonlida 5 ming tovarda ishlardi, lekin o'sish bilan
+   yiqilardi). `truncated` bayrog'i omborchini «aniqroq yozing» deb yo'naltiradi. To'liq yechim —
+   saralashni SQL ga tushirish (`ORDER BY (name = q) DESC, name ILIKE q||'%' DESC, ...`); T10/T11
+   dan oldin kerak bo'lsa ko'rib chiqilsin.
+4. **Ro'yxatda tovarning UOM (o'lchov birligi) ko'rsatilmaydi** — `ProductHitCard` da jami qoldiq
+   sonini birligisiz chizadi (bu `PickProductScreen` ning avvalgi xulqi ham edi). Kabel/shlang
+   metrlarida bu chalkashlik bo'lishi mumkin; shakl `uom` ni ALLAQACHON qaytaradi, ya'ni tuzatish
+   bir qatorlik. T5 (miqdor kiritish) bilan birga qilingani ma'qul.
+5. **Qidiruv natijasidan to'g'ridan-to'g'ri KESIM (`CutScreen`) oqimiga o'tish yo'li yo'q** —
+   bo'linadigan tovar `BLK-` yorlig'i bo'yicha topiladi (K-reja 7.3), qidiruv esa tovarni topadi.
+   Bu T3 doirasidan tashqarida, lekin K-reja fazalari uchun eslatma.
+6. **T1 hisobotining 5-bandi (yacheykada o'nlab biriktirilgan tovar bo'lsa skroll uzayadi) —
+   YOPILMADI.** T3 unga qidiruvni QO'SHDI (endi kerakli tovarni ro'yxatdan qidirmasdan topsa
+   bo'ladi), lekin ro'yxatning O'ZI hamon to'liq chiziladi. Agar jonlida uzunlik muammo bo'lsa
+   («faqat birinchi 10 tasi») — T6 (sanash progressi) bilan birga.
+7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) va
+   ularga T3 da ham tegilmadi — keyingi T-faza agenti ham o'z commitiga qo'shmasin.
