@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -124,7 +124,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | **TUGADI** |
-| **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | REJA |
+| **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
 | **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | REJA |
 | **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | REJA |
@@ -1780,3 +1780,221 @@ SON, tasdiq ro'yxatida ko'rinadi; u allaqachon «Tizimda» qatorida chizilardi.
    davomida **boshqa sessiya** kassa (S2) ishini shu branchga commit qildi
    (`988fb45c`, `57217f3e`) — keyingi faza agenti `git log` ni o'qiganda
    adashmasin.
+
+### T7 — «Oxirgi sanoq» qaytarish · **TUGADI** · 2026-09-04 · `53001842`
+
+**Nima qilindi**
+
+*Yangi fayl — sof modul (T5 naqshi)*
+
+- **`android/tsd-app/app/src/main/java/uz/sherset/tsd/CountUndo.kt`** (YANGI, 69 qator).
+  Android ham, Compose ham, `R` ham kirmaydi — shu tufayli qaror JVM unit-testi bilan
+  qamraldi. Yagona funksiya `point(raw: String?, after: String): Point`, javobi uch xil:
+  - `Point.Show(before, target)` — chiziq bor; `before == null` = qator yacheykada
+    UMUMAN yo'q edi (matn shunga qarab boshqacha bo'ladi), `target` — qaytarishda
+    serverga ketadigan **mutlaq son**;
+  - `Point.Unchanged` — chiziq YO'Q, chunki saqlangan son eski qiymatning O'ZI;
+  - `Point.Unreadable` — chiziq YO'Q, chunki eski qoldiqni miqdor sifatida qayta
+    yuborib bo'lmaydi (jurnalga yoziladi).
+  - 🔴 Eski qiymat `QtyExpression` dan o'tkaziladi, ya'ni T5 dagi **shakl qulfi**
+    qayta ishlatiladi: server `12.000000` qaytarsa qaytarishda `12` ketadi va
+    «o'zgarmadi» taqqoslashi ham ishonchli bo'ladi (`12.000000` == `12`).
+
+*Ekran*
+
+- **`CountScreen.kt`** (+310 / −0 — faqat qo'shildi, mavjud satrlar o'zgarmadi).
+  - Yangi holat: `lastSave` (`LastSave?`), `undoing`, `saveSeq`, `onScreen`.
+  - `undoPoint()` — saqlashdan **OLDIN** `systemQty()` ni o'qiydi va `CountUndo` ga
+    beradi; ekranning o'z ma'lumotini (`wasInRoster`, `seq`) qo'shadi. `save()` UI
+    thread'dan chaqiriladi va `items` faqat `shell.main` ichida almashadi, ya'ni bu
+    o'qish so'rovdan oldingi holat (reja bandi 1).
+  - `UndoStrip()` — sarlavha-kartadan KEYIN, «sanalayotgan tovar» kartasidan OLDIN
+    chiziladigan kulrang karta: «Oxirgi sanoq · <nom> — avval 14 edi, siz 41
+    qildingiz», ostida izoh va «⟲ Qaytarish — 14 qilib qo'yish» tugmasi.
+  - `undoLast()` — `setCellStock(store, cell, id, target)`, ya'ni `mode: 'set'`.
+    So'ngra tarkib **qayta o'qiladi**; qayta o'qish yiqilsa qaytarish baribir BO'LGAN
+    deb hisoblanadi (belgilar yozilgan AMALDAN olinadi — T6 dagi qoidaning o'zi),
+    xato `Diagnostics` ga tushadi.
+  - `clearProgress()` va `closeRest()` ham `lastSave` ni tozalaydi.
+- **`strings.xml`** (+16, faqat `uz`): `count_undo_title`, `count_undo_changed`,
+  `count_undo_new`, `count_undo_note`, `count_undo_note_zero`, `count_undo_button`,
+  `count_undoing`, `count_undo_done`.
+- **`CountUndoTest.kt`** (YANGI, 122 qator, **8 test**).
+- **`README.md`** (+60 / −4): yangi «**«Oxirgi sanoq» qaytarish (T7)**» bo'limi
+  (jadval bilan), G6 smoke ro'yxatiga **14-band** (eski «Narx tekshiruvi» 15 ga
+  surildi), fayl xaritasiga `CountUndo.kt` va `CountUndoTest.kt`.
+
+**🔴 «Qaytarish — bekor qilish EMAS» qayerda aytiladi (prompt bandi 3)**
+
+Uch joyda, uchalasi ham OMBORCHI ko'radigan matn:
+
+| Holat | Ekrandagi izoh |
+|---|---|
+| Nishon > 0 (`count_undo_note`) | «🔴 Qaytarish — BEKOR QILISH emas: ilova yangi sanoq (**14**) yuboradi va tizim **YANA hujjat yozadi**. Birinchi hujjat o'z joyida qoladi.» |
+| Nishon = 0 (`count_undo_note_zero`) | «🔴 Qaytarish — BEKOR QILISH emas: qoldiq 0 ga tushadi va tizim **CHIQIM (Списание)** hujjatini yozadi. Birinchi (KIRIM) hujjat o'z joyida qoladi.» |
+| Tugma matni | «⟲ Qaytarish — **14 qilib qo'yish**» — «bekor qilish» so'zi ATAYLAB ishlatilmadi; tugma nima BO'LISHINI aytadi, nima o'chishini emas |
+
+Izoh **nishonga** qarab tanlanadi, kelib chiqishiga emas: nishon 0 bo'lsa chiqim
+yoziladi — yacheykada YO'Q tovarda ham, qoldig'i 0 biriktirilgan qatorda ham.
+
+**Mutlaq son semantikasi (prompt bandi 3, ikkinchi yarmi)**
+
+Qaytarish `ApiClient.setCellStock(...)` ni chaqiradi — o'sha funksiya, o'sha
+`mode: 'set'`. `ApiClient.kt` diffda **umuman yo'q**, `add` hech qayerda paydo
+bo'lmadi. Ya'ni qaytarish so'rovi ikki marta ketsa ham natija AYNI (14 → 14).
+Nishon `QtyExpression` dan o'tgan sof son va u serverning `^\d+(\.\d{1,6})?$`
+qoidasiga mos ekani **test bilan qulflangan** (`nishonServerRegexigaMos`).
+
+**Chiziq QACHON yo'qoladi (reja bandi 4)**
+
+| Sabab | Mexanizm |
+|---|---|
+| 12 soniya o'tdi | `LaunchedEffect(last.seq) { delay(UNDO_STRIP_MS); … }`; kalit `seq`, chunki AYNI o'zgarish ikkinchi marta saqlansa `data class` nusxalari teng bo'lib taymer qayta boshlanmasdi (`MainActivity.errorSeq` naqshi). Taymer o'chirishdan oldin chiziq hamon O'ZINIKI ekanini tekshiradi |
+| Qaytarildi | `undoLast()` muvaffaqiyat shoxida `lastSave = null` — ikkinchi «qaytarish» endi qaytarish emas, oddiy yangi sanoq bo'lardi |
+| **Yacheyka almashdi** | `clearProgress()` (u `openCell()` muvaffaqiyat shoxida va `reset()` da chaqiriladi) |
+| **Ekran almashdi** | `Content()` dagi `DisposableEffect(Unit) { onDispose { … } }`. `WorkRoot` ekranni `key(screen)` bilan chizadi, ya'ni Qidiruv/tovar tanlashga o'tilganda kompozitsiya tarqatiladi. Bu ZARUR edi: ekran nusxasi navigatsiya tarixida saqlanadi va qaytib kelganda eski chiziq o'z joyida turardi |
+| Yangi sanoq o'zgarishsiz saqlandi | `lastSave = undo`, `undo == null` — eski chiziq ham ketadi |
+| «Qolganini 0 qilib yopish» ishga tushdi | `closeRest()` boshida `lastSave = null` |
+| Saqlash javobi ekran almashgandan KEYIN keldi | `onScreen` bayrog'i (`DisposableEffect` yoqadi/o'chiradi) — chiziq ko'rinmayotgan ekranga qo'yilmaydi |
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean testDebugUnitTest assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 1m 14s** · **42 task, 41 bajarildi** · exit **0** |
+| Ogohlantirish | o'sha log, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build — `UP-TO-DATE` task natijani yashirmadi) |
+| Unit-testlar | o'sha buyruq | **25 test · 0 failure · 0 error · 0 skipped** — `QtyExpressionTest` **17** (T5, buzilmadi) + `CountUndoTest` **8** (YANGI) |
+| APK | `app/build/outputs/apk/debug/app-debug.apk` | 13 007 956 bayt, yig'ildi (chiqarilmadi — §2 qoida 9) |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat 53001842` da `apps/`, `packages/`, `prisma/` **yo'q**) |
+
+**Yangi testlar (8 ta)**
+
+`oddiyQaytarish` · `yacheykadaYoqTovarNishoniNol` · `qoldigiNolQator` ·
+**`ozgarmaganSaqlashChiziqBermaydi`** · `eskiQiymatNormallashadi` ·
+`oqilmaydiganEskiQoldiq` · `ifodaKorinishidagiQoldiqHisoblanadi` ·
+**`nishonServerRegexigaMos`**.
+
+Ikkita eng muhim qulf qalin: birinchisi chiziqning shovqinga aylanib ketmasligini,
+ikkinchisi qaytarish so'rovining 400 bilan yiqilmasligini ushlab turadi.
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` **ogohlantirishsiz** | ✔ | toza `clean` build, 42 task / 41 bajarildi, `w:`/`warning`/`e:` — **0 qator**, exit 0 |
+| Qaytarishdan keyin **tarkib qayta o'qiladi** | ✔ | `undoLast()` → `shell.api.cellStock(storeId, cellId)` → `items = fresh.optJSONArray("items")` + `rosterSync()`. Qayta o'qish yiqilsa xato `Diagnostics` ga tushadi va belgilar baribir to'g'ri qoladi (T6 qoidasi) |
+| Qaytarish ham **mutlaq son** semantikasida (delta EMAS) | ✔ | `setCellStock(…, target)` — o'sha `mode: 'set'`; `ApiClient.kt` diffda yo'q, `add` paydo bo'lmadi; nishon server regexidan o'tishi test bilan qulflangan |
+| Eski qiymat saqlashdan OLDIN o'qiladi (vazifa 1) | ✔ | `save()` ning birinchi qatorlarida `undoPoint()` → `systemQty()`; `shell.io` blokidan OLDIN, UI thread'da |
+| Chiziq 10–15 soniya turadi (vazifa 1) | ✔ | `UNDO_STRIP_MS = 12_000L` |
+| «Qaytarish ham hujjat yozadi» UI matnida (vazifa 2) | ✔ | yuqoridagi jadval — uchta matnda, ikki xil og'irlikda |
+| Eski qiymati yo'q tovarda qaytarish = `set 0`, matn shunga mos (vazifa 3) | ✔ | `Point.Show(before = null, target = "0")`; sarlavha «avval bu yacheykada YO'Q edi», izoh QIZIL va CHIQIM haqida; test `yacheykadaYoqTovarNishoniNol` |
+| Ekran/yacheyka almashsa chiziq yo'qoladi (vazifa 4) | ✔ | yuqoridagi «Chiziq QACHON yo'qoladi» jadvali — 7 ta yo'l |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Serverga **bitta bayt ham** tegilmadi: `git show --stat 53001842` da `apps/`,
+`packages/`, `prisma/` **umuman yo'q**. Yangi endpoint ham, yangi javob maydoni ham,
+TSD allowlist qatori ham qo'shilmadi; `ApiClient.kt` diffda **yo'q** — T7 ikkita
+MAVJUD chaqiruvni ishlatadi (`setCellStock`, `cellStock`). Chiziqda ko'rinadigan
+yagona ma'lumot — omborchining O'ZI kiritgan son va `stock[].qty`, ya'ni allaqachon
+«Tizimda» qatorida chizilib turgan SON. `getCellStock` select'ida
+`buyPrice`/`salePrice`/`sum` umuman yo'q. `CountUndo` esa faqat matn bilan ishlaydi
+va narx tushunchasini bilmaydi.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Sanash semantikasi (mutlaq son)** — buzilmadi (yuqorida dalil). `save()` ning
+  mavjud tanasi o'zgarmadi: qo'shilgani ikki qator (`val undo = …` va
+  `lastSave = …`), `setCellStock` chaqiruvi va uning argumentlari o'z holicha.
+- **Oflayn navbat** — buzilmadi va unga tegilmadi. Qaytarish, sanashning o'zi kabi,
+  navbatga QO'YILMAYDI: `undoLast()` da `shell.enqueue` **umuman yo'q**, aloqa
+  yo'qligida `count_offline` banneri chiqadi va chiziq O'Z JOYIDA qoladi (omborchi
+  qayta urinadi). `ActionQueue`/`QueueSender`/`DeviceStore`/`ScannerBridge`/
+  `ApiClient` diffda **yo'q** (§2, qoida 10).
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi: `onScan`, `pick`,
+  `PickProductScreen` ga tegilmadi.
+- **Skaner fokusi (T2 ishi)** — buzilmadi. Chiziq DIALOG emas, oqim ichidagi karta
+  (T6 dagi tasdiq kartasi bilan bir sabab: dialog `ScanBar` fokusini tortib olsa,
+  yopilgach uni hech kim qaytarmaydi va klaviatura-wedge skaner jim o'lardi).
+  `ScanBar.kt` diffda yo'q, yangi `requestFocus()` qo'shilmadi.
+- **T4 ovoz/banner intizomi** — ergashildi: qaytarish muvaffaqiyatida
+  `shell.success` (toast + yuqori ton), xatoda `shell.error` (qizil banner + past
+  ton). Yangi signal turi qo'shilmadi.
+- **T5 kalkulyatori** — tegilmadi (`Widgets.kt`, `QtyExpression.kt` diffda yo'q);
+  `CountUndo` esa uni O'QIYDI (`QtyExpression.qty`), ya'ni bog'liqlik bir tomonlama.
+- **T6 progressi** — 🔴 **ATAYLAB o'zgardi**: qaytarilgan qator belgisi ✓ dan
+  **○ ga qaytadi** (`marks.remove`) va progress bir pog'ona pasayadi. Sabab: qiymat
+  tizimning o'z qoldig'iga qaytdi, ya'ni qator HALI SANALMAGAN. ✓ qoldirilsa
+  progress yolg'on aytardi va «qolganini 0 qilib yopish» bu qatorni chetlab o'tardi.
+  Maxraj (`roster`) ham tozalanadi, LEKIN faqat qatorni **shu saqlash** qo'shgan
+  bo'lsa (`wasInRoster == false`): aks holda 0 ga qaytgan qator server javobidan
+  yo'qolib, progress «12/13» da abadiy qolib ketardi.
+- **T1 «biriktirilgan» guruhi** — tegilmadi; qoldig'i 0 qator qaytarilganda nishon
+  0 bo'ladi va qizil izoh chiqadi (to'g'ri: server u yerda chiqim yozishi mumkin).
+- **Sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» ogohlantirishi** — o'z joyida
+  (`PickedCard`), unga tegilmadi.
+- **Server bilan moslik** — faza serverga tegmagani uchun «eski ilova + yangi server»
+  va «yangi ilova + eski server» kombinatsiyalari o'zgarmaydi.
+- **Yagona yangi xulq o'zgarishi:** endi bitta qator uchun ketma-ket IKKITA hujjat
+  yozilishi oson bo'ldi (KIRIM 27, keyin CHIQIM 27). Bu T7 ning MAQSADI, lekin ERP
+  tomonda hujjatlar soni ko'payadi — buxgalter «nega ikkita?» deb so'rashi mumkin.
+  Shuning uchun matn uch joyda ochiq ogohlantiradi va README ning 14-bandi ERP'da
+  ikkala hujjatni ko'rishni ATAYLAB talab qiladi.
+- **4" ekran balandligi** — ⚠️ chiziq ~150dp joy oladi va u sarlavha bilan
+  «sanalayotgan tovar» kartasi orasida turadi, ya'ni saqlashdan keyin ro'yxat
+  pastga suriladi. 12 soniyadan keyin o'zi ketadi. T5 hisobotining 2-bandi va T1
+  hisobotining 5-bandi ham shu ekranning uzunligi haqida — jonlida bezovta qilsa
+  hammasi birga ko'rilsin (T8).
+
+**Rejadan chekinishlar (ikkita, ochiq aytiladi)**
+
+1. 🔴 **Chiziq QATOR USTIDA emas, sarlavha-karta OSTIDA.** Reja «qator ustida
+   turadigan chiziq» deydi. Sabab qat'iy: sanoq `0` bo'lsa server qatorni
+   `getCellStock` javobidan **olib tashlaydi** (`qty > 0` filtri — T6 hisoboti,
+   2-band), ya'ni «qator ustida» turadigan chiziqning ANKARI yo'qoladi — aynan
+   qaytarish eng kerak bo'lgan holatda. Yacheykada YO'Q tovar sanalganda ham qator
+   ro'yxatda yangi joyda paydo bo'ladi. Shuning uchun chiziq QAT'IY joyda turadi va
+   tovar NOMINI o'zi aytadi (ya'ni ankarsiz ham noaniqlik yo'q). Yon foyda:
+   saqlashdan keyin «sanalayotgan tovar» kartasi yopiladi va ko'z aynan shu joyda
+   qoladi.
+2. **`CountUndo.kt` — rejada nomlanmagan yangi fayl.** Reja T7 uchun test talab
+   qilmaydi, lekin qaytarish nishoni serverga MUTLAQ son bo'lib ketadi va bu yerdagi
+   xato jimgina noto'g'ri qoldiq yozardi — ya'ni aynan shu reja tuzatayotgan
+   kasallik sinfi (§1.3). T5 hisobotining 6-bandi ham «yangi sof mantiqni
+   `app/src/test/` ga test bilan qo'shing» deydi. Shuning uchun qaror sof modulga
+   ajratildi va 8 ta test bilan qulflandi.
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan.** Qabul mezoni «kodda ko'rsatilsin» edi va
+   bajarildi; haqiqiy iData 95W Pro sinovi — **T8**. README ning G6 ro'yxatiga
+   **14-band** aynan shu uchun yozildi (chiziq, ⟲, ERP'da IKKITA hujjat,
+   o'zgarmagan saqlash, yacheykada yo'q tovar, 12 soniya, ekran almashishi,
+   aloqasiz xulq).
+2. 🔴 **Ommaviy «Qolganini 0 qilib yopish» ning qaytarishi YO'Q** — T7 doirasi
+   bitta qator (reja matni «avval 14 edi → 41 qildingiz»). Yopish tasdiq kartasi
+   buni ochiq aytadi («Ilova orqali bekor qilib bo'lmaydi: qaytarish uchun to'g'ri
+   sonni qayta sanash kerak») va `closeRest()` eski chiziqni tozalaydi, ya'ni
+   yolg'on va'da yo'q. T6 hisobotining «Yagona xulq o'zgarishi» bandi 7 ta
+   Списание haqida ogohlantirgan edi — u **hamon ochiq**. Ommaviy qaytarish
+   kerak bo'lsa u alohida faza (yoki **T11** — inventarizatsiya sessiyasi).
+3. **Faqat BITTA qadam orqaga.** Qaytarilgach chiziq yo'qoladi, ya'ni «qaytarishni
+   qaytarish» yo'q (omborchi kerakli sonni qo'lda yozadi). Tarix chuqurroq
+   bo'lsa qaysi hujjat qaysi qatorga tegishli ekani chalkashardi.
+4. **Chiziq ilova ichida yashaydi** (T6 progressi kabi): terminal qayta ishga
+   tushsa yoki ilova o'ldirilsa qaytarish imkoni yo'qoladi. Serverga «oxirgi
+   amalim» tushunchasi chiqarilmadi — u **T11** ning ishi.
+5. **`ShortageScreen` hamon ifoda rejimisiz** (T5 ning 4-bandi, T6 da ham ochiq
+   qolgan) — T7 unga tegmadi (§2, qoida 2). Bir qatorlik ish.
+6. **`getCellProducts` da `deletedAt: null` filtri yo'qligi** (T6 hisobotining
+   2-bandi) — hamon ochiq, T7 unga tegmadi. O'chirilgan tovar qatori sanalsa 404
+   beradi; qaytarish ham o'sha 404 ni oladi va chiziq banner bilan o'z joyida
+   qoladi (jim yo'qotish yo'q).
+7. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi**
+   (hamon `4`/`0.4.0`), `tools/publish.sh` chaqirilmadi. T1–T7 bitta o'rnatishda
+   sinalgani ma'qul — **T8**.
+8. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan**
+   (menejer-planshet X-rejasi va kassa ishi) — T7 da ham tegilmadi va commitga
+   tushmadi (`git show --stat 53001842` — 5 ta `android/tsd-app` fayli +
+   `pre-commit` hook'i qo'shgan `docs/progress.json`). Keyingi faza agenti ham
+   o'z commitiga qo'shmasin.
