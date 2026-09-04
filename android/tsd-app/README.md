@@ -199,6 +199,35 @@ Ifoda rejimi **Sanash**, **Joylashtirish** va **Kesish** maydonlarida yoqilgan
 (`NumberField(expression = true)`); «Topolmadim» (`ShortageScreen`) da hozircha
 YO'Q — T-rejaning T5 vazifasi uni sanamagan.
 
+## «Oxirgi sanoq» qaytarish (T7)
+
+Sanash ekranida son SAQLANGACH, sarlavha-karta ostida **12 soniya** turadigan
+chiziq chiqadi: «<nom> — avval **14** edi, siz **41** qildingiz · ⟲ Qaytarish».
+
+🔴 **Qaytarish — BEKOR QILISH EMAS.** Serverda hujjatni o'chiradigan sirt yo'q;
+tugma oddiy `PUT …/stock` ni `mode: 'set'` va **eski qiymat** bilan yuboradi.
+Ya'ni **MUTLAQ SON** semantikasi o'zgarmaydi va ERP'da **ikkinchi hujjat**
+paydo bo'ladi (avval KIRIM, keyin CHIQIM). Chiziqdagi izoh buni ochiq aytadi —
+omborchi «bekor bo'ldi» deb o'ylab qolsa, hujjatlarni ko'rgan buxgalter bilan
+qarama-qarshilikka tushardi.
+
+| Holat | Chiziq | Qaytarish nishoni |
+|---|---|---|
+| `14` → `41` | «avval 14 edi, siz 41 qildingiz» | `14` (sariq izoh) |
+| yacheykada YO'Q tovar → `5` | «avval bu yacheykada YO'Q edi» | `0` — **qizil** izoh: CHIQIM (Списание) yoziladi |
+| qoldig'i `0` qator → `41` | «avval 0 edi» | `0` — **qizil** izoh |
+| `14` → `14` (sukut qiymat) | **chiziq YO'Q** | serverda delta 0, hujjat yozilmagan |
+| `12.000000` → `41` | «avval 12 edi» | `12` (ortiqcha nollar kesiladi) |
+
+Chiziq yo'qoladigan holatlar: 12 soniya o'tdi · qaytarildi · yacheyka almashdi ·
+**ekran almashdi** (qidiruvga o'tib qaytilsa ham) · «Qolganini 0 qilib yopish»
+ishga tushdi. Qaytarish, sanashning o'zi kabi, **oflayn navbatga qo'yilmaydi**:
+aloqa yo'q bo'lsa chiziq o'z joyida qoladi va omborchi qayta urinadi.
+
+Qaror `CountUndo.kt` da — yana SOF modul, `CountUndoTest.kt` bilan qulflangan
+(eng muhimi: yuboriladigan nishon serverning `^\d+(\.\d{1,6})?$` qoidasidan
+o'tadi).
+
 ## Yangilanish (qurilmadan) — 0.3.0
 
 Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
@@ -380,7 +409,34 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
       («Navbatda: N» hisobi o'zgarmasin).
     - Boshqa yacheyka yorlig'ini skanerlang → progress **0/M** ga tushsin
       (eski ✓ belgilar ergashib o'tmasin).
-14. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+14. **«Oxirgi sanoq» qaytarish (T7):** qoldig'i bor yacheykani Sanashda oching.
+    - Qoldig'i **14** bo'lgan qatorga ataylab **41** yozib **Saqlang** →
+      sarlavha-karta ostida kulrang chiziq chiqsin: «Oxirgi sanoq · <nom> —
+      **avval 14 edi, siz 41 qildingiz**», ostida sariq izoh
+      «🔴 Qaytarish — BEKOR QILISH emas: ilova yangi sanoq (14) yuboradi va
+      tizim YANA hujjat yozadi» va tugma «⟲ Qaytarish — 14 qilib qo'yish».
+    - **⟲ Qaytarish** → «Qaytarilmoqda…» → «Qaytarildi: <nom> = 14» toasti,
+      qatorning «Tizimda» soni **14** ga qaytsin, belgisi **○ kulrang** bo'lsin
+      (progress **1/3** dan **0/3** ga tushadi — sanoq qaytarildi, demak qator
+      hali sanalmagan) va chiziq yo'qolsin.
+    - **ERP'da IKKITA hujjat** turgan bo'lsin (avval KIRIM 27, keyin CHIQIM 27)
+      — qaytarish hujjatni o'chirmaydi, yangisini yozadi.
+    - **O'zgarmagan saqlash chiziq bermasin:** shu qatorga **14** ni (ya'ni
+      sukut qiymatni) qayta saqlang → «Sanoq saqlandi» chiqsin, lekin chiziq
+      **umuman chiqmasin**.
+    - **Yacheykada YO'Q tovar:** 🔍 qidiruvdan yacheykada bo'lmagan tovarni
+      tanlab **5** deb saqlang → chiziqda «avval bu yacheykada YO'Q edi, siz 5
+      qildingiz», izoh **qizil** («qoldiq 0 ga tushadi va tizim CHIQIM
+      (Списание) hujjatini yozadi»), tugma «⟲ Qaytarish — 0 qilib qo'yish».
+    - **Chiziq o'zi yo'qolsin:** yangi sanoq saqlab **12 soniya** kuting →
+      chiziq yo'qolsin.
+    - **Ekran/yacheyka almashishi:** sanoq saqlab, **🔍 Tovar qidirish** ni
+      oching va «Orqaga» qayting → chiziq **bo'lmasin**. Boshqa yacheyka
+      yorlig'ini skanerlaganda ham chiziq bo'lmasin.
+    - **Aloqasiz xulq:** sanoq saqlab Wi-Fi'ni O'CHIRING va ⟲ ni bosing →
+      past signal + qizil banner «Aloqa yo'q — sanoq saqlanmadi, qayta urinib
+      ko'ring», chiziq **O'Z JOYIDA qolsin** (navbatga hech nima tushmasin).
+15. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
     Terminal tokeni bilan `GET /api/v1/products?search=…` → **403**;
     `GET /api/v1/tsd/search?q=…` → **200** va javobda narx maydoni **yo'q**.
 
@@ -459,6 +515,7 @@ app/src/main/java/uz/sherset/tsd/
    ScannerBridge.kt                        — broadcast skaner ko'prigi (ko'p vendor)
    Feedback.kt                             — T4: ovoz (ToneGenerator) + tebranish (Vibrator)
    QtyExpression.kt                        — T5: miqdor ifodasi (SOF modul, `12*24` → `288`)
+   CountUndo.kt                            — T7: qaytarish nishoni (SOF modul; chiziq chiqadimi, qaysi son ketadi)
    Updater.kt                              — qurilmadan yangilash (manifest+sha256+o'rnatish)
    — dizayn qatlami (0.2.0, Compose) —
    Theme.kt                                — ranglar, tipografika, shakllar
@@ -476,5 +533,6 @@ app/src/main/java/uz/sherset/tsd/
    CutScreen.kt                            — K4: bo'linadigan tovar kesimi
 app/src/test/java/uz/sherset/tsd/
    QtyExpressionTest.kt                    — T5: JVM unit-test (17 ta) — `gradle testDebugUnitTest`
+   CountUndoTest.kt                        — T7: JVM unit-test (8 ta) — qaytarish nishoni server regexidan o'tadi
 app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose)
 ```

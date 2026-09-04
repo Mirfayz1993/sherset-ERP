@@ -130,6 +130,22 @@
     <string name="count_close_partial">%1$d qator yopildi, %2$d qator YOPILMADI — qizil qatorlarga qarang</string>
     <string name="count_close_stopped">Aloqa yo\'q — to\'xtatildi. %1$d qator yopildi, %2$d qator yopilmadi</string>
 
+    <!-- T7 - «Oxirgi sanoq» qaytarish.
+         🔴 QAYTARISH BEKOR QILISH EMAS. Server yozilgan hujjatni
+         o'chirmaydi va ilovada bunday sirt umuman yo'q; qaytarish —
+         yangi `set <eski qiymat>` so'rovi, ya'ni tizim IKKINCHI hujjatni
+         yozadi (birinchisi o'z joyida qoladi). Matn buni OCHIQ aytadi:
+         jimgina «bekor bo'ldi» taassuroti berish IS-5 («jim yo'qotish»)
+         klassiga yaqin bo'lardi. -->
+    <string name="count_undo_title">Oxirgi sanoq</string>
+    <string name="count_undo_changed">%1$s — avval %2$s edi, siz %3$s qildingiz</string>
+    <string name="count_undo_new">%1$s — avval bu yacheykada YO\'Q edi, siz %2$s qildingiz</string>
+    <string name="count_undo_note">🔴 Qaytarish — BEKOR QILISH emas: ilova yangi sanoq (%1$s) yuboradi va tizim YANA hujjat yozadi. Birinchi hujjat o\'z joyida qoladi.</string>
+    <string name="count_undo_note_zero">🔴 Qaytarish — BEKOR QILISH emas: qoldiq 0 ga tushadi va tizim CHIQIM (Списание) hujjatini yozadi. Birinchi (KIRIM) hujjat o\'z joyida qoladi.</string>
+    <string name="count_undo_button">⟲ Qaytarish — %1$s qilib qo\'yish</string>
+    <string name="count_undoing">Qaytarilmoqda… kutib turing</string>
+    <string name="count_undo_done">Qaytarildi: %1$s = %2$s</string>
+
     <!-- T3 - nom/artikul bo'yicha qidiruv (`GET /tsd/search`, NARXSIZ) -->
     <string name="search_title">Tovar qidirish</string>
     <string name="search_open">🔍 Tovar qidirish</string>

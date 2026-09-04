@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -81,6 +84,20 @@ import org.json.JSONObject
  * 🔴 Bu amal ham NAVBATGA QO'YILMAYDI (sanash qoidasi o'zgarmadi): aloqa
  * yo'q bo'lsa halqa TO'XTAYDI va yopilmagan qatorlar ekranda kulrang/qizil
  * bo'lib qoladi — jim yo'qotish yo'q (IS-5).
+ *
+ * 🔵 **«OXIRGI SANOQ» QAYTARISH (T7, 2026-09-04).** Noto'g'ri terilgan son
+ * (masalan `14` o'rniga `41`) saqlangach jimgina avto-Оприходование bo'lib
+ * qolardi va omborchi eski qiymatni ESLAB, uni qo'lda qayta terishi kerak
+ * edi — javon oldida turib buni hech kim qilmaydi. Endi saqlashdan keyin
+ * sarlavha ostida chiziq turadi: «avval 14 edi, siz 41 qildingiz ·
+ * ⟲ qaytarish». Eski qiymat saqlashdan OLDIN o'qiladi.
+ *
+ * 🔴 QAYTARISH — BEKOR QILISH EMAS. Server yozilgan hujjatni o'chirmaydi
+ * (bunday sirt umuman yo'q), qaytarish esa oddiy `setCellStock(… , eski
+ * qiymat, mode: 'set')` — ya'ni MUTLAQ SON semantikasi o'zgarmaydi va
+ * tizim IKKINCHI hujjatni yozadi. Chiziqdagi matn shuni ochiq aytadi:
+ * omborchi «bekor bo'ldi» deb o'ylab qolsa, ERP'dagi ikkita hujjatni
+ * ko'rgan buxgalter bilan qarama-qarshilikka tushardi.
  */
 class CountScreen(private val shell: Shell) : Screen {
 
@@ -128,10 +145,57 @@ class CountScreen(private val shell: Shell) : Screen {
     /** T6 — yopish halqasi ketmoqda: tugma o'rniga holat matni chiqadi. */
     private var closing by mutableStateOf(false)
 
+    /**
+     * T7 — oxirgi QIYMATI O'ZGARGAN sanoq. `null` = qaytariladigan narsa yo'q.
+     *
+     * Faqat bitta qator saqlanadi (nomi ham shu): omborchi javon oldida
+     * turib «uch qadam orqaga» qaytmaydi, va uzun undo-tarixi qaysi hujjat
+     * qaysi qatorga tegishli ekanini chalkashtirardi.
+     */
+    private var lastSave by mutableStateOf<LastSave?>(null)
+
+    /** T7 — qaytarish so'rovi ketmoqda: tugma o'rniga holat matni chiqadi. */
+    private var undoing by mutableStateOf(false)
+
+    /**
+     * T7 — [LastSave.seq] uchun hisoblagich. Ketma-ket IKKI marta AYNI
+     * o'zgarish saqlansa (`14 → 41`, keyin yana `14 → 41`) `data class`
+     * nusxalari teng bo'lardi va `LaunchedEffect` avto-yopish taymerini
+     * qayta boshlamasdi — ikkinchi chiziq birinchisidan qolgan vaqtda
+     * yo'qolardi. `MainActivity.errorSeq` dagi naqshning aynan o'zi.
+     */
+    private var saveSeq = 0
+
+    /**
+     * T7 — ekran AYNI DAMDA kompozitsiyadami. Compose state EMAS: u
+     * chizishda o'qilmaydi, faqat «chiziqni qo'yish mumkinmi?» savoliga
+     * javob beradi (o'qish ham, yozish ham UI thread'da).
+     *
+     * Nega kerak: saqlash so'rovi ketayotganda omborchi qidiruvga o'tib
+     * ketsa, javob kelganda chiziq KO'RINMAYOTGAN ekranga qo'yilardi va
+     * qaytib kelganda kutilmaganda paydo bo'lardi.
+     */
+    private var onScreen = false
+
     override fun title(shell: Shell): String = shell.str(R.string.count_title)
 
     @Composable
     override fun Content() {
+        // 🔴 T7 (reja bandi 4) — EKRAN ALMASHSA chiziq yo'qoladi. `WorkRoot`
+        // ekranni `key(screen)` bilan chizadi, ya'ni boshqa ekranga o'tilganda
+        // (Qidiruv, tovar tanlash) shu kompozitsiya TARQATILADI va bu yerga
+        // tushadi. Nega kerak: ekran nusxasi navigatsiya tarixida saqlanadi,
+        // shuning uchun qaytib kelganda eski chiziq o'z joyida turardi va
+        // omborchi allaqachon unutilgan sanoqni «qaytarib» yuborishi mumkin
+        // edi. Yacheyka almashishi esa `clearProgress()` da qamralgan.
+        DisposableEffect(Unit) {
+            onScreen = true
+            onDispose {
+                onScreen = false
+                lastSave = null
+            }
+        }
+
         val c = cell
         if (c == null) {
             SectionCard {
@@ -175,6 +239,11 @@ class CountScreen(private val shell: Shell) : Screen {
             }
         }
         Spacer(Modifier.height(10.dp))
+
+        // T7 — «oxirgi sanoq» chizig'i. Sarlavhadan KEYIN va «sanalayotgan
+        // tovar» kartasidan OLDIN: saqlashdan keyin karta yopiladi va ko'z
+        // aynan shu joyda qoladi.
+        UndoStrip(c)
 
         val p = picked
         if (p != null) {
@@ -363,6 +432,90 @@ class CountScreen(private val shell: Shell) : Screen {
                 pickedQty = ""
             }
         }
+    }
+
+    /**
+     * 🔴 T7 — «Oxirgi sanoq» chizig'i: nima o'zgargani va bir bosishda
+     * qaytarish. Chiziq [UNDO_STRIP_MS] dan keyin O'ZI yo'qoladi.
+     *
+     * **Qaytarish — BEKOR QILISH EMAS.** U hujjatni o'chirmaydi (serverda
+     * bunday sirt yo'q), balki eski qiymat bilan YANGI `set` so'rovini
+     * yuboradi: mutlaq son semantikasi buzilmaydi va tizim ikkinchi hujjat
+     * yozadi. Kartadagi qizil izoh shuni ochiq aytadi — «bekor bo'ldi» degan
+     * jim taassurot ERP tomondagi ikkita hujjat bilan qarama-qarshi bo'lardi.
+     *
+     * 🔴 Chiziq DIALOG emas, oqim ichidagi karta — T6 dagi tasdiq kartasi
+     * bilan bir sabab: dialog `ScanBar` fokusini tortib olsa, yopilgandan
+     * keyin uni hech kim qaytarmaydi va klaviatura-wedge skaner jim o'lardi.
+     *
+     * Chiziq FAQAT qiymat haqiqatan o'zgarganda chiqadi ([save] dagi shart):
+     * maydonning sukut qiymati tizim qoldig'ining O'ZI, ya'ni saqlashlarning
+     * ko'pi «14 → 14» bo'ladi. Ularda server hujjat ham yozmaydi (delta 0)
+     * va qaytariladigan narsa yo'q — har saqlashda chiziq chiqsa u shovqinga
+     * aylanib, HAQIQIY xatolik ko'rinmay qolardi.
+     */
+    @Composable
+    private fun UndoStrip(c: JSONObject) {
+        val last = lastSave ?: return
+
+        if (undoing) {
+            SectionCard(tint = Palette.WarningContainer, border = Palette.Warning) {
+                Text(
+                    stringResource(R.string.count_undoing),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Palette.Warning,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            return
+        }
+
+        // Avto-yopish. Kalit — `seq`, chunki AYNI o'zgarish ikkinchi marta
+        // saqlansa `data class` nusxalari teng bo'lardi va taymer qayta
+        // boshlanmasdi. Taymer tugaganda o'zi qo'ygan chiziq hamon o'sha
+        // ekanini tekshiradi: kechikkan taymer yangi chiziqni o'chirmasin.
+        LaunchedEffect(last.seq) {
+            delay(UNDO_STRIP_MS)
+            if (lastSave?.seq == last.seq) lastSave = null
+        }
+
+        val target = last.target
+        SectionCard(tint = Palette.SurfaceMuted) {
+            Text(
+                stringResource(R.string.count_undo_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (last.before == null) {
+                    stringResource(R.string.count_undo_new, last.name, last.after)
+                } else {
+                    stringResource(R.string.count_undo_changed, last.name, last.before, last.after)
+                },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(6.dp))
+            // Izoh nishonga qarab tanlanadi, kelib chiqishiga emas: nishon 0
+            // bo'lsa qaytarish CHIQIM (Списание) yozadi — yacheykada YO'Q
+            // tovarda ham, qoldig'i 0 biriktirilgan tovarda ham (reja bandi 3).
+            val zeroTarget = target == "0"
+            Text(
+                if (zeroTarget) {
+                    stringResource(R.string.count_undo_note_zero)
+                } else {
+                    stringResource(R.string.count_undo_note, target)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (zeroTarget) Palette.Danger else Palette.Warning,
+            )
+            Spacer(Modifier.height(10.dp))
+            SecondaryButton(
+                text = stringResource(R.string.count_undo_button, target),
+                color = if (zeroTarget) Palette.Danger else Palette.Primary,
+            ) { undoLast(c, last) }
+        }
+        Spacer(Modifier.height(10.dp))
     }
 
     /**
@@ -576,6 +729,10 @@ class CountScreen(private val shell: Shell) : Screen {
         val cellId = c.optString("id")
         confirming = false
         closing = true
+        // T7 — ommaviy yopish oldingi BITTA qatorning chizig'ini eskirtiradi:
+        // «oxirgi sanoq» endi u emas. Ommaviy amalning o'z qaytarishi YO'Q
+        // (T7 doirasi — bitta qator), buni tasdiq matni ochiq aytadi.
+        lastSave = null
         shell.io {
             var ok = 0
             var stopped = false
@@ -642,6 +799,103 @@ class CountScreen(private val shell: Shell) : Screen {
         }
     }
 
+    /**
+     * 🔴 T7 — SAQLASHDAN OLDINGI holatni suratga oladi. `null` qaytarsa
+     * chiziq CHIZILMAYDI (va eskisi ham olib tashlanadi).
+     *
+     * Qarorning O'ZI [CountUndo] da — sof modulda, unit-test bilan
+     * qulflangan. Bu yerda faqat ekranning holati qo'shiladi: qator progress
+     * maxrajida bormidi va taymer kaliti.
+     */
+    private fun undoPoint(assortmentId: String, name: String, after: String): LastSave? {
+        val raw = systemQty(assortmentId)
+        val point = CountUndo.point(raw, after)
+        if (point is CountUndo.Point.Unreadable) {
+            Diagnostics.log("count: qaytarish nuqtasi yo'q — eski qoldiq o'qilmadi: " + raw)
+        }
+        if (point !is CountUndo.Point.Show) return null
+        saveSeq++
+        return LastSave(
+            id = assortmentId,
+            name = name,
+            before = point.before,
+            target = point.target,
+            after = after,
+            wasInRoster = roster.containsKey(assortmentId),
+            seq = saveSeq,
+        )
+    }
+
+    /**
+     * 🔴 T7 — oxirgi sanoqni qaytaradi: eski qiymat bilan YANGI `set` so'rovi.
+     *
+     * Bu BEKOR QILISH emas — server hujjatni o'chirmaydi va ilovada bunday
+     * sirt yo'q. `setCellStock` hamon `mode: 'set'`, ya'ni MUTLAQ SON
+     * semantikasi buzilmaydi: so'rov ikki marta ketsa ham natija AYNI bo'ladi.
+     * Yacheykada bo'lmagan tovar uchun nishon `0` (reja bandi 3).
+     *
+     * Amal, sanashning o'zi kabi, oflayn NAVBATGA QO'YILMAYDI: aloqa yo'q
+     * bo'lsa chiziq O'Z JOYIDA qoladi va omborchi qayta urinadi — «keyin
+     * yuboriladi» degan va'da berilmaydi.
+     */
+    private fun undoLast(c: JSONObject, last: LastSave) {
+        val storeId = c.optString("storeId")
+        val cellId = c.optString("id")
+        val target = last.target
+        undoing = true
+        shell.io {
+            try {
+                shell.api.setCellStock(storeId, cellId, last.id, target)
+            } catch (e: ApiClient.ApiException) {
+                shell.main {
+                    undoing = false
+                    shell.error(
+                        if (e.retriable) shell.str(R.string.count_offline) else (e.message ?: ""),
+                    )
+                }
+                return@io
+            }
+            // Tarkib QAYTA O'QILADI (qabul mezoni). Qayta o'qish yiqilsa ham
+            // qaytarish BO'LDI: belgilar yozilgan AMALDAN olinadi, ro'yxat
+            // esa faqat ko'rinish — T6 dagi qoidaning aynan o'zi.
+            val fresh = try {
+                shell.api.cellStock(storeId, cellId)
+            } catch (e: ApiClient.ApiException) {
+                Diagnostics.log("count: qaytarishdan keyin qayta o'qish xato — " + e.code)
+                null
+            }
+            shell.main {
+                undoing = false
+                // Yacheyka almashib ketgan bo'lsa (so'rov ketayotganda) natija
+                // YANGI yacheykaning qatorlariga tushmasin — `closeRest` dagi
+                // qo'riqning o'zi.
+                if (cell?.optString("id") == cellId) {
+                    if (fresh != null) items = fresh.optJSONArray("items") ?: items
+                    counts.remove(last.id)
+                    // 🔴 Qator endi SANALMAGAN (○): qiymat tizimning o'z
+                    // qoldig'iga qaytdi, ya'ni omborchi uni hali sanamadi.
+                    // ✓ qoldirilsa progress «sanaldi» deb yolg'on aytardi va
+                    // «qolganini 0 qilib yopish» bu qatorni chetlab o'tardi.
+                    marks.remove(last.id)
+                    // Maxrajga qatorni SHU saqlash qo'shgan bo'lsa — olib
+                    // tashlanadi: 0 ga qaytgan qator server javobidan
+                    // yo'qoladi va aks holda progress «12/13» da abadiy
+                    // qolib ketardi (yopadigan qator ekranda yo'q).
+                    if (!last.wasInRoster) roster.remove(last.id)
+                    if (fresh != null) rosterSync()
+                    if (picked?.optString("id") == last.id) {
+                        picked = null
+                        pickedQty = ""
+                    }
+                    // Ikkinchi marta qaytarish taklif qilinmaydi: u endi
+                    // «qaytarish» emas, oddiy yangi sanoq bo'lardi.
+                    lastSave = null
+                }
+                shell.success(shell.str(R.string.count_undo_done, last.name, target))
+            }
+        }
+    }
+
     private fun pick(name: String, assortmentId: String) {
         picked = JSONObject().put("id", assortmentId).put("name", name)
         // Ro'yxatdagi tovarda sukut — tizim qoldig'i (omborchi ko'pincha uni
@@ -670,6 +924,11 @@ class CountScreen(private val shell: Shell) : Screen {
         roster.clear()
         marks.clear()
         confirming = false
+        // 🔴 T7 (reja bandi 4) — YACHEYKA almashsa chiziq ham yo'qoladi.
+        // Aks holda omborchi yangi javon oldida turib eski javonning
+        // sanog'ini «qaytarib» yuborardi. Ekran almashishi esa
+        // `Content()` dagi `DisposableEffect` da qamralgan.
+        lastSave = null
     }
 
     /**
@@ -760,6 +1019,10 @@ class CountScreen(private val shell: Shell) : Screen {
             shell.error(if (input.isBlank()) R.string.count_qty_hint else R.string.qty_invalid)
             return
         }
+        // 🔴 T7 — eski qiymat saqlashdan OLDIN o'qiladi (reja bandi 1). Bu
+        // funksiya UI thread'dan chaqiriladi va `items` faqat `shell.main`
+        // ichida almashadi, ya'ni bu yerdagi o'qish so'rovdan oldingi holat.
+        val undo = undoPoint(assortmentId, name, qty)
         shell.io {
             try {
                 shell.api.setCellStock(c.optString("storeId"), c.optString("id"), assortmentId, qty)
@@ -781,6 +1044,11 @@ class CountScreen(private val shell: Shell) : Screen {
                         picked = null
                         pickedQty = ""
                     }
+                    // T7 — qaytarish chizig'i. `undo == null` bo'lsa (qiymat
+                    // o'zgarmagan yoki eski qiymat o'qib bo'lmaydigan) eski
+                    // chiziq ham OLIB TASHLANADI: u endi «oxirgi» emas.
+                    // Ekran almashib ketgan bo'lsa chiziq umuman qo'yilmaydi.
+                    lastSave = if (onScreen) undo else null
                     shell.success(shell.str(R.string.count_saved))
                 }
             } catch (e: ApiClient.ApiException) {
@@ -807,6 +1075,48 @@ private enum class Mark {
 
 /** T6 — 0 ga tushiriladigan qator: tasdiq ro'yxati aynan shuni chizadi. */
 private data class Pending(val id: String, val name: String, val qty: String)
+
+/**
+ * 🔴 T7 — qaytarish nuqtasi: bitta qatorning SAQLASHDAN OLDINGI holati.
+ *
+ * Faqat SON saqlanadi, hujjat identifikatori emas — chunki qaytarish hujjatni
+ * o'chirmaydi, u yangi `set <before>` so'rovini yuboradi (mutlaq son).
+ */
+private data class LastSave(
+    val id: String,
+    val name: String,
+
+    /**
+     * Saqlashdan oldingi qoldiq, `QtyExpression` orqali normallashtirilgan.
+     * `null` = qator yacheykada UMUMAN yo'q edi; bunda qaytarish nishoni `0`
+     * va matn ham shunga mos bo'ladi (reja bandi 3).
+     */
+    val before: String?,
+
+    /**
+     * Qaytarishda serverga ketadigan MUTLAQ son ([CountUndo.Point.Show]
+     * dan): `before` yo'q bo'lsa `"0"`.
+     */
+    val target: String,
+    val after: String,
+
+    /**
+     * Saqlashdan oldin qator progress MAXRAJIDA (`roster`) bormidi.
+     * Qaytarishda maxrajni tozalash uchun: qatorni maxrajga aynan shu saqlash
+     * qo'shgan bo'lsa, qaytarilgach u yerda qolmasligi kerak.
+     */
+    val wasInRoster: Boolean,
+
+    /** Avto-yopish taymerining kaliti (`MainActivity.errorSeq` naqshi). */
+    val seq: Int,
+)
+
+/**
+ * T7 — chiziq shuncha turadi. Reja 10–15 soniya deydi; o'rtasi olindi:
+ * omborchi saqlagach ekranga bir qaraydi va xatoni shu qarashda ko'radi,
+ * lekin chiziq keyingi tovarga o'tgach yo'lda qolib ketmaydi.
+ */
+private const val UNDO_STRIP_MS = 12_000L
 
 /**
  * Belgi RANGDAN tashqari SHAKL bilan ham farq qiladi: 4" ekranda, qo'lqopda
