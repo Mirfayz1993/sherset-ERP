@@ -288,6 +288,7 @@ describe('PosHeader — qurilma soati ogohlantirishi (S5)', () => {
 describe('PosHeader — skew hali O`LCHANMAGAN (S5)', () => {
   afterEach(() => {
     vi.doUnmock('@/hooks/use-server-clock');
+    vi.unstubAllGlobals();
     vi.resetModules();
     vi.useRealTimers();
     window.localStorage.clear();
@@ -297,6 +298,16 @@ describe('PosHeader — skew hali O`LCHANMAGAN (S5)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-04T10:00:00.000Z'));
     window.localStorage.clear();
+    // 🔴 Tarmoq YOPILADI. Stsenariy aynan «server bilan hech gaplashmagan
+    // qurilma», header ichidagi `PosRateChip` esa haqiqiy `authedFetch`
+    // qiladi — javob kelsa `noteServerDate` skew'ni O'LCHANGAN qilib
+    // qo'yardi va test o'z stsenariysini yo'qotardi. (Lokal mashinada port
+    // bo'sh bo'lgani uchun so'rov o'zi yiqilardi va bu yashirin qolgan edi;
+    // serverda o'sha portda BOSHQA ilova javob berib testni qizartirdi.)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('tarmoq yo`q'))),
+    );
     vi.resetModules();
     const { PosHeader: FreshHeader } = await import('../pos-header');
 
