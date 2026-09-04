@@ -41,6 +41,63 @@ export interface MonthlyEmployeeReport {
   lateMinutesTotal: number;
 }
 
+/**
+ * X2 — xodim O'ZI ko'radigan bir kun.
+ *
+ * ⚠️ `checkInTime`/`checkOutTime` — LOKAL `HH:mm` matni (Toshkent), Date EMAS.
+ * `my/today` da ular to'liq sana-vaqt bo'ladi; bu yerda esa ekranda kun
+ * qatori sifatida chiqadi va oyning barcha kunlari uchun bir xil qisqa
+ * ko'rinish kerak. Maydon nomlari X-rejadagi shartnomadan olingan.
+ *
+ * 🔴 `lateMinutes` — `null` ≠ 0 (0-bo'lim 8-qoidasi): yozuv yo'q kunda
+ * «kechikmagan» deb ko'rsatish YOLG'ON bo'lardi, shuning uchun `null`
+ * («—» chiqadi), 0 esa «keldi va kechikmadi» degani.
+ */
+export interface MyHistoryDay {
+  date: string; // yyyy-MM-dd (Toshkent)
+  checkInTime: string | null; // 'HH:mm' lokal — null = o'sha kun yozuvi yo'q
+  checkOutTime: string | null; // 'HH:mm' lokal — null = yopilmagan yoki yozuv yo'q
+  lateMinutes: number | null; // null = yozuv yo'q; 0 = keldi, kechikmadi
+  isDayOff: boolean;
+  autoClosed: boolean; // kunni tungi kron yopgan (ketish ko'rinmagan)
+  status: MonthlyRow['status'];
+}
+
+export interface MyHistoryResult {
+  yearMonth: string;
+  days: MyHistoryDay[];
+  totals: {
+    presentDays: number;
+    lateDays: number;
+    absentDays: number;
+    dayOffDays: number;
+    lateMinutesTotal: number;
+  };
+}
+
+const EMPTY_TOTALS: MyHistoryResult['totals'] = {
+  presentDays: 0,
+  lateDays: 0,
+  absentDays: 0,
+  dayOffDays: 0,
+  lateMinutesTotal: 0,
+};
+
+/** 'yyyy-MM' → oyning [boshlanish, tugash) chegarasi (Toshkent kalendari). */
+function monthRange(yearMonth: string): { monthStart: Date; monthEnd: Date } {
+  const y = Number(yearMonth.slice(0, 4));
+  const m = Number(yearMonth.slice(5, 7));
+  const nextYm = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  return {
+    monthStart: fromZonedTime(`${yearMonth}-01T00:00:00`, HR_TZ),
+    monthEnd: fromZonedTime(`${nextYm}-01T00:00:00`, HR_TZ),
+  };
+}
+
+const WEEK_SELECT = {
+  select: { weekday: true, startTime: true, endTime: true, isDayOff: true },
+} as const;
+
 /** Monthly attendance report (schedule x attendance) + today's live board. */
 @Injectable()
 export class HrDavomatReportService {
@@ -51,11 +108,7 @@ export class HrDavomatReportService {
     filter: MonthlyReportFilter,
   ): Promise<{ yearMonth: string; employees: MonthlyEmployeeReport[] }> {
     const { yearMonth, employeeId } = filter;
-    const y = Number(yearMonth.slice(0, 4));
-    const m = Number(yearMonth.slice(5, 7));
-    const nextYm = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-    const monthStart = fromZonedTime(`${yearMonth}-01T00:00:00`, HR_TZ);
-    const monthEnd = fromZonedTime(`${nextYm}-01T00:00:00`, HR_TZ);
+    const { monthStart, monthEnd } = monthRange(yearMonth);
     const todayLocalDate = formatInTimeZone(new Date(), HR_TZ, 'yyyy-MM-dd');
 
     const employees = await this.prisma.client.employee.findMany({
@@ -67,9 +120,7 @@ export class HrDavomatReportService {
       select: {
         id: true,
         name: true,
-        workSchedules: {
-          select: { weekday: true, startTime: true, endTime: true, isDayOff: true },
-        },
+        workSchedules: WEEK_SELECT,
       },
       orderBy: { name: 'asc' },
     });
@@ -105,6 +156,90 @@ export class HrDavomatReportService {
       });
     }
     return { yearMonth, employees: out };
+  }
+
+  /**
+   * X2 — xodimning O'Z oylik davomat tarixi (`GET /hr/attendance/my/history`).
+   *
+   * 🔴 XAVFSIZLIK: `employeeId` FAQAT `user.sub` dan keladi (kontroller uni
+   * so'rov parametridan OLMAYDI), qidiruv esa ustiga `accountId` bilan ham
+   * chegaralangan. Ya'ni boshqa xodimni (yoki boshqa akkauntni) so'rashning
+   * YO'LI YO'Q. `monthly()` ga TEGILMADI — u menejer hisoboti va u yerda
+   * `employeeId` filtri ATAYLAB tanlanadigan (`employees:read` ostida).
+   *
+   * Hisob mantig'i qayta yozilmagan: kun/holat/jamlar `computeMonthlyAttendance`
+   * dan (menejer hisoboti bilan BIR XIL manba), bu metod ustiga faqat
+   * `autoClosed` ni va halol-raqam (`null` ≠ 0) qoidasini qo'yadi.
+   */
+  async myHistory(
+    accountId: string,
+    employeeId: string,
+    yearMonth?: string,
+  ): Promise<MyHistoryResult> {
+    const todayLocalDate = formatInTimeZone(new Date(), HR_TZ, 'yyyy-MM-dd');
+    const ym = yearMonth ?? todayLocalDate.slice(0, 7);
+
+    const emp = await this.prisma.client.employee.findFirst({
+      where: { id: employeeId, accountId },
+      select: { id: true, workSchedules: WEEK_SELECT },
+    });
+    // Xodim bu akkauntda topilmadi — bo'sh tarix. Bo'sh jadval bilan hisoblab
+    // yuborish oyni butunlay «dam olish» qilib ko'rsatardi, bu esa yolg'on.
+    if (!emp) return { yearMonth: ym, days: [], totals: { ...EMPTY_TOTALS } };
+
+    const { monthStart, monthEnd } = monthRange(ym);
+    const attendance = await this.prisma.client.hrAttendance.findMany({
+      where: {
+        accountId,
+        employeeId,
+        deletedAt: null,
+        checkInTime: { gte: monthStart, lt: monthEnd },
+      },
+      select: {
+        checkInTime: true,
+        checkOutTime: true,
+        lateMinutes: true,
+        autoClosed: true,
+      },
+      orderBy: { checkInTime: 'asc' },
+    });
+
+    const agg = computeMonthlyAttendance({
+      yearMonth: ym,
+      week: emp.workSchedules,
+      attendance,
+      tz: HR_TZ,
+      todayLocalDate,
+    });
+
+    // `computeMonthlyAttendance` kunning BIRINCHI kelishini oladi; `autoClosed`
+    // ni ham aynan o'sha yozuvdan olamiz, aks holda ikki yozuvli kunda bayroq
+    // boshqa qatordan kelib qolardi.
+    const autoClosedByDate = new Map<string, boolean>();
+    for (const a of attendance) {
+      const d = formatInTimeZone(a.checkInTime, HR_TZ, 'yyyy-MM-dd');
+      if (!autoClosedByDate.has(d)) autoClosedByDate.set(d, a.autoClosed);
+    }
+
+    return {
+      yearMonth: ym,
+      days: agg.rows.map((r) => ({
+        date: r.date,
+        checkInTime: r.checkIn,
+        checkOutTime: r.checkOut,
+        lateMinutes: r.checkIn === null ? null : r.lateMinutes,
+        isDayOff: r.status === 'dayoff',
+        autoClosed: autoClosedByDate.get(r.date) ?? false,
+        status: r.status,
+      })),
+      totals: {
+        presentDays: agg.presentDays,
+        lateDays: agg.lateDays,
+        absentDays: agg.absentDays,
+        dayOffDays: agg.dayOffDays,
+        lateMinutesTotal: agg.rows.reduce((a, r) => a + r.lateMinutes, 0),
+      },
+    };
   }
 
   /** Today's board: present (with status) + scheduled-but-absent opted-in employees. */
@@ -174,9 +309,7 @@ export class HrDavomatReportService {
         name: true,
         department: true,
         workLocation: { select: { id: true, name: true } },
-        workSchedules: {
-          select: { weekday: true, startTime: true, endTime: true, isDayOff: true },
-        },
+        workSchedules: WEEK_SELECT,
         schedule: { select: SCHEDULE_SELECT },
       },
       orderBy: { name: 'asc' },

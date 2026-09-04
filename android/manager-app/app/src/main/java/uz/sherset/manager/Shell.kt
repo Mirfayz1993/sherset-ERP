@@ -41,6 +41,19 @@ interface Shell {
 
     /** Sessiyani yopadi (lokal sirlar o'chadi, server zanjiri bekor qilinadi). */
     fun logout()
+
+    /**
+     * Bir martalik GPS o'lchovi — «Keldim»/«Ketyapman» uchun (X2).
+     *
+     * Ruxsat FAQAT shu chaqiruvda so'raladi (ilova ochilishida EMAS): ilova
+     * qolgan hamma joyda o'qish-ilova bo'lib qolaveradi, lokatsiya esa xodim
+     * tugmani o'zi bosgandagina kerak.
+     *
+     * Natija HAR DOIM UI thread'da va BIR MARTA keladi. `null` — o'lchov
+     * bo'lmadi; sababi (ruxsat berilmadi / GPS o'chiq / vaqt tugadi) qobiq
+     * tomonidan toast bilan aytiladi, ekran esa shunchaki tugmani qayta ochadi.
+     */
+    fun locate(onFix: (Locator.Fix?) -> Unit)
 }
 
 /**

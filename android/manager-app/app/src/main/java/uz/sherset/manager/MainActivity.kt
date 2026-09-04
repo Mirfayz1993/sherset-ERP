@@ -54,6 +54,14 @@ class MainActivity : ComponentActivity(), Shell {
     private val ioPool = Executors.newSingleThreadExecutor()
     private lateinit var store: SessionStore
 
+    /**
+     * X2 — «Keldim»/«Ketyapman» uchun bir martalik GPS o'lchovi.
+     * 🔴 Maydon sifatida tuziladi (`onCreate` ichida EMAS): ichidagi
+     * `registerForActivityResult` `STARTED` holatidan OLDIN ro'yxatdan
+     * o'tishi shart, aks holda ilova ochilishda yiqiladi.
+     */
+    private val locator = Locator(this)
+
     override lateinit var api: ApiClient
     override var userName: String = ""
 
@@ -304,6 +312,25 @@ class MainActivity : ComponentActivity(), Shell {
     }
 
     override fun main(work: () -> Unit) = runOnUiThread(work)
+
+    /**
+     * X2 — bitta GPS o'lchovi. Sabab toast bilan aytiladi, ekranga esa
+     * `null` qaytadi (ekran tugmani qayta ochadi, o'zi xabar chiqarmaydi).
+     */
+    override fun locate(onFix: (Locator.Fix?) -> Unit) {
+        locator.locate { fix, failure ->
+            if (fix == null) {
+                toast(
+                    when (failure) {
+                        Locator.Failure.DENIED -> R.string.loc_denied
+                        Locator.Failure.NO_PROVIDER -> R.string.loc_disabled
+                        else -> R.string.loc_timeout
+                    },
+                )
+            }
+            onFix(fix)
+        }
+    }
 
     /** Chiqish — sirlar o'chadi, server zanjiri bekor qilinadi (best-effort). */
     override fun logout() {

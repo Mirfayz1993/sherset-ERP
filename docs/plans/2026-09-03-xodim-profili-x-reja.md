@@ -267,3 +267,65 @@ hisobotini yoz va TO'XTA.
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi (amend qilinsa hash yana o'zgaradi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x1 — bosh ekran rolga moslashdi`.
+
+---
+
+### X2 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi
+
+**O'zgargan/yangi fayllar:**
+
+*Server — `apps/api/src/modules/hr/attendance-geo/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `attendance-geo.schema.ts` | `MyHistoryQuerySchema` — FAQAT ixtiyoriy `yearMonth` (`^\d{4}-(0[1-9]|1[0-2])$`). 🔴 `employeeId` maydoni ATAYLAB YO'Q: zod obyekti notanish kalitlarni olib tashlaydi ⇒ `?employeeId=` kontrollergacha YETIB BORMAYDI. |
+| `davomat-report.service.ts` | `myHistory(accountId, employeeId, yearMonth?)` — self-scoped. Hisob mantig'i QAYTA YOZILMADI: kun/holat/jamlar `computeMonthlyAttendance` dan (menejer hisoboti bilan bir xil manba), o'ram ustiga faqat `autoClosed` va `null ≠ 0` qoidasini qo'yadi. `monthRange()` + `WEEK_SELECT` — `monthly()`/`dashboard()` dan takrorlanish olib tashlandi. |
+| `ping.controller.ts` | `GET my/history` — `my/today` naqshida: `JwtAuthGuard`, `employeeId = user.sub`, `accountId = user.accountId`. `HrDavomatReportService` inyeksiya qilindi. |
+| `davomat-report.service.test.ts` | +7 test (quyida). |
+| `my-history.controller.test.ts` | **YANGI** — 5 ta own-only qulf testi. |
+
+*Ilova — `android/manager-app/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/Davomat.kt` | **YANGI.** Oy/kun hisobining SOF funksiyalari (`HrAccess` naqshi — Android'siz, `org.json` siz ⇒ JVM testi): `currentYearMonth` (TOSHKENT kalendari), `shiftMonth`, `canGoNext`, `monthLabel`, `dayNumber`, `weekdayLabel`, `lateLabel` (null≠0), `timeOrDash`, `localTime` (UTC→Toshkent). |
+| `…/Locator.kt` | **YANGI.** Bir martalik GPS o'lchovi: ruxsat so'rash + GPS→tarmoq→yaqindagi oxirgi joy (2 daqiqadan eski OLINMAYDI), har provayderga 15 s, natija bir marta va UI thread'da. |
+| `…/AttendanceScreen.kt` | **YANGI.** Bugungi holat kartasi (status plashkasi, kelish/ketish/kechikish, smena, ish joyi, `autoClosed` belgisi) + «Keldim»/«Ketyapman»/opt-in + oylik tarix (oy tanlagichi, jamlar, kun qatorlari: kech sariq, kelmagan qizil, dam kulrang). |
+| `…/ApiClient.kt` | `attendanceToday/History/CheckIn/CheckOut/OptIn` + `post()` yordamchisi. |
+| `…/Shell.kt` | Shartnomaga `locate(onFix)` qo'shildi. |
+| `…/MainActivity.kt` | `locator` MAYDON sifatida (`registerForActivityResult` STARTED dan oldin bo'lishi shart) + `locate()` amalga oshirildi (sababni toast bilan aytadi). |
+| `…/HomeScreen.kt` | «Davomat» plitkasi `ComingSoonScreen` o'rniga `AttendanceScreen` ga ulandi (qolgan 3 plitka X3–X6 ni kutadi). |
+| `…/AndroidManifest.xml` | `ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION`. FON ruxsati va fon xizmati ATAYLAB YO'Q. |
+| `…/res/values/strings.xml` | +40 satr (davomat, server rad sabablari, tarix, joylashuv xabarlari). |
+| `…/test/…/DavomatTest.kt` | **YANGI** — 22 ta JVM testi. |
+
+**Testlar:**
+
+- `vitest run src/modules/hr/attendance-geo` → **22 fayl, 131 test, 131 o'tdi, 0 yiqildi** (shundan 12 tasi yangi).
+  - Servis (7): o'z oyi kunma-kun to'g'ri · kelmagan kunda `lateMinutes = null` (0 EMAS) · kelib kechikmagan kunda `0` (null EMAS) · `autoClosed` FAQAT o'sha kunga tushadi · `yearMonth` berilmasa joriy oy va kelajak kunlar chizilmaydi · **🔴 prisma `where` da FAQAT `accountId`+`employeeId`** (kalitlar ro'yxati qat'iy tekshiriladi — kelajakda `OR`/`in` qo'shilsa test yiqiladi) · **🔴 boshqa akkaunt xodimi → bo'sh tarix va davomat jadvaliga UMUMAN so'rov ketmaydi.**
+  - Kontroller (5): `employeeId` token'dan · **🔴 `?employeeId=<o'zga>` e'tiborsiz** · **🔴 `?accountId=` ham e'tiborsiz** · `yearMonth` sukut qiymati · noto'g'ri oy (13-oy, kun bilan, bo'sh) rad etiladi.
+  - Vaqt qotirildi (`vi.setSystemTime`) — «joriy oy» sinovlari kalendarga bog'lanib qolmasin.
+- `vitest run src/modules/hr` (butun HR moduli) → **95 fayl, 1022 test, hammasi o'tdi.**
+- `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato.**
+- `gradle testDebugUnitTest` → **38 test, 38 o'tdi** (22 yangi `DavomatTest` + 16 X1 `HrAccessTest`).
+- `gradle assembleDebug` (JDK 17, Gradle 8.7) → **BUILD SUCCESSFUL, ogohlantirishsiz.** APK 13 034 880 bayt (~12,4 MiB; X1 dan +44 KB — yangi bog'liqlik qo'shilmadi).
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **v0.1 ning «lokatsiya ATAYLAB yo'q» qoidasiga ONGLI istisno.** Server `my/check-in` ni GEOFENCE bilan tekshiradi (`ping-ingest.service.ts` — `isInsideGeofence`, aniqlik chegarasi 100 m), ya'ni koordinatasiz «Keldim» MUMKIN EMAS. Chegaralar: fon ruxsati YO'Q, fon xizmati YO'Q, o'lchov FAQAT tugma bosilganda, ruxsat ham aynan o'sha payt so'raladi. **Play Services ISHLATILMADI** (driver-app `FusedLocationProviderClient` yo'lidan farqli) — `LocationManagerCompat` androidx.core ichida, yangi bog'liqliksiz va GMS'siz planshetda ham ishlaydi.
+2. 🔴 **`my/today` VAQTLARI UTC keladi — X5/X6 ga eslatma.** Nest `Date` ni `JSON.stringify` bilan beradi (`…T04:20:00.000Z`). Matndan kesib olish (`Fmt.dateTimeShort` naqshi) ekranda **5 SOAT orqadagi** vaqtni chiqarardi. Shuning uchun `Davomat.localTime` qo'shildi (`OffsetDateTime` → Toshkent), unga 4 ta test bor. **Keyingi fazalarda serverdan `Date` kelsa AYNAN shu tuzoq takrorlanadi.**
+3. **Maydon nomlari rejadan, qiymat turi boshqacha:** `my/history` javobidagi `checkInTime`/`checkOutTime` — LOKAL `HH:mm` MATNI (`my/today` dagi to'liq Date'dan farq qiladi). Sababi: oy jadvalida 30 ta qator qisqa vaqt ko'rsatadi, `computeMonthlyAttendance` esa allaqachon `HH:mm` beradi. Servis izohida va JSDoc'da yozib qo'yildi.
+4. **`lateMinutes: null`** — rejadagi shartnoma. `computeMonthlyAttendance` yozuv yo'q kunda `0` beradi; o'ram uni `null` ga aylantiradi, aks holda «kelmagan kun» ekranda «kechikmadi» bo'lib ko'rinardi. Jamlardagi `lateMinutesTotal` esa son bo'lib qolaveradi.
+5. ⚠️ **Jadvalsiz xodimda butun oy «dam olish» ko'rinadi.** `computeMonthlyAttendance` da `scheduleFor()` null bo'lsa kun `dayoff` bo'ladi — bu MAVJUD xulq (menejer hisoboti ham shunday), o'zgartirilmadi. Ammo `EmployeeWorkSchedule` biriktirilmagan xodim «Davomat» ekranida oyni butunlay dam olish deb ko'radi. **Egasidan tekshirish so'raladi:** jonlida qaysi xodimlarda hafta jadvali yo'q? (Tuzatish X-reja qamrovidan tashqarida — u menejer hisobotiga ham tegadi.)
+6. ⚠️ **`AndroidManifest.xml` shu commitga KIRITILDI.** U X1 dan keyin ham kuzatilmagan (v0.1 qoldig'i) edi, lekin X2 ruxsatlari usiz ishlamaydi — ekranning asosiy tugmasi o'lik bo'lib qolardi. Ya'ni commitda v0.1 manifestining butun matni bor, faqat mening qo'shgan qatorlarim emas.
+7. **X1 ning 4-topilmasi HAMON KUCHDA:** `android/manager-app/` ning katta qismi (`BriefingScreen.kt`, `Widgets.kt`, `Theme.kt`, `Updater.kt`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` …) hamon KUZATILMAGAN, ya'ni X1+X2 commitlari yolg'iz o'zi yig'ilmaydi. Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 ga shu vazifa berilsin).
+8. **Kichik refaktor:** `davomat-report.service.ts` da uch joyda takrorlangan `workSchedules` select'i → `WEEK_SELECT`, oy chegarasi hisobi → `monthRange()`. Mavjud testlar bilan qoplangan.
+9. `Locator` da `android.os.CancellationSignal` ishlatildi — `androidx.core.os` varianti ham, uni oladigan `getCurrentLocation` ortiqchasi ham eskirgan (birinchi qurishda ogohlantirish chiqdi, tuzatildi).
+10. Platformaning bekor qilinishi `Consumer` ni chaqirmasligi mumkin — shuning uchun `Locator` da O'Z taymeri bor va `AtomicBoolean` ikki marta chaqirilishdan qo'riqlaydi (aks holda «Yuborilmoqda…» tugmasi abadiy qotib qolardi).
+11. **Commitda 17-fayl bor: `docs/progress.json`.** Uni MEN yozmadim — repo'ning O'Z pre-commit ilgagi qayta yaratib stage'ga qo'shdi (o'zgargani faqat `generatedAt` vaqt tamg'asi). `lint-staged` shu yerda biome bilan yangi test fayllarining qo'shtirnoq uslubini ham tekislab qo'ydi (testlar keyin qayta yuritildi — 131 o'tdi).
+12. Daraxtda boshqa sessiyaning kuzatilgan, lekin commit qilinmagan ishi turibdi (`android/tsd-app/` — T9 release-imzo; `apps/api/src/modules/auth`, `permissions`). Ularga TEGILMADI, commitga ham kirmadi.
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x2 — davomat ekrani va my/history endpointi`.

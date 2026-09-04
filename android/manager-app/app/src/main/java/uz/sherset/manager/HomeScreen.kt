@@ -126,7 +126,8 @@ class HomeScreen(private val shell: Shell) : Screen {
                 icon = Icons.Filled.DateRange,
                 label = stringResource(R.string.tile_attendance),
                 tint = MaterialTheme.colorScheme.primary,
-            ) { shell.go(ComingSoonScreen(shell, R.string.tile_attendance)) },
+                // X2 — «Tez orada» o'rniga haqiqiy ekran ulandi.
+            ) { shell.go(AttendanceScreen(shell)) },
             TileSpec(
                 icon = Icons.Filled.Edit,
                 label = stringResource(R.string.tile_my_tasks),

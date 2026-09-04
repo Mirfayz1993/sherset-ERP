@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Query, UseGuards } from '@nestjs/common';
 import type { AuthenticatedUser } from '../../auth/auth.schema.js';
 import { CurrentUser } from '../../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
-import { OptInSchema, PingSchema } from './attendance-geo.schema.js';
+import { MyHistoryQuerySchema, OptInSchema, PingSchema } from './attendance-geo.schema.js';
+import { HrDavomatReportService } from './davomat-report.service.js';
 import { HrDavomatStatusService } from './davomat-status.service.js';
 import { HrPingIngestService } from './ping-ingest.service.js';
 
@@ -16,6 +17,7 @@ export class HrDavomatPingController {
   constructor(
     @Inject(HrPingIngestService) private readonly ingest: HrPingIngestService,
     @Inject(HrDavomatStatusService) private readonly status: HrDavomatStatusService,
+    @Inject(HrDavomatReportService) private readonly report: HrDavomatReportService,
   ) {}
 
   @Post('ping')
@@ -26,6 +28,20 @@ export class HrDavomatPingController {
   @Get('my/today')
   async myToday(@CurrentUser() user: AuthenticatedUser) {
     return this.status.myToday(user.accountId, user.sub);
+  }
+
+  /**
+   * X2 — xodimning O'Z oylik davomat tarixi (mobil «Davomat» ekrani).
+   *
+   * 🔴 Kim so'ralayotgani FAQAT `user.sub` dan olinadi. So'rovdagi
+   * `?employeeId=` (yoki boshqa har qanday notanish kalit) `MyHistoryQuerySchema`
+   * da OLIB TASHLANADI — u bu yergacha yetib kelmaydi. Bu shart
+   * `my-history.controller.test.ts` da qulflangan.
+   */
+  @Get('my/history')
+  async myHistory(@CurrentUser() user: AuthenticatedUser, @Query() query: unknown) {
+    const { yearMonth } = MyHistoryQuerySchema.parse(query ?? {});
+    return this.report.myHistory(user.accountId, user.sub, yearMonth);
   }
 
   @Post('my/opt-in')

@@ -48,6 +48,24 @@ export const MonthlyReportFilterSchema = z.object({
   employeeId: z.string().uuid().optional(),
 });
 
+/**
+ * X2 — xodimning O'Z davomat tarixi (`GET /hr/attendance/my/history`).
+ *
+ * 🔴 `employeeId` maydoni ATAYLAB YO'Q: xodim kimning tarixini so'rashini
+ * TANLAY OLMAYDI, manba har doim `user.sub`. Zod obyekti sukut bo'yicha
+ * notanish kalitlarni OLIB TASHLAYDI, ya'ni `?employeeId=<o'zga>` jimgina
+ * yo'qoladi (X-reja 0-bo'lim 7-qoidasi). Qo'riqchi test:
+ * `my-history.controller.test.ts`.
+ *
+ * `yearMonth` berilmasa — joriy oy (servis Toshkent kalendaridan oladi).
+ */
+export const MyHistoryQuerySchema = z.object({
+  yearMonth: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Oy 'yyyy-MM' ko'rinishida bo'lishi kerak")
+    .optional(),
+});
+
 export const DashboardQuerySchema = z.object({
   date: z
     .string()
@@ -60,3 +78,4 @@ export type WorkLocationInput = z.infer<typeof WorkLocationSchema>;
 export type ScheduleWeekInput = z.infer<typeof ScheduleWeekSchema>;
 export type AttendanceConfigInput = z.infer<typeof AttendanceConfigSchema>;
 export type MonthlyReportFilter = z.infer<typeof MonthlyReportFilterSchema>;
+export type MyHistoryQuery = z.infer<typeof MyHistoryQuerySchema>;

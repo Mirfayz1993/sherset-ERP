@@ -141,6 +141,34 @@ class ApiClient(private val baseUrl: String) {
     fun collection(scope: String): JSONObject =
         get("/manager/collection?scope=" + enc(scope) + "&limit=200")
 
+    // ── Xodimning O'ZI: davomat (X2) ────────────────────────────────────────
+    //
+    // Bularning hammasi `ping.controller.ts` da va FAQAT `JwtAuthGuard` bilan
+    // yopilgan: xodim token'dan olinadi. Ya'ni ilova KIMNI so'rashini tanlay
+    // olmaydi — `employeeId` parametri bu yo'llarda UMUMAN yo'q.
+
+    /** Bugungi holat: `{optIn, workLocation, schedule, today, status}`. */
+    fun attendanceToday(): JSONObject = get("/hr/attendance/my/today")
+
+    /** Oylik tarix: `{yearMonth, days[], totals}` — X2 da ochilgan endpoint. */
+    fun attendanceHistory(yearMonth: String): JSONObject =
+        get("/hr/attendance/my/history?yearMonth=" + enc(yearMonth))
+
+    /** «Keldim» — server geofence bilan tekshiradi; javob `{ok, reason, status}`. */
+    fun attendanceCheckIn(lat: Double, lng: Double, accuracy: Double): JSONObject =
+        post("/hr/attendance/my/check-in", ping(lat, lng, accuracy))
+
+    /** «Ketyapman» — ochiq yozuvni yopadi (joy tekshirilmaydi, faqat yozib qo'yiladi). */
+    fun attendanceCheckOut(lat: Double, lng: Double, accuracy: Double): JSONObject =
+        post("/hr/attendance/my/check-out", ping(lat, lng, accuracy))
+
+    /** Davomat kuzatuvini yoqish — xodimning O'Z roziligi (`my/opt-in`). */
+    fun attendanceOptIn(optIn: Boolean): JSONObject =
+        post("/hr/attendance/my/opt-in", JSONObject().put("optIn", optIn))
+
+    private fun ping(lat: Double, lng: Double, accuracy: Double): JSONObject =
+        JSONObject().put("lat", lat).put("lng", lng).put("accuracy", accuracy)
+
     // -- ichki ---------------------------------------------------------------
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path
@@ -151,8 +179,22 @@ class ApiClient(private val baseUrl: String) {
         exec(Request.Builder().url(url(path)).get(), auth = true, retryOn401 = true)
 
     /**
+     * Auth'li POST. 401 da BIR MARTA qaytarish bu yo'llar uchun XAVFSIZ:
+     * check-in ochiq yozuv bo'lsa yangi yozuv yaratmay `already_open` beradi,
+     * check-out esa ochiq yozuv bo'lmasa `no_open_record` — ikkalasi ham
+     * takrorlansa qo'sh yozuv chiqmaydi (`ping-ingest.service.ts`).
+     */
+    private fun post(path: String, body: JSONObject): JSONObject =
+        exec(
+            Request.Builder().url(url(path)).post(body.toString().toRequestBody(json)),
+            auth = true,
+            retryOn401 = true,
+        )
+
+    /**
      * So'rovni bajaradi. `retryOn401` — access-token eskirgan bo'lsa BIR MARTA
-     * refresh qilib qaytaradi (faqat auth'li GET yo'llarda).
+     * refresh qilib qaytaradi (auth'li GET yo'llarda va yuqoridagi idempotent
+     * davomat POST'larida).
      */
     private fun exec(builder: Request.Builder, auth: Boolean, retryOn401: Boolean): JSONObject {
         if (auth) accessToken?.let { builder.header("Authorization", "Bearer $it") }

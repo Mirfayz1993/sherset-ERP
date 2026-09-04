@@ -39,6 +39,54 @@
     <string name="tile_my_routes">Yo\'nalishlarim</string>
     <string name="coming_soon_note">Bu bo\'lim keyingi yangilanishda ochiladi.</string>
 
+    <!-- Davomat (X2) — xodimning O\'Z kelgan/ketgani -->
+    <string name="att_status_not_arrived">Kelmagan</string>
+    <string name="att_status_at_work">Ishda</string>
+    <string name="att_status_left">Ketgan</string>
+    <string name="att_arrived_at">Kelish</string>
+    <string name="att_left_at">Ketish</string>
+    <string name="att_late">Kechikish</string>
+    <string name="att_schedule">Bugungi smena</string>
+    <string name="att_dayoff">Dam olish kuni</string>
+    <string name="att_workplace">Ish joyi</string>
+    <string name="att_no_workplace">Sizga ish joyi biriktirilmagan — HR ga murojaat qiling</string>
+    <string name="att_check_in">Keldim</string>
+    <string name="att_check_out">Ketyapman</string>
+    <string name="att_marking">Yuborilmoqda…</string>
+    <string name="att_done_today">Bugungi kun yakunlandi</string>
+    <string name="att_checked_in">Kelganingiz belgilandi</string>
+    <string name="att_checked_out">Ketganingiz belgilandi</string>
+    <string name="att_auto_closed">Kunni tizim avtomatik yopgan</string>
+    <string name="att_auto_closed_short">avto</string>
+    <string name="att_optin_note">Davomat kuzatuvi o\'chiq. Yoqsangiz kelish-ketish vaqtingiz yozib boriladi.</string>
+    <string name="att_optin_button">Davomatni yoqish</string>
+
+    <!-- Server rad javoblari (ManualMarkResult.reason) — yopiq lug\'at -->
+    <string name="att_reason_outside">Ish joyidan uzoqdasiz — belgilanmadi</string>
+    <string name="att_reason_accuracy">GPS aniqligi past — ochiq joyga chiqib qayta urining</string>
+    <string name="att_reason_not_opted_in">Davomat yoqilmagan</string>
+    <string name="att_reason_no_location">Sizga ish joyi biriktirilmagan — HR ga murojaat qiling</string>
+    <string name="att_reason_no_open_record">Bugun ochiq yozuv yo\'q</string>
+    <string name="att_reason_unknown">Belgilanmadi — qayta urining</string>
+
+    <!-- Oylik tarix -->
+    <string name="att_prev_month">Oldingi</string>
+    <string name="att_next_month">Keyingi</string>
+    <string name="att_history_empty">Bu oyda yozuv yo\'q</string>
+    <string name="att_total_present">Ishlangan kun</string>
+    <string name="att_total_late">Kech qolgan kun</string>
+    <string name="att_total_absent">Kelmagan kun</string>
+    <string name="att_total_late_minutes">Jami kechikish</string>
+    <string name="att_day_present">Keldi</string>
+    <string name="att_day_late">Kechikdi</string>
+    <string name="att_day_absent">Kelmadi</string>
+    <string name="att_day_off">Dam</string>
+
+    <!-- Joylashuv — FAQAT «Keldim»/«Ketyapman» bosilganda so\'raladi -->
+    <string name="loc_denied">Joylashuv ruxsati berilmadi — «Keldim» ishlamaydi</string>
+    <string name="loc_disabled">GPS o\'chiq — qurilma sozlamalaridan yoqing</string>
+    <string name="loc_timeout">Joylashuv aniqlanmadi — ochiq joyga chiqib qayta urining</string>
+
     <!-- Brifing -->
     <string name="briefing_title">Brifing</string>
     <string name="briefing_morning">Ertalabki</string>
