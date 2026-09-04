@@ -62,7 +62,8 @@ o'z-o'zidan `done` bo'ladi va chek KONTROL navbatiga tushadi (G2) — TSD chekni
 | `/restock-tasks/:id/lines/:lineId/confirm` | POST | Qatorni qo'lda tasdiqlash |
 | `/restock-tasks/:id/confirm-scan` | POST | Skaner bilan tasdiqlash |
 | `/restock-tasks/:id/lines/:lineId/shortage` | POST | **G6** — «topolmadim» (mutlaq miqdor; `0` = belgini olib tashlash) |
-| `/tsd/scan?code=` | GET | **Narxsiz** tovar qidiruvi (multi-hit) |
+| `/tsd/scan?code=` | GET | **Narxsiz** tovar qidiruvi — AYNAN moslik (multi-hit) |
+| `/tsd/search?q=` | GET | **T3** — **narxsiz** nom/artikul qidiruvi (`contains`, min 2 belgi, eng ko'pi 30 ta). Javob: `{query, products, truncated}`; `products` elementi `/tsd/scan` bilan **AYNI shaklda** (serverda ikkalasi ham `buildProductHits` dan chiqadi) |
 | `/admin/stores/cells/by-barcode?code=` | GET | Yacheyka yorlig'i |
 | `/products/:id/cell-move` · `/cell-place` | POST | Ko'chirish / joylashtirish |
 | `/admin/stores/:id/cells/:cellId/stock` | GET·PUT | Yacheyka sanash |
@@ -80,6 +81,15 @@ omborchiga»*. `GET /products` to'liq tovar qatorini (`buyPrice`, `minPrice`,
 `salePrices`) qaytaradi, shuning uchun u TSD ro'yxatida **umuman yo'q** —
 o'rniga `GET /tsd/scan` bor va uning ustunlari `tsd-scan.ts` da **oq ro'yxat**
 bilan sanab chiqilgan. Ekranda ko'rsatmaslik himoya emas: token haqiqiy.
+
+**T3 (2026-09-03) shu qoidani QAYTA sinadi.** Omborchiga nom bo'yicha qidiruv
+kerak bo'ldi va eng oson yechim `/products?search=` ni allowlist'ga qo'shish
+bo'lardi — u kirim narxini terminalga ochib yuborardi. Shuning uchun ikkinchi
+**narxsiz** sirt qilindi: `GET /tsd/search`. U `/tsd/scan` bilan **ayni**
+`TSD_PRODUCT_SELECT` oq ro'yxati va **ayni** hit-quruvchi
+(`TsdService.buildProductHits`) ustida ishlaydi, ya'ni unga narx maydonini
+qo'shib yuborish tuzilmaviy jihatdan mumkin emas. `/products` hamon YOPIQ va
+buni `tsd-policy.test.ts` alohida test bilan qulflaydi.
 
 ## Skaner (iData 95W Pro)
 
@@ -242,7 +252,19 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
    ikkala urinish ham «ODAM …» / «SKANER …» bo'lib ko'rinsin; skaner «ODAM»
    deb tanilsa `config.xml` dagi `scan_human_gap_ms` ni ko'rsatilgan
    o'rtachadan yuqori qo'ying.
-10. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+10. **Nom bo'yicha qidiruv (T3):** bosh menyudagi **🔍 Tovar qidirish**
+    plitkasini oching → tovar nomining bir bo'lagini yozing (kamida 2 belgi) →
+    **Qidirish** → ro'yxat chiqsin, har qatorda nom, artikul, qayerdaligi va
+    jami qoldiq ko'rinsin, **narx YO'Q** bo'lsin → qatorni bosing → narxsiz
+    «Skan ma'lumoti» ekrani ochilsin.
+    So'ng **Sanash** da yacheyka ochib «🔍 Tovar qidirish» → topilgan tovar
+    yuqoridagi sanoq kartasiga tushsin; **Joylashtirish** ning 1-bosqichida ham
+    «🔍 Tovar qidirish» → tovar tanlangach oqim 2-bosqichga o'tsin.
+    ⚠️ Maydon **o'zi yubormaydi** (T2 qoidasi) — «Qidirish» tugmasi yoki
+    klaviaturaning tasdiq tugmasi bosilishi kerak.
+11. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+    Terminal tokeni bilan `GET /api/v1/products?search=…` → **403**;
+    `GET /api/v1/tsd/search?q=…` → **200** va javobda narx maydoni **yo'q**.
 
 ## Qo'lda smoke (K4 qabul mezoni — BO'LINADIGAN TOVAR KESIMI)
 
@@ -329,6 +351,7 @@ app/src/main/java/uz/sherset/tsd/
    UpdateCard.kt                           — yangilanish kartasi (holat mashinasi)
    TaskListScreen.kt · TaskDetailScreen.kt · ShortageScreen.kt
    PlaceScreen.kt · CountScreen.kt · ScanInfoScreen.kt · PickProductScreen.kt
+   SearchScreen.kt                         — T3: nom/artikul qidiruvi (narxsiz)
    QueueScreen.kt                          — oflayn navbat + rad etilganlar
    CutScreen.kt                            — K4: bo'linadigan tovar kesimi
 app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose)

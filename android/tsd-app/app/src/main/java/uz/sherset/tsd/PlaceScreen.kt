@@ -70,6 +70,18 @@ class PlaceScreen(private val shell: Shell) : Screen {
         if (p == null) {
             SectionCard { Text(stringResource(R.string.place_need_product), color = Palette.TextMuted) }
             Spacer(Modifier.height(10.dp))
+            // T3 — shtrixi yirtilgan tovarni NOMIDAN topish. Bosqichning o'zi
+            // o'zgarmaydi: natija `product` ga tushadi va oqim odatdagidek
+            // 2-bosqichga (manba tanlash) o'tadi.
+            SecondaryButton(text = stringResource(R.string.search_open)) {
+                shell.go(
+                    SearchScreen(shell) { hit ->
+                        product = hit
+                        shell.back()
+                    },
+                )
+            }
+            Spacer(Modifier.height(10.dp))
             SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
                 shell.back()
             }

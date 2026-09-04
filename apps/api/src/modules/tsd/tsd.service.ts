@@ -7,10 +7,41 @@ import {
   normalizeScanCode,
   pickExactHits,
 } from './tsd-scan.js';
+import { SEARCH_MIN_LEN, SEARCH_TAKE, normalizeSearchQuery, sortSearchHits } from './tsd-search.js';
 
 export const TsdScanQuerySchema = z.object({
   code: z.string().min(1).max(200),
 });
+
+/**
+ * T3 — nom/artikul qidiruvi.
+ *
+ * Ikki chegara ATAYLAB ikki xil vazifada: bu yerdagi `1000` — MUDOFAA
+ * (megabaytlik matn umuman qabul qilinmasin), ma'noli chegara esa
+ * `SEARCH_MAX_LEN` (100) va u rad ETMAYDI, KESADI. Omborchi tasodifan uzun
+ * matn qo'yib yuborsa qidiruv ishlashda davom etsin — 400 bilan to'xtash
+ * uning ishini uzardi.
+ */
+export const TsdSearchQuerySchema = z.object({
+  q: z.string().min(1).max(1000),
+});
+
+/**
+ * `TSD_PRODUCT_SELECT` bilan o'qilgan XOM qator — `buildProductHits` kirishi.
+ *
+ * Tur oq ro'yxatning aksi: narx maydoni bu yerda ham YO'Q, ya'ni kimdir
+ * `select` ga narx ustuni qo'shsa TypeScript uni bu turdan o'tkazmaydi.
+ */
+interface TsdProductRow {
+  id: string;
+  name: string;
+  code: string | null;
+  article: string | null;
+  barcodes: string[];
+  uom: string | null;
+  archived: boolean;
+  attributes: unknown;
+}
 
 /** Bitta skan natijasidagi tovar — NARX MAYDONI YO'Q (`tsd-scan.ts` izohi). */
 interface TsdProductHit {
@@ -145,7 +176,94 @@ export class TsdService {
       rows.map((r) => ({ ...r, barcodes: r.barcodes ?? [] })),
       code,
     );
-    const ids = winners.map((w) => w.id);
+
+    return {
+      code,
+      kind: 'product' as const,
+      products: await this.buildProductHits(accountId, winners),
+    };
+  }
+
+  /**
+   * T3 — NOM / ARTIKUL bo'yicha qidiruv (`GET /tsd/search`).
+   *
+   * `scan` dan farqi bitta: bu yerda moslik AYNAN emas, ICHIDA
+   * (`contains`) — ya'ni shtrixi yirtilgan yoki bazaga kiritilmagan tovar
+   * ham topiladi (T-reja §1.2 dagi boshi berk ko'chaning ildizi).
+   *
+   * 🔴 NARX: so'rov `TSD_PRODUCT_SELECT` oq ro'yxati ustida ketadi va javob
+   * `scan` bilan BIR XIL `buildProductHits` dan chiqadi — ya'ni qidiruv
+   * o'zining alohida javob shakliga EGA EMAS va narx maydonini qo'shib
+   * yuborishi tuzilmaviy jihatdan mumkin emas.
+   *
+   * 🔴 MULTI-HIT qoidasi kuchda: bu yo'l HECH QACHON o'zi tovar tanlamaydi —
+   * hatto bitta natija qaytganda ham. Tanlovni ODAM qiladi (ilova ro'yxatni
+   * ko'rsatadi), `pickExactHits` bu yerda ATAYLAB chaqirilmaydi: u
+   * skanerlangan token uchun («aynan mos kelgan shtrix ustun»), qidiruv
+   * so'rovi esa ataylab noaniq.
+   */
+  async search(accountId: string, rawQuery: unknown) {
+    const parsed = TsdSearchQuerySchema.safeParse(rawQuery);
+    if (!parsed.success) throw new BadRequestException('Qidiruv so`rovi kiritilmadi');
+    const query = normalizeSearchQuery(parsed.data.q);
+    if (query.length < SEARCH_MIN_LEN) {
+      throw new BadRequestException(`Kamida ${SEARCH_MIN_LEN} belgi yozing`);
+    }
+
+    const rows = await this.prisma.client.product.findMany({
+      where: {
+        accountId,
+        deletedAt: null,
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { article: { contains: query, mode: 'insensitive' } },
+          { code: { contains: query, mode: 'insensitive' } },
+          { barcodes: { has: query } },
+        ],
+      },
+      select: TSD_PRODUCT_SELECT,
+      // Kesish DB tomonda bo'lgani uchun tartib ham DB tomonda aniq bo'lishi
+      // SHART: usiz `take` har safar boshqa 30 tani olib kelardi. Arxiv shu
+      // yerdayoq pastga tushadi, ya'ni kesilgan 30 ta tirik tovarga to'g'ri
+      // keladi; nozik saralash (aynan/boshida/ichida) esa xotirada.
+      orderBy: [{ archived: 'asc' }, { name: 'asc' }],
+      take: SEARCH_TAKE,
+    });
+
+    return {
+      query,
+      products: await this.buildProductHits(
+        accountId,
+        sortSearchHits(
+          rows.map((r) => ({ ...r, barcodes: r.barcodes ?? [] })),
+          query,
+        ),
+      ),
+      // Ro'yxat kesilgan bo'lsa omborchi «hammasi shu» deb o'ylamasin.
+      truncated: rows.length === SEARCH_TAKE,
+    };
+  }
+
+  /**
+   * SKAN va QIDIRUV uchun YAGONA hit-quruvchi (T3).
+   *
+   * 🔴 Nega umumiy: ilova bitta renderer va bitta `PickProductScreen` bilan
+   * ishlaydi. Ikki sirt ikki xil shakl qaytarsa, ikkinchisida `cells` yoki
+   * `homeCell` yo'q bo'lib qolgan kun ekran jimgina bo'sh joy chizardi va
+   * buni test emas, omborchi topardi. Shuning uchun shakl BU YERDA, bir
+   * marta quriladi va `tsd.service.test.ts` ikkala yo'l bir xil kalitlar
+   * to'plamini berishini qulflaydi.
+   *
+   * 🔴 NARX YO'Q: kirish qatorlari `TSD_PRODUCT_SELECT` bilan o'qiladi,
+   * qo'shimcha so'rovlar esa faqat `Stock`/`StockByCell` ga boradi — ularda
+   * narx ustuni umuman yo'q (qoldiq jadvallari).
+   */
+  private async buildProductHits(
+    accountId: string,
+    rows: readonly TsdProductRow[],
+  ): Promise<TsdProductHit[]> {
+    if (rows.length === 0) return [];
+    const ids = rows.map((r) => r.id);
 
     const [stocks, cellRows] = await Promise.all([
       this.prisma.client.stock.findMany({
@@ -165,7 +283,7 @@ export class TsdService {
       }),
     ]);
 
-    const products: TsdProductHit[] = winners.map((w) => {
+    return rows.map((w) => {
       const total = stocks
         .filter((s) => s.assortmentId === w.id)
         .reduce((sum, s) => sum + Number(s.qty), 0);
@@ -192,7 +310,5 @@ export class TsdService {
           })),
       };
     });
-
-    return { code, kind: 'product' as const, products };
   }
 }

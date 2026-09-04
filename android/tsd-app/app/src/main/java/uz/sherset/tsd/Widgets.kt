@@ -1,12 +1,15 @@
 package uz.sherset.tsd
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +37,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Umumiy vidjetlar — G5 `Ui.kt` ning Compose merosxo'ri.
@@ -222,6 +228,63 @@ fun PlainField(
             unfocusedBorderColor = Palette.Border,
         ),
     )
+}
+
+/**
+ * `/tsd/scan` va `/tsd/search` qaytaradigan TOVAR elementining YAGONA
+ * chizuvchisi (T3).
+ *
+ * Ikkala sirt serverda AYNI funksiyadan (`TsdService.buildProductHits`)
+ * chiqadi va bitta test shuni qulflaydi — demak ilovada ham bitta chizuvchi
+ * bo'lishi kerak. Aks holda bir tovar Multi-hit ekranida bir xil, Qidiruv
+ * ekranida boshqacha ko'rinardi va omborchi ularni bir tovar deb tanimasdi.
+ *
+ * 🔴 NARX YO'Q va bu ekranning intizomi emas: bu shaklda narx maydoni
+ * umuman yo'q (`TSD_PRODUCT_SELECT` oq ro'yxati).
+ */
+@Composable
+fun ProductHitCard(p: JSONObject, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    val article = p.optString("article")
+    val archived = p.optBoolean("archived")
+    SectionCard(
+        modifier = if (onClick == null) modifier else modifier.clickable { onClick() },
+        tint = if (archived) Palette.SurfaceMuted else MaterialTheme.colorScheme.surface,
+    ) {
+        Text(p.optString("name"), style = MaterialTheme.typography.titleMedium)
+        if (article.isNotEmpty()) {
+            Text(
+                stringResource(R.string.search_article, article),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+        }
+        if (archived) {
+            Text(
+                stringResource(R.string.count_archived),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.Warning,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        InfoRow(label = productWhere(p), value = p.optString("totalQty"))
+    }
+}
+
+/**
+ * Tovar QAYERDA: birinchi haqiqiy yacheyka, bo'lmasa uy-yacheykasi TAVSIYA
+ * sifatida. «Yacheykada turibdi» va «uyi shu yerda» ni aralashtirmaslik —
+ * `ScanInfoScreen` dagi mavjud qoidaning aynan o'zi (jonlida qoldiqning
+ * aksariyati hali yacheykasiz).
+ */
+@Composable
+private fun productWhere(p: JSONObject): String {
+    val cells = p.optJSONArray("cells") ?: JSONArray()
+    if (cells.length() > 0) {
+        return cells.optJSONObject(0)?.optString("cellName").orEmpty()
+    }
+    val home = p.optString("homeCell")
+    return if (home.isEmpty()) stringResource(R.string.no_cell)
+    else stringResource(R.string.scan_home_cell, home)
 }
 
 /** Yorliq-qiymat qatori (skan-ma'lumot, kesim ekranlari). */

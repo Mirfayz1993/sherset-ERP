@@ -17,7 +17,9 @@
  *     kirim narxi faqat katta omborchiga». Shuning uchun bu ro'yxatda
  *     `/products` UMUMAN yo'q — u to'liq tovar qatorini (`buyPrice`,
  *     `minPrice`, `salePrices`) qaytaradi. Skaner uchun narxsiz alohida sirt
- *     bor: `GET /tsd/scan` (`tsd-scan.ts`).
+ *     bor: `GET /tsd/scan` (`tsd-scan.ts`), nom bo'yicha
+ *     qidiruv uchun esa `GET /tsd/search` (`tsd-search.ts`) — ikkalasi
+ *     ham AYNI oq ro'yxat ustida.
  */
 
 import { type Rule, isAllowedBy } from './route-allowlist.js';
@@ -73,6 +75,15 @@ export const TSD_ALLOWED: readonly Rule[] = [
   // ── Skaner: NARXSIZ tovar/yacheyka ma'lumoti ──────────────────────────────
   // Alohida sirt, chunki `/products` javobida kirim narxi bor (yuqoridagi izoh).
   { prefix: '/tsd/scan', methods: ['GET'], exact: true, why: 'narxsiz skan-qidiruv' },
+  // T3 — NOM/ARTIKUL qidiruvi. Alohida qator, chunki `/tsd/scan` `exact` va
+  // uning ostiga yangi yo'l qo'shib bo'lmaydi (bu ataylab: `exact` yangi
+  // sub-yo'l jimgina ochilib ketishining oldini oladi).
+  //
+  // 🔴 «Bu javobda narx bormi?» — YO'Q, va bu tuzilmaviy: javob `/tsd/scan`
+  // bilan AYNI funksiyadan (`TsdService.buildProductHits`) chiqadi va o'sha
+  // `TSD_PRODUCT_SELECT` oq ro'yxati ustida qurilgan. `/products` esa
+  // qidiruv uchun ham OCHILMADI — u hamon bu ro'yxatda yo'q.
+  { prefix: '/tsd/search', methods: ['GET'], exact: true, why: 'narxsiz nom-qidiruv' },
   {
     prefix: '/admin/stores/cells/by-barcode',
     methods: ['GET'],

@@ -189,6 +189,24 @@ class CountScreen(private val shell: Shell) : Screen {
             Spacer(Modifier.height(10.dp))
         }
 
+        // T3 — shtrixsiz tovarni NOMIDAN topish. Yacheyka ochiq bo'lgandagina
+        // ko'rinadi: yacheykasiz sanoq ma'nosiz (son qaysi yacheykaga
+        // yozilishi noma'lum bo'lardi) — bu `onScan` dagi mavjud qoidaning
+        // aynan o'zi.
+        SecondaryButton(text = stringResource(R.string.search_open)) {
+            shell.go(
+                SearchScreen(shell) { pr ->
+                    // Multi-hit qoidasi buzilmaydi: tanlovni ODAM qildi,
+                    // ekran esa mavjud `pick()` ga o'tadi — yangi sanoq yo'li
+                    // yaratilmaydi va sariq «yacheykada yo'q» ogohlantirishi
+                    // o'z joyida ishlaydi.
+                    pick(pr.optString("name"), pr.optString("id"))
+                    shell.back()
+                },
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+
         SecondaryButton(text = stringResource(R.string.restart), color = Palette.TextMuted) {
             reset()
         }

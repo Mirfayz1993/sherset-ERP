@@ -201,8 +201,23 @@ class ApiClient(private val baseUrl: String) {
 
     // ── Skan ────────────────────────────────────────────────────────────────
 
-    /** NARXSIZ skan-qidiruv (`tsd-scan.ts`). */
+    /** NARXSIZ skan-qidiruv (`tsd-scan.ts`) — AYNAN moslik. */
     fun scan(code: String): JSONObject = get("/tsd/scan?code=" + enc(code))
+
+    /**
+     * T3 — NARXSIZ nom/artikul qidiruvi (`tsd-search.ts`).
+     *
+     * `scan` dan farqi moslik turida: bu yerda `contains`, ya'ni shtrixi
+     * yirtilgan yoki bazaga kiritilmagan tovar ham topiladi. Javob:
+     * `{ query, products, truncated }` — `products` elementlari `scan`
+     * bilan AYNI shaklda (serverda ikkalasi ham `buildProductHits` dan
+     * chiqadi), shuning uchun ilovada bitta renderer yetadi.
+     *
+     * 🔴 `/products` ga BORILMAYDI va bora olmaydi ham: u TSD allowlist'ida
+     * yo'q (`tsd-policy.ts`) va serverda 403 bo'ladi. Narx shu sababdan
+     * terminalga tushmaydi.
+     */
+    fun search(q: String): JSONObject = get("/tsd/search?q=" + enc(q))
 
     /** Yacheyka yorlig'i bo'yicha qidirish. */
     fun cellByBarcode(code: String): JSONObject =

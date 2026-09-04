@@ -1,6 +1,5 @@
 package uz.sherset.tsd
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
@@ -44,29 +43,17 @@ class PickProductScreen(
 
         for (i in 0 until products.length()) {
             val p = products.optJSONObject(i) ?: continue
-            SectionCard(modifier = Modifier.clickable { onPicked(p) }) {
-                Text(p.optString("name"), style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
-                InfoRow(
-                    label = whereText(p),
-                    value = p.optString("totalQty"),
-                )
-            }
+            // T3 — chizish `Widgets.ProductHitCard` ga ko'chdi: Qidiruv ekrani
+            // ham AYNI shaklni (`buildProductHits`) ko'rsatadi va ikki ekranda
+            // bir tovar boshqacha ko'rinmasligi kerak. Xulq o'zgarmadi, ustiga
+            // artikul va arxiv belgisi qo'shildi — multi-hit tanlovida aynan
+            // ular ikki o'xshash tovarni ajratadi.
+            ProductHitCard(p) { onPicked(p) }
             Spacer(Modifier.height(10.dp))
         }
 
         SecondaryButton(text = stringResource(R.string.back), color = Palette.TextMuted) {
             shell.back()
         }
-    }
-
-    /** Birinchi yacheyka, bo'lmasa uy-yacheykasi tavsiyasi. */
-    @Composable
-    private fun whereText(p: JSONObject): String {
-        val cells = p.optJSONArray("cells") ?: JSONArray()
-        if (cells.length() > 0) {
-            return cells.optJSONObject(0)?.optString("cellName").orEmpty()
-        }
-        return p.optString("homeCell").ifEmpty { stringResource(R.string.no_cell) }
     }
 }

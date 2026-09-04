@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * 0.2.0 — BOSH EKRAN: plitkali menyu (egasining tanlovi, 2026-09-01).
@@ -84,6 +87,37 @@ class HomeScreen(private val shell: Shell) : Screen {
                 label = stringResource(R.string.count_title),
                 tint = Palette.CellText,
             ) { shell.go(CountScreen(shell)) }
+            // T3 — «bu nima va qayerda» savoliga SHTRIXSIZ javob. Natija
+            // bosilganda o'zgartiruvchi oqim emas, NARXSIZ ma'lumot ekrani
+            // ochiladi (ko'chirish uchun alohida «Joylashtirish» plitkasi bor).
+            Tile(
+                icon = Icons.Filled.Search,
+                label = stringResource(R.string.search_title),
+                tint = Palette.Accent,
+            ) {
+                shell.go(
+                    SearchScreen(shell) { p ->
+                        shell.go(
+                            ScanInfoScreen(
+                                shell,
+                                // `ScanInfoScreen` skan javobini kutadi —
+                                // qidiruv elementi AYNI shaklda bo'lgani uchun
+                                // (server: `buildProductHits`) uni shu yerda
+                                // o'rash yetarli, yangi so'rov KERAK EMAS.
+                                JSONObject()
+                                    .put("kind", "product")
+                                    .put("products", JSONArray().put(p)),
+                            ),
+                        )
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Tile(
                 icon = Icons.AutoMirrored.Filled.Send,
                 label = stringResource(R.string.queue_title),
@@ -97,6 +131,10 @@ class HomeScreen(private val shell: Shell) : Screen {
                     else -> null
                 },
             ) { shell.go(QueueScreen(shell)) }
+            // Beshinchi plitka yo'q — bo'sh yarim qator qoldiriladi, aks holda
+            // Navbat plitkasi butun enni egallab, ustidagi to'rtta bilan bir
+            // xil o'lchamda ko'rinmasdi.
+            Spacer(Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(14.dp))

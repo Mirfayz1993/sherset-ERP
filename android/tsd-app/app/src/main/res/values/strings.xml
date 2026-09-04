@@ -109,6 +109,18 @@
     <string name="count_bound_zero">biriktirilgan · qoldiq 0</string>
     <string name="count_archived">⚠ arxivlangan</string>
 
+    <!-- T3 - nom/artikul bo'yicha qidiruv (`GET /tsd/search`, NARXSIZ) -->
+    <string name="search_title">Tovar qidirish</string>
+    <string name="search_open">🔍 Tovar qidirish</string>
+    <string name="search_hint">Nom yoki artikul</string>
+    <string name="search_button">Qidirish</string>
+    <string name="search_min">Kamida %1$d belgi yozing</string>
+    <string name="search_none">Topilmadi — boshqacha yozib ko\'ring</string>
+    <string name="search_article">Artikul: %1$s</string>
+    <!-- Ro'yxat kesilganda: jim kesish omborchini «bazada boshqa yo'q» deb
+         adashtirardi (IS-5 klassi). -->
+    <string name="search_truncated">Faqat birinchi %1$d ta ko\'rsatildi — aniqroq yozing</string>
+
     <!-- 0.2.0 — bosh ekran (plitkali menyu, egasining tanlovi 2026-09-01) -->
     <string name="home_title">Bosh ekran</string>
     <string name="home_scan_tip">Istalgan joyda shtrix yoki yacheyka yorlig\'ini skanerlang</string>

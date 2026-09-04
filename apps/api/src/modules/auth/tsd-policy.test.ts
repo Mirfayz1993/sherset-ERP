@@ -56,6 +56,23 @@ describe('isTsdAllowed — omborchi ishi OCHIQ', () => {
     expect(isTsdAllowed('GET', '/admin/stores/cells/by-barcode')).toBe(true);
   });
 
+  it('T3 — narxsiz NOM/ARTIKUL qidiruvi OCHIQ, faqat GET va faqat aynan shu yo`l', () => {
+    // Busiz shtrixi yirtilgan tovar terminalda umuman topilmasdi (T-reja
+    // §1.2 dagi jonli hodisa) va omborchining yagona chorasi `/products`
+    // bo'lardi — u esa kirim narxini ochib yuborardi.
+    expect(isTsdAllowed('GET', '/tsd/search')).toBe(true);
+    // `exact` — ichki yo'llar (kelajakdagi `/tsd/search/history` va h.k.)
+    // jimgina ochilmaydi.
+    expect(isTsdAllowed('GET', '/tsd/search/history')).toBe(false);
+    // Qidiruv — O'QISH yo'li. Yozuv metodlari yopiq.
+    expect(isTsdAllowed('POST', '/tsd/search')).toBe(false);
+    expect(isTsdAllowed('PUT', '/tsd/search')).toBe(false);
+    expect(isTsdAllowed('DELETE', '/tsd/search')).toBe(false);
+    // Segment chegarasi: o'xshash nomli modul ochilmaydi.
+    expect(isTsdAllowed('GET', '/tsd/search-admin')).toBe(false);
+    expect(isTsdAllowed('GET', normalizePath('/api/v1/tsd/search?q=kabel'))).toBe(true);
+  });
+
   it('yacheykaga joylashtirish / ko`chirish', () => {
     expect(isTsdAllowed('POST', '/products/p1/cell-move')).toBe(true);
     expect(isTsdAllowed('POST', '/products/p1/cell-place')).toBe(true);
@@ -85,6 +102,17 @@ describe('isTsdAllowed — NARX hech qayerdan chiqmaydi', () => {
     expect(isTsdAllowed('GET', '/products/p1')).toBe(false);
     expect(isTsdAllowed('GET', '/products/p1/scan')).toBe(false);
     expect(isTsdAllowed('GET', '/products/p1/cell-stock')).toBe(false);
+  });
+
+  it('🔴 T3 — nom-qidiruv qo`shilgach ham `/products` YOPIQ QOLDI', () => {
+    // T3 aynan «nom bo'yicha qidirish» ehtiyoji uchun qilindi va eng oson
+    // yechim `/products?search=` ni ochish bo'lardi — u `buyPrice`,
+    // `minPrice`, `salePrices` qaytaradi. Bu test o'sha yo'lni QULFLAYDI:
+    // qidiruv `/tsd/search` orqali, narxsiz oq ro'yxat ustida ishlaydi.
+    expect(isTsdAllowed('GET', '/products')).toBe(false);
+    expect(isTsdAllowed('GET', normalizePath('/api/v1/products?search=kabel'))).toBe(false);
+    expect(isTsdAllowed('GET', normalizePath('/api/v1/products?limit=1&search=k'))).toBe(false);
+    expect(isTsdAllowed('GET', '/tsd/search')).toBe(true);
   });
 
   it('narx modullari YOPIQ', () => {
