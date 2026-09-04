@@ -9,13 +9,16 @@
  *  · o'ng chetdagi `children` sloti chiziladi (F6 oyna-tugmalari shu yerga);
  *  · header `position: fixed` EMAS (desktop klaviatura-evristikasi buzilmasin).
  *
- * Soat ATAYLAB assert qilinmaydi — minutlik interval real vaqtga bog'liq,
- * assert flaky bo'lardi (reja 2.2 qadami shu qarorni yozadi).
+ * Soat ILGARI assert qilinmasdi («minutlik interval real vaqtga bog'liq,
+ * flaky bo'lardi»). S1 dan keyin u SERVER vaqtidan o'qiladi — ya'ni testda
+ * to'liq deterministik va soxta soat + soxta `Date` sarlavhasi bilan
+ * qulflanadi (fayl oxiridagi blok).
  */
 
+import { noteServerDate } from '@/lib/clock';
 import { renderWithProviders, screen, waitFor, within } from '@/test-utils';
 import type { CurrentSession } from '@moysklad/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PosHeader, type PosHeaderProps } from '../pos-header';
 
 function SESSION(over: Partial<CurrentSession> = {}): CurrentSession {
@@ -132,5 +135,46 @@ describe('PosHeader — versiya-badge headerda (F9, spec §3.1)', () => {
   it('brauzerda (qobiqsiz) headerda badge yo`q — joy band qilinmaydi', () => {
     renderHeader();
     expect(screen.queryByTestId('shell-version-badge')).not.toBeInTheDocument();
+  });
+});
+
+// S1 (2026-09-04) — egasining shikoyati: «kassada vaqt qurilma vaqti bilan
+// ishlayapti va qurilmada vaqt xato bo'lsa xato ko'rsatmoqda».
+describe('PosHeader — soat SERVER vaqtida (S1)', () => {
+  /** Kassa mashinasining ADASHGAN soati. */
+  const DEVICE = new Date('2026-09-04T10:00:00.000Z');
+  /** Serverning to'g'ri soati — qurilmadan 3 soat oldinda. */
+  const SERVER_MS = DEVICE.getTime() + 3 * 60 * 60 * 1_000;
+
+  afterEach(() => {
+    // Skew modul darajasida yashaydi — keyingi testlarga oqib ketmasin.
+    noteServerDate({ headers: new Headers({ Date: new Date().toUTCString() }) } as Response);
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it('qurilma soati 3 soat orqada bo`lsa ham server soatini ko`rsatadi', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    noteServerDate({
+      headers: new Headers({ Date: new Date(SERVER_MS).toUTCString() }),
+    } as Response);
+
+    renderHeader();
+
+    // 13:00 UTC = 18:00 Asia/Tashkent. Qurilma vaqti bo'lganda 15:00 chiqardi.
+    expect(screen.getByTestId('pos-header-clock')).toHaveTextContent('18:00');
+    expect(screen.getByTestId('pos-header-clock')).not.toHaveTextContent('15:00');
+  });
+
+  it('qurilmaning MINTAQASI ham so`ralmaydi (`Asia/Tashkent` qat`iy)', () => {
+    vi.useFakeTimers();
+    // Skew yo'q — faqat mintaqa tekshiriladi: 23:30 UTC = ertasi kun 04:30
+    // Toshkentda. Sinov mashinasining TZ'i qanday bo'lishidan qat'i nazar.
+    vi.setSystemTime(new Date('2026-09-04T23:30:00.000Z'));
+
+    renderHeader();
+
+    expect(screen.getByTestId('pos-header-clock')).toHaveTextContent('04:30');
   });
 });

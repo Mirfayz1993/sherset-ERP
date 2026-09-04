@@ -1,6 +1,6 @@
 # Kassa vaqt ishonchliligi — qurilma soatidan qutulish (S-reja)
 
-> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** REJA (hech bir faza boshlanmagan)
+> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1 TUGADI (2026-09-04)
 > **Boshlang'ich nuqta:** `yacheyka-inventarizatsiya` branch, HEAD `8e698b11`. Jonli: `erp.sherset.uz`.
 > **Sabab (egasining xabari, 2026-09-04):** «kassada vaqt qurilma vaqti bilan ishlayapti va qurilmada vaqt
 > xato bo'lsa xato ko'rsatmoqda».
@@ -132,7 +132,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 
 | Faza | Nima | Server ishi | Prioritet | Holat |
 |---|---|---|---|---|
-| **S1** | Poydevor: `serverNow()` + skew (`Date` sarlavhasi) + `POS_TZ`; iste'molchi — 2 ta soat | yo'q | 🔴 blok | REJA |
+| **S1** | Poydevor: `serverNow()` + skew (`Date` sarlavhasi) + `POS_TZ`; iste'molchi — 2 ta soat | yo'q | 🔴 blok | **TUGADI** |
 | **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | REJA |
 | **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | REJA |
 | **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | REJA |
@@ -291,3 +291,81 @@ API mashinasidan keladi (nginx `/api/` → `127.0.0.1:4001`). Tanlov loyihaning 
 - Ish daraxtida T3 (TSD qidiruv) ning commit qilinmagan ishi bor — §2 qoida 7 ga qat'iy amal qilinsin.
 - S5 ning NTP bandi admin huquqi talab qiladi; kod bilan yechiladimi yoki ops yo'riqnomasi bo'ladimi —
   o'sha fazada qaror qilinadi.
+
+---
+
+### S1 — Poydevor: `serverNow()` + `POS_TZ` · **TUGADI** · 2026-09-04
+
+**Nima qilindi**
+
+| Fayl | O'zgarish |
+|---|---|
+| `apps/web/src/lib/clock.ts` | **YANGI** — `POS_TZ`, `clockSkewMs()`, `serverNow()`, `noteServerDate()`. §4 shartnomasi to'liq bajarildi. |
+| `apps/web/src/hooks/use-server-clock.ts` | **YANGI** — `useServerClock(stepMs)`, `Date \| null`. |
+| `apps/web/src/lib/api-client.ts` | `authedFetch` ichida **bitta chaqiruv** — `noteServerDate(res)`. Transport mantig'iga (401-refresh, `credentials`, `Content-Type`) tegilmadi. |
+| `apps/web/src/components/pos/pos-header.tsx` | Soat `serverNow()` + `POS_TZ` da; `clockText` (qurilma `getHours()`) olib tashlandi. |
+| `apps/web/src/app/customer-display/page.tsx` | CFD soati `useServerClock(10_000)`; formatga `timeZone: POS_TZ`. |
+| `apps/web/src/lib/clock.test.ts` | **YANGI** — 15 test. |
+| `apps/web/src/components/pos/__tests__/pos-header.test.tsx` | +2 test (skew va mintaqa). |
+
+**§4 shartnomasidan chetlanish (hujjatlanadi):** `useServerClock` `lib/clock.ts` ga EMAS,
+`src/hooks/` ga qo'yildi — repo konvensiyasi hook'larni o'sha yerda saqlaydi (45 fayl) va `lib/clock.ts`
+shu tariqa React'siz, ya'ni server-komponentdan ham xavfsiz import qilinadigan bo'lib qoldi.
+
+**Yangi testlar soni:** **17** (15 + 2).
+
+**Test natijalari (raqam bilan)**
+
+- `src/lib/clock.test.ts` — **15/15** ✔
+- `src/components/pos/__tests__/pos-header.test.tsx` — **12/12** ✔ (ilgari 10 edi)
+- Tegilgan doiralar (`api-client`, `customer-display`, butun `components/pos`) — **26 fayl / 301 test** ✔
+- **Butun web unit-suite** (`api-client` hamma joyda ishlatilgani uchun to'liq yugurtirildi) —
+  **348/348 fayl · 4543 o'tdi · 26 o'tkazib yuborildi · 0 yiqildi** ✔
+- `pnpm --filter @moysklad/web typecheck` — **0 xato** ✔
+- `npx biome check` (o'zgargan 7 fayl) — **0 xato**. Qolgan 1 ta ogohlantirish
+  (`customer-display/page.tsx:1262 useExhaustiveDependencies`) **MENDAN OLDIN bor edi** —
+  `git stash` bilan HEAD nusxasida ham chiqishi o'lchandi.
+- `pnpm i18n:gate` — **20/20** ✔ (yangi matn qo'shilmadi)
+
+**🔴 Mavjud qo'riqcha meni tutdi (va to'g'ri tutdi):** soatni avval `Intl.DateTimeFormat('en-GB', …)`
+bilan yozgan edim — `src/__tests__/pos-bcp47-guard.test.ts` uni «kassa doirasida qattiq BCP-47 teg»
+deb rad etdi. Teg `useBcp47()` ga o'tkazildi. Bu **ko'rinishni o'zgartirmaydi**: o'sha qo'riqchining
+o'z hujjati (`i18n-format.ts`, Node va Chromium'da o'lchangan jadval) soat/daqiqa formatini ikki
+lokalda **aynan bir xil** deb qayd etadi. `hour12: false` ham ataylab BERILMADI — ba'zi ICU nusxalarida
+u h24 ga tushib yarim tunni «24:00» qilib yozadi.
+
+**Qabul mezoni**
+
+- ✔ Qurilma soati 3 soatga siljitilganda header va CFD soati to'g'ri ko'rsatadi — test bilan
+  (`18:00` kutiladi, qurilma vaqtida `15:00` chiqardi).
+- ✔ Qurilmaning MINTAQASI ham so'ralmaydi — alohida test (`23:30 UTC` → `04:30` Toshkent).
+- ✔ `authedFetch` ning 401-refresh shoxi va transport xulqi o'zgarmagan (`api-client.test.ts` yashil,
+  diff 6 qator: 1 import + 1 chaqiruv + 3 qator izoh).
+- ✔ Tarmoq yo'qligida sahifa yiqilmaydi — `noteServerDate` butunlay `try/catch` ichida va
+  «sarlavhalar o'qilmasa ham OTMAYDI» testi shuni qulflaydi; oxirgi skew `localStorage` dan tiklanadi
+  («qurilma qayta yuklandi, tarmoq yo'q» testi).
+
+**«Bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»**
+
+1. **Har HTTP javob** endi bitta qo'shimcha funksiyadan o'tadi. U to'liq `try/catch` ichida, tashqi
+   chaqiruv qilmaydi va faqat ikki sarlavhani o'qiydi — savdo so'rovini yiqita olmaydi. Buni test
+   ham (buzuq `headers` bilan) qulflaydi.
+2. **Serverga yuborilgan yangi maydon YO'Q** (§2 qoida 3). `git diff` da yagona serverga tegishli
+   fayl — `api-client.ts`, unda ham faqat javobni O'QISH qo'shildi. Sotuv `moment`i hamon serverniki.
+3. **Soatning birinchi paydo bo'lishi** endi mount'dan keyin (ilgari header darhol chizardi). Bu
+   ataylab: CFD allaqachon shu himoyada edi (gidratatsiya nomuvofiqligi). Ko'zga ko'rinmaydi —
+   effekt birinchi bo'yashdan keyin darhol ishlaydi.
+4. **Skew kechikishi:** birinchi javob kelgunicha skew `0` bo'lishi mumkin, ya'ni eng ko'p bitta
+   interval (POS 30 s, CFD 10 s) davomida qurilma vaqti ko'rinadi. Amalda POS header'i sessiya
+   yuklangandan KEYIN chiziladi (ya'ni skew allaqachon bor), qayta yuklashda esa `localStorage`
+   dan tiklanadi. Bu kechikish faqat mashinaning eng birinchi ishga tushishida bo'ladi.
+5. **Til almashish** soatga ta'sir qilmaydi (yuqoridagi o'lchov).
+
+**Ochiq qolganlar**
+
+- Chek/qog'oz hamon qurilma sanasida — **S2** yopadi (eng muhim).
+- Navbat «o'tgan vaqt», qarz kunlari, qoralama vaqti — **S3**.
+- §1.3 dagi qolgan 12 formatlash nuqtasi mintaqasiz — **S4** (guard test ham o'sha yerda).
+- CFD navbat kartasidagi vaqt (`customer-display/page.tsx:886`) ATAYLAB tegilmadi — u S4 doirasi va
+  unga bog'langan mavjud test (`customer-display.test.tsx:82`, `05:01`) mashina mintaqasida yozilgan;
+  S4 uni test bilan birga ko'chirsin.

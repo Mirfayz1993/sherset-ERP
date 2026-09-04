@@ -11,6 +11,7 @@
  */
 
 import { getAccessToken, refresh } from './auth-store';
+import { noteServerDate } from './clock';
 
 const BASE = '/api/v1';
 
@@ -31,6 +32,11 @@ async function authedFetch(path: string, init: RequestInit = {}, retry = true): 
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers, credentials: 'include' });
+
+  // S1 (kassa vaqti, 2026-09-04) — javobning `Date` sarlavhasidan server soati
+  // bilan farqni yangilaydi. Qo'shimcha so'rov YO'Q, funksiya hech qachon
+  // otmaydi va quyidagi 401-refresh shoxiga tegmaydi.
+  noteServerDate(res);
 
   if (res.status === 401 && retry && token) {
     const refreshed = await refresh();

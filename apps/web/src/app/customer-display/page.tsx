@@ -31,9 +31,11 @@
 // Brauzerda sinash (Electron'siz):  /customer-display?demo=1
 
 import './cfd-theme.css';
+import { useServerClock } from '@/hooks/use-server-clock';
 import { LOCALE_COOKIE, isLocale } from '@/i18n/config';
 import { api } from '@/lib/api-client';
 import { getAccessToken, refresh } from '@/lib/auth-store';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { CART_DRAFTS_STORAGE_KEY, parseCartDrafts } from '@/lib/pos/cart-drafts';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
@@ -598,12 +600,9 @@ export function TopBar({
   // 🔴 Soat `null` dan boshlanadi va faqat mount'dan keyin to'ladi: server va
   // brauzer vaqti bir xil bo'lmasligi mumkin va React gidratatsiya nomuvofiqligi
   // haqida ogohlantirardi (ekran mijoz oldida — konsol xatosi kerak emas).
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 10_000);
-    return () => clearInterval(id);
-  }, []);
+  // Shu qaror endi `useServerClock` ichida — S1 da manba ham SERVER vaqtiga
+  // ko'chirildi (qurilma soati adashsa mijoz xato soat ko'rardi).
+  const now = useServerClock(10_000);
 
   return (
     <div
@@ -670,6 +669,8 @@ export function TopBar({
             ? now.toLocaleTimeString(bcp47, {
                 hour: '2-digit',
                 minute: '2-digit',
+                // Qurilmaning mintaqa sozlamasi so'ralmaydi (S1).
+                timeZone: POS_TZ,
               })
             : ''}
         </div>

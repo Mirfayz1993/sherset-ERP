@@ -15,12 +15,20 @@
  *
  * Soat minutlik interval bilan yangilanadi; sekundlar ko'rsatilmaydi —
  * kassirga kerak emas, interval esa arzon qoladi.
+ *
+ * 🔴 Soat SERVER vaqtida (S-reja S1, 2026-09-04). Ilgari u qurilma soatidan
+ * o'qilardi va kassa mashinasining vaqti adashsa ekranda ham xato chiqardi
+ * (egasining shikoyati). Endi manba — `serverNow()`, mintaqa esa qat'iy
+ * `POS_TZ`, ya'ni qurilmaning sozlamasi umuman so'ralmaydi.
  */
 
+import { useServerClock } from '@/hooks/use-server-clock';
+import { POS_TZ } from '@/lib/clock';
+import { useBcp47 } from '@/lib/i18n-format';
 import type { CurrentSession } from '@moysklad/contracts';
 import { formatMoney } from '@moysklad/ui';
 import { useTranslations } from 'next-intl';
-import { type ReactNode, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { PosRateChip } from './pos-rate-chip';
 import { ShellVersionBadge } from './shell-version-badge';
 import { WindowControls } from './window-controls';
@@ -35,20 +43,30 @@ export interface PosHeaderProps {
   children?: ReactNode;
 }
 
-/** «HH:MM» — lokal vaqt. Matn emas, raqam — i18n talab qilinmaydi. */
-function clockText(d: Date): string {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
+/**
+ * «HH:MM» — SERVER vaqti, `POS_TZ` mintaqasida.
+ *
+ * Lokal `useBcp47()` dan olinadi (Faza 3 konvensiyasi, `pos-bcp47-guard`
+ * qo'riqchisi shuni talab qiladi). Chiqish ikki tilda AYNI: soat/daqiqa —
+ * o'sha qo'riqchi hujjatlagan yagona haqiqiy no-op (`i18n-format.ts` jadvali,
+ * Node va Chromium'da o'lchangan), ya'ni bu ulanish ko'rinishni o'zgartirmaydi.
+ *
+ * `hour12` ATAYLAB berilmaydi: `false` ba'zi ICU nusxalarida h24 ga tushib
+ * yarim tunni «24:00» qilib yozadi; ikkala lokalimiz ham sukut bo'yicha h23.
+ */
 function useMinuteClock(): string {
-  const [now, setNow] = useState(() => clockText(new Date()));
-  useEffect(() => {
-    // Minut boshiga tekislamaymiz — 30s qadam bilan eng ko'p yarim minut
-    // kechikadi, kod esa sodda qoladi (drift-tekislash mantiqsiz murakkablik).
-    const id = setInterval(() => setNow(clockText(new Date())), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
+  const bcp47 = useBcp47();
+  // Minut boshiga tekislamaymiz — 30s qadam bilan eng ko'p yarim minut
+  // kechikadi, kod esa sodda qoladi (drift-tekislash mantiqsiz murakkablik).
+  const now = useServerClock(30_000);
+  return now
+    ? now.toLocaleTimeString(bcp47, {
+        hour: '2-digit',
+        minute: '2-digit',
+        // Qurilmaning mintaqa sozlamasi so'ralmaydi (S1).
+        timeZone: POS_TZ,
+      })
+    : '';
 }
 
 export function PosHeader({ session, shiftAge, connectionOk, children }: PosHeaderProps) {
@@ -117,7 +135,7 @@ export function PosHeader({ session, shiftAge, connectionOk, children }: PosHead
           )}
         </div>
 
-        {/* Soat — testda assert YO'Q (flaky), faqat ko'rinish. */}
+        {/* Soat — SERVER vaqtida (S1); testda skew bilan assert qilinadi. */}
         <span
           data-test-id="pos-header-clock"
           className="font-semibold text-[20px] tabular-nums tracking-wide"
