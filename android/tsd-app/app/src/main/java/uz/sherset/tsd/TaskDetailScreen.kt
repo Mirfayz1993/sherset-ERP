@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -44,6 +45,37 @@ class TaskDetailScreen(
     private var task by mutableStateOf<JSONObject?>(null)
     private var loading by mutableStateOf(true)
 
+    /**
+     * 🔴 T10 — topshiriq KESHDAN chizildimi (`null` = jonli javob).
+     *
+     * Oflayn ko'rinish FAQAT O'QISH: «Oldim», «Topolmadim» va «Kesish»
+     * tugmalari CHIZILMAYDI. Sabab qat'iy — bu tugmalar «qator hali OCHIQ»
+     * degan xulosani bajaradi, xulosa esa keshdan chiqadi: shu orada
+     * qatorni boshqa terminal yopgan yoki kontrol bekor qilgan bo'lishi
+     * mumkin. Amal navbatga tushib, keyin 4xx bilan rad etilar edi — ya'ni
+     * omborchi «bo'ldi» degan javobni eshitib, ishi rad etilganlar
+     * ro'yxatiga tushardi.
+     *
+     * Yo'qotilgan narsa yo'q: ilgari oflaynda bu ekran umuman ochilmasdi
+     * (`load()` yiqilib, «Yuklanmoqda…» abadiy qolardi).
+     */
+    private var cachedAt by mutableStateOf<Long?>(null)
+
+    /** Jim yangilash halqasining kaliti. */
+    private var retry by mutableStateOf(0)
+
+    /**
+     * 🔴 T10 — jim yangilash AYNI DAMDA ketmoqdami.
+     *
+     * `Shell.io` YAGONA thread'da yuradi (`MainActivity.ioPool`), zaif
+     * Wi-Fi'da esa bitta so'rov 15 soniyagacha `connectTimeout` ushlaydi —
+     * ya'ni 20 soniyalik halqa qo'riqchisiz bo'lsa navbat O'SARDI va
+     * omborchining o'z amallari o'sha navbat orqasida kutib qolardi.
+     * Bayroq Compose state EMAS: u chizishda o'qilmaydi (o'qish ham, yozish
+     * ham UI thread'da — [CountScreen.onScreen] naqshi).
+     */
+    private var refreshing = false
+
     override fun title(shell: Shell): String = shell.str(R.string.task_title)
 
     /**
@@ -57,7 +89,17 @@ class TaskDetailScreen(
         // natija kelganda `onScanResult` o'zi ok/fail ni aytadi.
         shell.toast(R.string.scan_working)
         shell.io {
-            val hit = shell.api.scan(code)
+            val hit = try {
+                shell.api.scan(code)
+            } catch (e: ApiClient.ApiException) {
+                // 🔴 T10 — skan tasdiq YO'LI, ya'ni yozish. Keshda «bu shtrix
+                // qaysi tovar» degan javob yo'q va bo'lishi ham kerak emas:
+                // tasdiq faqat jonli tasnifdan keyin ketadi.
+                shell.error(
+                    if (e.retriable) shell.str(R.string.cache_no_actions) else (e.message ?: ""),
+                )
+                return@io
+            }
             shell.main { onScanResult(hit) }
         }
         return true
@@ -104,6 +146,18 @@ class TaskDetailScreen(
         }
         val total = lines.length()
         val done = total - open
+
+        val staleAt = cachedAt
+        if (staleAt != null) {
+            OfflineBadge(savedAt = staleAt, note = stringResource(R.string.cache_no_actions))
+            Spacer(Modifier.height(10.dp))
+            // Aloqa qaytganda JIM yangilash (izohi `CountScreen.refreshQuietly`).
+            LaunchedEffect(retry, staleAt) {
+                delay(CacheShape.RETRY_MS)
+                refreshQuietly()
+                retry++
+            }
+        }
 
         SectionCard {
             Text(
@@ -194,6 +248,10 @@ class TaskDetailScreen(
             )
 
             if (closed) return@SectionCard
+            // 🔴 T10 — kesh ustida AMAL tugmalari yo'q (sabab `cachedAt`
+            // izohida). Qator o'zi ko'rinadi: omborchi nimani yig'ishini
+            // biladi, tasdiqni esa aloqa qaytgach beradi.
+            if (cachedAt != null) return@SectionCard
 
             Spacer(Modifier.height(12.dp))
             // K4 — bo'linadigan tovar: qator KESIMSIZ yopilmaydi (server ham
@@ -230,10 +288,48 @@ class TaskDetailScreen(
     private fun load() {
         loading = true
         shell.io {
-            val t = shell.api.task(taskId)
+            val t = try {
+                shell.api.task(taskId)
+            } catch (e: ApiClient.ApiException) {
+                // 🔴 T10 — aloqa yo'q: oxirgi ko'rilgan topshiriq chiziladi
+                // (faqat o'qish uchun). Ilgari ekran «Yuklanmoqda…» da
+                // abadiy qolardi va omborchi nimani yig'ishini ko'rolmasdi.
+                val hit = if (e.retriable) shell.cache.task(taskId) else null
+                shell.main {
+                    loading = false
+                    if (hit == null) return@main
+                    task = hit.body
+                    cachedAt = hit.savedAt
+                }
+                if (hit == null) shell.error(e.message ?: "")
+                return@io
+            }
+            shell.cache.putTask(taskId, t)
             shell.main {
                 task = t
+                cachedAt = null
                 loading = false
+            }
+        }
+    }
+
+    /** T10 — aloqa qaytganda jim yangilash: xato KO'RSATILMAYDI. */
+    private fun refreshQuietly() {
+        if (refreshing) return
+        refreshing = true
+        shell.io {
+            val t = try {
+                shell.api.task(taskId)
+            } catch (e: ApiClient.ApiException) {
+                Diagnostics.log("CACHE topshiriq jim yangilanmadi: " + (e.message ?: ""))
+                shell.main { refreshing = false }
+                return@io
+            }
+            shell.cache.putTask(taskId, t)
+            shell.main {
+                task = t
+                cachedAt = null
+                refreshing = false
             }
         }
     }

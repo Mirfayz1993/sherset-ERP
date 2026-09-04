@@ -15,6 +15,13 @@ interface Shell {
     val queue: ActionQueue
     val sender: QueueSender
 
+    /**
+     * T10 — OFLAYN O'QUV keshi. `queue` bilan ADASHTIRMANG: `queue` —
+     * YUBORILADIGAN amallar, `cache` esa faqat KO'RSATILADIGAN ma'lumot.
+     * Keshdan hech qanday amal yoki yozish qarori chiqmaydi ([ReadCache]).
+     */
+    val cache: ReadCache
+
     /** Kirgan xodim (topshiriqlar shu bo'yicha filtrlanadi). */
     val employeeId: String
 

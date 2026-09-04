@@ -228,6 +228,42 @@ Qaror `CountUndo.kt` da — yana SOF modul, `CountUndoTest.kt` bilan qulflangan
 (eng muhimi: yuboriladigan nishon serverning `^\d+(\.\d{1,6})?$` qoidasidan
 o'tadi).
 
+## Oflayn o'quv keshi (T10)
+
+Ombor Wi-Fi'si javonlar orasida o'lik zonalar qoldiradi. Endi **oxirgi
+ko'rilgan** ma'lumot xotirada qoladi va aloqa yo'q bo'lganda ekran baribir
+o'qiladi — tepasida sariq plashka bilan: «📴 Oflayn ma'lumot · **12 daq
+oldin**».
+
+| Ekran | Keshdan chiziladi | Oflaynda NIMA YO'Q |
+|---|---|---|
+| Sanash | yacheyka tarkibi (qoldiq + biriktirilgan qatorlar) | sanoq maydonining **sukut qiymati**, «qolganini 0 qilib yopish», ⟲ qaytarish |
+| Topshiriq detali | qatorlar, marshrut, progress | «Oldim», «Topolmadim», «✂ Kesish», skan bilan tasdiq |
+| Topshiriqlar ro'yxati | kartalar va progress | — |
+| Tovar qidirish | AYNI so'rov bilan oxirgi natijalar | — (ekran hech nimani o'zgartirmaydi) |
+
+🔴 **Kesh — FAQAT O'QISH.** Undan hech qanday yozish qarori chiqmaydi va
+oflayn AMAL navbatiga (`ActionQueue`) umuman tegilmagan: u alohida fayl,
+alohida qoidalar. Eng muhim natija — sanash maydonining sukut qiymati:
+keshdagi «tizim soni» maydonga QO'YILMAYDI, chunki omborchi «Saqlash» ni
+bosgan zahoti eski son **mutlaq sanoq** bo'lib serverga ketardi. Oflaynda
+maydon bo'sh, tugma o'chiq — son javondan sanab kiritiladi.
+
+🔴 **Narx keshda yo'q va bo'lishi mumkin ham emas.** Yozilayotgan javob
+`CacheShape` **oq ro'yxatidan** o'tadi: ro'yxatda yo'q maydon ko'chirilmaydi,
+oq ro'yxatsiz ichki obyekt esa butunlay tashlanadi. Qoida `CacheShapeTest`
+bilan qulflangan (narx maydonlari qo'shilgan javob modellashtiriladi).
+
+Chegaralar (`CacheShape`): yacheyka **50 ta**, qidiruv **20 ta**, topshiriq
+**20 ta**, ro'yxat **5 xodim**; bitta yacheykada **200 qator**, topshiriqda
+**300 qator**; har bo'lim **256 KB** — qaysi chegara oldin to'lsa, o'sha
+ishlaydi va eng ESKISI chiqadi. Yozuv **12 soatdan** (bitta smena) eski
+bo'lsa umuman ko'rsatilmaydi.
+
+Aloqa qaytganda ekran **jim** yangilanadi (20 soniyada bir urinish, ovoz ham,
+banner ham yo'q — plashka shunchaki yo'qoladi). Oflaynda terilgan sonlar va
+✓ belgilari jim yangilashda SAQLANADI.
+
 ## Yangilanish (qurilmadan) — 0.3.0
 
 Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
@@ -546,10 +582,12 @@ app/src/main/java/uz/sherset/tsd/
    Feedback.kt                             — T4: ovoz (ToneGenerator) + tebranish (Vibrator)
    QtyExpression.kt                        — T5: miqdor ifodasi (SOF modul, `12*24` → `288`)
    CountUndo.kt                            — T7: qaytarish nishoni (SOF modul; chiziq chiqadimi, qaysi son ketadi)
+   CacheShape.kt                           — T10: kesh oq ro'yxati, hajm chegaralari, yosh (SOF modul)
+   ReadCache.kt                            — T10: oflayn O'QUV keshi (SharedPreferences; amal navbatidan mustaqil)
    Updater.kt                              — qurilmadan yangilash (manifest+sha256+o'rnatish)
    — dizayn qatlami (0.2.0, Compose) —
    Theme.kt                                — ranglar, tipografika, shakllar
-   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar (T5 kalkulyator rejimi), xato banneri
+   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar (T5 kalkulyator rejimi), xato banneri, T10 oflayn plashkasi
    Shell.kt                                — `Shell`/`Screen` shartnomasi
    ScanBar.kt                              — doim fokusdagi klaviatura-wedge maydoni
    AuthScreens.kt                          — juftlash + PIN (raqamlagich)
@@ -564,6 +602,7 @@ app/src/main/java/uz/sherset/tsd/
 app/src/test/java/uz/sherset/tsd/
    QtyExpressionTest.kt                    — T5: JVM unit-test (17 ta) — `gradle testDebugUnitTest`
    CountUndoTest.kt                        — T7: JVM unit-test (8 ta) — qaytarish nishoni server regexidan o'tadi
+   CacheShapeTest.kt                       — T10: JVM unit-test (15 ta) — keshda narx YO'Q, yosh va hajm chegaralari
 app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose + T9 release-imzo)
 tools/
    imzo-yarat.sh                           — T9: release-kalitni BIR MARTA yaratish (mavjud bo'lsa to'xtaydi)

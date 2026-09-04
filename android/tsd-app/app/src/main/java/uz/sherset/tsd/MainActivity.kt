@@ -65,6 +65,9 @@ class MainActivity : ComponentActivity(), Shell {
     override lateinit var api: ApiClient
     override lateinit var queue: ActionQueue
     override lateinit var sender: QueueSender
+
+    /** T10 — oflayn O'QUV keshi (amal navbatidan mustaqil, [ReadCache]). */
+    override lateinit var cache: ReadCache
     override var employeeId: String = ""
 
     /** Auth bosqichi — juftlashdan ish stoligacha. */
@@ -109,6 +112,9 @@ class MainActivity : ComponentActivity(), Shell {
         Feedback.init(this)
         store = DeviceStore(this)
         queue = ActionQueue(this)
+        // T10 — kesh sessiyadan MUSTAQIL yashaydi: u chiqishda tozalanmaydi
+        // (izohi `ReadCache` da) va sirni ham, narxni ham saqlamaydi.
+        cache = ReadCache(this)
         api = ApiClient(getString(R.string.api_base_url))
         // Sessiyani tiklab bo'lmadi ⇒ PIN ekrani. Ilgari bu holat xom
         // «HTTP 401» bo'lib chiqardi va terminal boshi berk ko'chaga kirardi.

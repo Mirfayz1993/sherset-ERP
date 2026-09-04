@@ -177,6 +177,35 @@ class CountScreen(private val shell: Shell) : Screen {
      */
     private var onScreen = false
 
+    /**
+     * 🔴 T10 — TARKIB KESHDAN CHIZILDIMI. `null` = jonli javob; son = kesh
+     * QACHON yozilgani (plashka yoshi shundan hisoblanadi).
+     *
+     * Bu bayroq shunchaki bezak emas — u ekranning UCH ta yozish yo'lini
+     * o'chiradi (sanoq maydonining sukut qiymati, «qolganini 0 qilib
+     * yopish» va ⟲ qaytarish), chunki ularning hammasi SERVERDAGI songa
+     * tayanadi. Kesh — faqat O'QISH.
+     */
+    private var cachedAt by mutableStateOf<Long?>(null)
+
+    /** Yacheyka QAYSI kod bilan ochilgan — jim yangilash shu koddan ketadi. */
+    private var cellCode by mutableStateOf("")
+
+    /** Jim yangilash halqasining kaliti (`LaunchedEffect` shundan qayta boshlanadi). */
+    private var cacheRetry by mutableStateOf(0)
+
+    /**
+     * 🔴 T10 — jim yangilash AYNI DAMDA ketmoqdami.
+     *
+     * `Shell.io` YAGONA thread'da yuradi (`MainActivity.ioPool`), zaif
+     * Wi-Fi'da esa bitta so'rov 15 soniyagacha `connectTimeout` ushlaydi —
+     * ya'ni 20 soniyalik halqa qo'riqchisiz bo'lsa navbat O'SARDI va
+     * omborchining o'z amallari o'sha navbat orqasida kutib qolardi.
+     * Bayroq Compose state EMAS: u chizishda o'qilmaydi (o'qish ham, yozish
+     * ham UI thread'da — [CountScreen.onScreen] naqshi).
+     */
+    private var refreshing = false
+
     override fun title(shell: Shell): String = shell.str(R.string.count_title)
 
     @Composable
@@ -240,6 +269,22 @@ class CountScreen(private val shell: Shell) : Screen {
         }
         Spacer(Modifier.height(10.dp))
 
+        // 🔴 T10 — kesh plashkasi: sarlavhadan darhol KEYIN, qatorlardan
+        // OLDIN. Omborchi sonlarni o'qishdan avval ularning eski ekanini
+        // ko'rishi kerak — pastga qo'yilsa u skroll bilan ketib qolardi.
+        val staleAt = cachedAt
+        if (staleAt != null) {
+            OfflineBadge(savedAt = staleAt, note = stringResource(R.string.cache_count_note))
+            Spacer(Modifier.height(10.dp))
+            // Aloqa qaytganda JIM yangilash: omborchi hech nima bosmaydi va
+            // hech nima ko'rmaydi — plashka shunchaki yo'qoladi.
+            LaunchedEffect(cacheRetry, staleAt) {
+                delay(CacheShape.RETRY_MS)
+                refreshQuietly()
+                cacheRetry++
+            }
+        }
+
         // T7 — «oxirgi sanoq» chizig'i. Sarlavhadan KEYIN va «sanalayotgan
         // tovar» kartasidan OLDIN: saqlashdan keyin karta yopiladi va ko'z
         // aynan shu joyda qoladi.
@@ -286,11 +331,21 @@ class CountScreen(private val shell: Shell) : Screen {
                 }
                 Spacer(Modifier.height(4.dp))
                 InfoRow(
-                    label = stringResource(R.string.count_system_qty),
+                    label = stringResource(
+                        if (staleAt == null) R.string.count_system_qty
+                        else R.string.count_system_qty_stale,
+                    ),
                     value = it.optString("qty"),
                 )
                 Spacer(Modifier.height(10.dp))
-                val typed = counts[assortmentId] ?: it.optString("qty")
+                // 🔴 T10 — KESHDAN kelgan son SUKUT QIYMAT bo'la olmaydi:
+                // omborchi «Saqlash» ni bosgan zahoti eski son MUTLAQ sanoq
+                // bo'lib serverga ketardi — bu aynan «keshdan chiqqan yozish
+                // qarori». Oflaynda maydon BO'SH va tugma o'chiq turadi
+                // (`QtyExpression.qty("") == null`), ya'ni son javondan
+                // sanab kiritilishi SHART.
+                val typed = counts[assortmentId]
+                    ?: if (staleAt == null) it.optString("qty") else ""
                 NumberField(
                     value = typed,
                     onChange = { v -> counts[assortmentId] = v },
@@ -398,7 +453,13 @@ class CountScreen(private val shell: Shell) : Screen {
             MarkedTitle(p.optString("name"), marks[assortmentId])
             Spacer(Modifier.height(6.dp))
             if (inCell != null) {
-                InfoRow(label = stringResource(R.string.count_system_qty), value = inCell)
+                InfoRow(
+                    label = stringResource(
+                        if (cachedAt == null) R.string.count_system_qty
+                        else R.string.count_system_qty_stale,
+                    ),
+                    value = inCell,
+                )
             } else {
                 // 🔴 Yangi qator — sanash KIRIM hujjatini yozadi. Omborchi buni
                 // oldindan bilishi kerak (jim qo'shish IS-5 klassi bo'lardi).
@@ -562,6 +623,12 @@ class CountScreen(private val shell: Shell) : Screen {
      */
     @Composable
     private fun CloseRestBlock(c: JSONObject) {
+        // 🔴 T10 — OFLAYN ko'rinishda bu blok umuman chizilmaydi. «Qolganini
+        // 0 qilib yopish» — YO'QOTUVCHI ommaviy amal (har qator uchun avto
+        // Списание) va u «qaysi qator sanalmagan» ro'yxatidan chiqadi.
+        // Ro'yxat kesh bo'lsa qaror ham keshdan chiqqan bo'lardi: boshqa
+        // terminal allaqachon sanagan qator bu yerda «sanalmagan» ko'rinadi.
+        if (cachedAt != null) return
         if (closing) {
             SectionCard(tint = Palette.WarningContainer, border = Palette.Warning) {
                 Text(
@@ -808,6 +875,10 @@ class CountScreen(private val shell: Shell) : Screen {
      * maxrajida bormidi va taymer kaliti.
      */
     private fun undoPoint(assortmentId: String, name: String, after: String): LastSave? {
+        // 🔴 T10 — kesh ustida qaytarish TAKLIF QILINMAYDI: «avvalgi qiymat»
+        // eski nusxadan olingan bo'lardi va ⟲ tugmasi uni MUTLAQ son
+        // sifatida serverga yuborardi — ya'ni keshdan chiqqan yozish qarori.
+        if (cachedAt != null) return null
         val raw = systemQty(assortmentId)
         val point = CountUndo.point(raw, after)
         if (point is CountUndo.Point.Unreadable) {
@@ -901,11 +972,14 @@ class CountScreen(private val shell: Shell) : Screen {
         // Ro'yxatdagi tovarda sukut — tizim qoldig'i (omborchi ko'pincha uni
         // tasdiqlaydi); yacheykada yo'q tovarda maydon BO'SH qoladi, chunki
         // «0» taklif qilish sanashning ma'nosini yo'qotardi.
-        pickedQty = systemQty(assortmentId) ?: ""
+        // 🔴 T10 — kesh ustida sukut qiymat TAKLIF QILINMAYDI (sabab
+        // ro'yxatdagi maydon izohida): oflaynda sonni omborchi o'zi kiritadi.
+        pickedQty = if (cachedAt != null) "" else systemQty(assortmentId) ?: ""
     }
 
     private fun reset() {
         cell = null
+        cellCode = ""
         items = JSONArray()
         bound = JSONArray()
         counts.clear()
@@ -924,6 +998,9 @@ class CountScreen(private val shell: Shell) : Screen {
         roster.clear()
         marks.clear()
         confirming = false
+        // T10 — yangi yacheyka JONLI deb hisoblanadi; keshdan ochilgan
+        // bo'lsa `adoptCell` bayroqni shundan KEYIN qo'yadi.
+        cachedAt = null
         // 🔴 T7 (reja bandi 4) — YACHEYKA almashsa chiziq ham yo'qoladi.
         // Aks holda omborchi yangi javon oldida turib eski javonning
         // sanog'ini «qaytarib» yuborardi. Ekran almashishi esa
@@ -937,7 +1014,19 @@ class CountScreen(private val shell: Shell) : Screen {
      */
     override fun onScan(code: String): Boolean {
         shell.io {
-            val hit = shell.api.scan(code)
+            val hit = try {
+                shell.api.scan(code)
+            } catch (e: ApiClient.ApiException) {
+                // 🔴 T10 — aloqa yo'q, ya'ni kod TASNIFLANMAGAN: u yacheykami
+                // yoki tovarmi — bilmaymiz. Yagona xavfsiz javob — xotirada
+                // AYNAN shu kod bilan ochilgan yacheyka bormi. Tovar shtrixi
+                // oflaynda tanilmaydi va bu ATAYLAB: kesh qaysi shtrix qaysi
+                // tovarga tegishli ekanini emas, faqat KO'RILGAN ro'yxatni
+                // biladi — undan tovar «tanlash» multi-hit qoidasini
+                // (tanlovni ODAM qiladi) chetlab o'tishga yo'l ochardi.
+                if (e.retriable) openCellFromCache(code) else shell.error(e.message ?: "")
+                return@io
+            }
             when (hit.optString("kind")) {
                 "cell" -> openCell(code)
                 "product" -> {
@@ -983,8 +1072,21 @@ class CountScreen(private val shell: Shell) : Screen {
 
     /** Yacheyka yorlig'i — tarkibini ochadi (yoki keyingi yacheykaga o'tadi). */
     private fun openCell(code: String) {
-        val resp = shell.api.cellByBarcode(code)
+        val resp = try {
+            shell.api.cellByBarcode(code)
+        } catch (e: ApiClient.ApiException) {
+            // T10 — skan tasniflanib ulgurdi, lekin tarkib kelmadi (Wi-Fi
+            // aynan shu daqiqada uzildi). Xotiradagi nusxa bo'lsa — ochamiz.
+            if (!e.retriable) throw e
+            openCellFromCache(code)
+            return
+        }
         val cells = resp.optJSONArray("cells") ?: JSONArray()
+        // 🔴 T10 — kesh IO thread'da yoziladi (`SharedPreferences` diskka
+        // tegadi) va FAQAT yagona yacheyka topilganda: ko'p natijali yorliq
+        // keshga tushsa, oflaynda ilova uni «shu yacheyka» deb ochib
+        // yuborardi, ya'ni «tanlovni ODAM qiladi» qoidasi buzilardi.
+        if (cells.length() == 1) shell.cache.putCell(code, resp)
         shell.main {
             when (cells.length()) {
                 0 -> shell.error(R.string.cell_not_found)
@@ -992,21 +1094,101 @@ class CountScreen(private val shell: Shell) : Screen {
                     // T4 — yacheyka ochildi: omborchi yorliqni skanerlab,
                     // ekranga qaramasdan keyingi tovarga qo'l uzatadi.
                     Feedback.ok()
-                    cell = cells.getJSONObject(0)
-                    items = resp.optJSONArray("stock") ?: JSONArray()
-                    // Qo'shimcha SO'ROV YO'Q — `products` shu javobning ichida.
-                    bound = resp.optJSONArray("products") ?: JSONArray()
-                    counts.clear()
-                    picked = null
-                    pickedQty = ""
-                    // T6 — yangi yacheyka = yangi sanoq sessiyasi.
-                    clearProgress()
-                    rosterSync()
+                    adoptCell(code, cells.getJSONObject(0), resp, at = null)
                 }
                 // Ikki javonda bir xil yorliq — ilova TANLAMAYDI, aks holda
                 // sanoq noto'g'ri yacheykaga yozilardi.
                 else -> shell.error(R.string.cell_ambiguous)
             }
+        }
+    }
+
+    /**
+     * Yacheyka tarkibini ekranga oladi (UI thread).
+     *
+     * @param at `null` = JONLI javob; son = KESH va uning yoshi.
+     * @param fresh `true` = YANGI yacheyka (sanoq sessiyasi noldan boshlanadi);
+     *   `false` = AYNI yacheykaning jim yangilanishi, ya'ni omborchi terib
+     *   qo'ygan sonlar, ✓ belgilari va progress JOYIDA qoladi.
+     */
+    private fun adoptCell(
+        code: String,
+        c: JSONObject,
+        resp: JSONObject,
+        at: Long?,
+        fresh: Boolean = true,
+    ) {
+        if (fresh) {
+            counts.clear()
+            picked = null
+            pickedQty = ""
+            // T6 — yangi yacheyka = yangi sanoq sessiyasi. `clearProgress`
+            // `cachedAt` ni ham nolga tushiradi, shuning uchun bayroq undan
+            // KEYIN qo'yiladi.
+            clearProgress()
+        }
+        cell = c
+        cellCode = code
+        items = resp.optJSONArray("stock") ?: JSONArray()
+        // Qo'shimcha SO'ROV YO'Q — `products` shu javobning ichida.
+        bound = resp.optJSONArray("products") ?: JSONArray()
+        cachedAt = at
+        rosterSync()
+    }
+
+    /**
+     * 🔴 T10 — yacheykani XOTIRADAN ochadi (aloqa yo'q).
+     *
+     * Kesh yozuvi yo'q yoki muddati o'tgan bo'lsa ([CacheShape.MAX_AGE_MS] —
+     * bitta smena) hech nima ochilmaydi va xato AYTILADI: bo'sh yacheyka
+     * ko'rsatib qo'yish 2026-09-03 dagi boshi berk ko'chaning aynan o'zi
+     * bo'lardi.
+     */
+    private fun openCellFromCache(code: String) {
+        val entry = shell.cache.cell(code)
+        val one = entry?.body?.optJSONArray("cells")?.optJSONObject(0)
+        if (entry == null || one == null) {
+            shell.error(R.string.cache_cell_missing)
+            return
+        }
+        shell.main {
+            // Yorliq TANILDI — signal T4 qoidasi bo'yicha beriladi (omborchi
+            // ekranga emas, javonga qaraydi). Ma'lumot eski ekanini sariq
+            // plashka aytadi, bo'sh sanoq maydonlari esa unga qarashga
+            // majbur qiladi.
+            Feedback.ok()
+            adoptCell(code, one, entry.body, at = entry.savedAt)
+        }
+    }
+
+    /**
+     * 🔴 T10 — ALOQA QAYTGANDA JIM YANGILASH.
+     *
+     * «Jim» — so'zma-so'z: muvaffaqiyatda ovoz ham, toast ham, banner ham
+     * yo'q (plashka shunchaki yo'qoladi), xatoda esa faqat [Diagnostics] ga
+     * qator tushadi. Sabab: bu urinishni omborchi so'ramagan — u javon
+     * oldida ishlayapti va har 20 soniyada chiqadigan qizil banner uning
+     * ishini to'sardi.
+     */
+    private fun refreshQuietly() {
+        val code = cellCode
+        if (code.isEmpty() || refreshing) return
+        refreshing = true
+        shell.io {
+            val resp = try {
+                shell.api.cellByBarcode(code)
+            } catch (e: ApiClient.ApiException) {
+                Diagnostics.log("CACHE jim yangilash o'tmadi: " + (e.message ?: ""))
+                shell.main { refreshing = false }
+                return@io
+            }
+            val cells = resp.optJSONArray("cells") ?: JSONArray()
+            val one = cells.optJSONObject(0)
+            if (cells.length() == 1 && one != null) {
+                shell.cache.putCell(code, resp)
+                shell.main { adoptCell(code, one, resp, at = null, fresh = false) }
+            }
+            shell.main { refreshing = false }
         }
     }
 
@@ -1032,6 +1214,9 @@ class CountScreen(private val shell: Shell) : Screen {
                 val fresh = shell.api.cellStock(c.optString("storeId"), c.optString("id"))
                 shell.main {
                     items = fresh.optJSONArray("items") ?: items
+                    // T10 — «Tizimda» ustuni endi JONLI o'qildi: plashka
+                    // ketadi va sukut qiymatlar qaytadi.
+                    cachedAt = null
                     counts.remove(assortmentId)
                     // T6 — qator SANALDI (✓ yashil) va progressga kiradi.
                     // `roster` ga ham yoziladi: 0 deb sanalgan yoki
@@ -1117,6 +1302,7 @@ private data class LastSave(
  * lekin chiziq keyingi tovarga o'tgach yo'lda qolib ketmaydi.
  */
 private const val UNDO_STRIP_MS = 12_000L
+
 
 /**
  * Belgi RANGDAN tashqari SHAKL bilan ham farq qiladi: 4" ekranda, qo'lqopda

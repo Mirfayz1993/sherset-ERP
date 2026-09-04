@@ -101,6 +101,9 @@
     <string name="count_empty">Yacheyka bo\'sh</string>
     <string name="count_qty_hint">Sanalgan son</string>
     <string name="count_system_qty">Tizimda</string>
+    <!-- T10 — ayni yorliq, lekin son KESHDAN: omborchi uni jonli deb -->
+    <!-- o'qib qolmasin. -->
+    <string name="count_system_qty_stale">Tizimda (eski nusxa)</string>
     <string name="count_scan_product_tip">Tovar shtrixini skanerlang yoki ro\'yxatdan tanlang</string>
     <string name="count_scanned">Sanalayotgan tovar</string>
     <string name="count_not_in_cell">⚠ Bu tovar yacheykada yo\'q — sanalgan son KIRIM bo\'lib yoziladi</string>
@@ -228,6 +231,19 @@
     <string name="qty_bad_big">Son juda katta</string>
     <string name="qty_bad_precise">Kasr qismi 6 xonadan uzun</string>
     <string name="qty_invalid">Miqdor noto\'g\'ri — saqlanmadi</string>
+
+    <!-- T10 — oflayn O'QUV keshi. Plashka matni har doim ma'lumot QANCHA
+         eski ekanini aytadi: omborchi ekrandagi sonni «tizimdagi son» deb
+         qabul qiladi va uning ustiga qaror quradi. -->
+    <string name="cache_fresh">📴 Oflayn ma\'lumot · hozirgina olingan</string>
+    <string name="cache_minutes">📴 Oflayn ma\'lumot · %1$d daq oldin</string>
+    <string name="cache_hours">📴 Oflayn ma\'lumot · %1$d soat oldin</string>
+    <string name="cache_expired">📴 Oflayn ma\'lumot · juda eski</string>
+    <string name="cache_note">Aloqa yo\'q — ekran xotiradagi nusxadan chizildi. Aloqa qaytganda o\'zi yangilanadi.</string>
+    <string name="cache_count_note">🔴 Sanoq maydonlari BO\'SH qoldirildi: tizim soni eski bo\'lishi mumkin va ilova uni taklif qilmaydi. Sonni javondan sanab O\'ZINGIZ kiriting.</string>
+    <string name="cache_no_actions">🔴 Oflayn ko\'rinish — faqat o\'qish uchun. Tasdiqlash, yetishmovchilik va kesim tugmalari aloqa qaytgach paydo bo\'ladi.</string>
+    <string name="cache_cell_missing">Aloqa yo\'q va bu yacheyka xotirada ham yo\'q — Wi-Fi zonasiga chiqing</string>
+    <string name="cache_search_hint">Aloqa yo\'q — oxirgi marta shu so\'rov bilan topilganlar</string>
 
     <!-- Navbatdagi amallarning nomlari (rad etilganlar ro'yxatida ko'rinadi) -->
     <string name="op_confirm_line">Qator tasdig\'i</string>

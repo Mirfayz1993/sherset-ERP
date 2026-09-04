@@ -28,6 +28,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -447,5 +453,48 @@ fun InfoRow(label: String, value: String, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
         )
+    }
+}
+
+/**
+ * 🔴 T10 — «OFLAYN MA'LUMOT» PLASHKASI.
+ *
+ * Ekranda kesh turganini AYTMASLIK mumkin emas: omborchi ko'rgan sonni
+ * TIZIMDAGI son deb qabul qiladi va uning ustiga qaror quradi. Shuning
+ * uchun plashka ikki narsani aytadi — ma'lumot ESKI ekanini va QANCHA
+ * eski ekanini.
+ *
+ * Yosh JONLI: karta ekranda turgan sayin har 30 soniyada qayta hisoblanadi,
+ * ya'ni «2 daq oldin» plashkasi omborchi javon oldida turganda ham to'g'ri
+ * qoladi (aks holda u yozilgan paytdagi raqamda muzlab qolardi).
+ */
+@Composable
+fun OfflineBadge(savedAt: Long, note: String? = null, modifier: Modifier = Modifier) {
+    var now by remember(savedAt) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(savedAt) {
+        while (true) {
+            delay(30_000L)
+            now = System.currentTimeMillis()
+        }
+    }
+    val text = when (val age = CacheShape.age(savedAt, now)) {
+        is CacheShape.Age.Fresh -> stringResource(R.string.cache_fresh)
+        is CacheShape.Age.Minutes -> stringResource(R.string.cache_minutes, age.n)
+        is CacheShape.Age.Hours -> stringResource(R.string.cache_hours, age.n)
+        // Ekranda turganda muddati o'tib ketdi — «qancha eski» degan raqam
+        // endi yolg'on bo'lardi, shuning uchun faqat «juda eski» deyiladi.
+        is CacheShape.Age.Expired -> stringResource(R.string.cache_expired)
+    }
+    SectionCard(modifier = modifier, tint = Palette.WarningContainer, border = Palette.Warning) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Palette.Warning,
+        )
+        if (note != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(note, style = MaterialTheme.typography.bodyMedium, color = Palette.TextMuted)
+        }
     }
 }

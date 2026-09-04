@@ -54,6 +54,17 @@ class SearchScreen(
     /** Server ro'yxatni kesdimi (30 dan ko'p mos keldi). */
     private var truncated by mutableStateOf(false)
 
+    /**
+     * 🔴 T10 — natijalar KESHDAN chizildimi (`null` = jonli javob).
+     *
+     * Qidiruv ekrani hech nimani o'zgartirmaydi, ya'ni bu yerda «keshdan
+     * yozish qarori» xavfi yo'q: yagona chiqish — [onPick] bilan tovar
+     * TANLASH, tanlovni esa baribir ODAM qiladi. Lekin eski ro'yxat
+     * ARXIVLANGAN yoki o'chirilgan tovarni ko'rsatishi mumkin, shuning uchun
+     * plashka majburiy.
+     */
+    private var cachedAt by mutableStateOf<Long?>(null)
+
     override fun title(shell: Shell): String = shell.str(R.string.search_title)
 
     @Composable
@@ -87,6 +98,12 @@ class SearchScreen(
         if (busy) {
             EmptyState(stringResource(R.string.scan_working))
             return
+        }
+
+        val staleAt = cachedAt
+        if (staleAt != null) {
+            OfflineBadge(savedAt = staleAt, note = stringResource(R.string.cache_search_hint))
+            Spacer(Modifier.height(10.dp))
         }
 
         if (searched && results.length() == 0) {
@@ -126,17 +143,32 @@ class SearchScreen(
         shell.io {
             try {
                 val resp = shell.api.search(q)
+                // T10 — kesh IO thread'da yoziladi (`SharedPreferences`).
+                shell.cache.putSearch(q, resp)
                 shell.main {
                     results = resp.optJSONArray("products") ?: JSONArray()
                     truncated = resp.optBoolean("truncated")
                     searched = true
                     busy = false
+                    cachedAt = null
                 }
             } catch (e: ApiClient.ApiException) {
+                // 🔴 T10 — aloqa yo'q bo'lsa AYNI so'rov bilan oxirgi marta
+                // topilganlar ko'rsatiladi. Jim yangilash bu yerda ATAYLAB
+                // YO'Q: qidiruvni omborchi boshlaydi va u «Qidirish» ni
+                // qayta bosgani — aloqani qayta sinash uchun tayyor yo'l.
+                val hit = if (e.retriable) shell.cache.search(q) else null
                 // Xato holatida `busy` ALBATTA tushiriladi, aks holda ekran
                 // «Qidirilmoqda…» da qotib qolardi va tugma ham o'chiq turardi.
-                shell.main { busy = false }
-                shell.error(e.message ?: "")
+                shell.main {
+                    busy = false
+                    if (hit == null) return@main
+                    results = hit.body.optJSONArray("products") ?: JSONArray()
+                    truncated = hit.body.optBoolean("truncated")
+                    searched = true
+                    cachedAt = hit.savedAt
+                }
+                if (hit == null) shell.error(e.message ?: "")
             }
         }
     }

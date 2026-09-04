@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -38,6 +39,29 @@ class TaskListScreen(private val shell: Shell) : Screen {
     private var items by mutableStateOf(JSONArray())
     private var loading by mutableStateOf(true)
 
+    /**
+     * 🔴 T10 — ro'yxat KESHDAN chizildimi (`null` = jonli javob).
+     *
+     * Ro'yxat keshlanmasa topshiriq DETALI keshi ham yetib bo'lmas edi:
+     * detalga yagona yo'l shu ekrandan o'tadi.
+     */
+    private var cachedAt by mutableStateOf<Long?>(null)
+
+    /** Jim yangilash halqasining kaliti. */
+    private var retry by mutableStateOf(0)
+
+    /**
+     * 🔴 T10 — jim yangilash AYNI DAMDA ketmoqdami.
+     *
+     * `Shell.io` YAGONA thread'da yuradi (`MainActivity.ioPool`), zaif
+     * Wi-Fi'da esa bitta so'rov 15 soniyagacha `connectTimeout` ushlaydi —
+     * ya'ni 20 soniyalik halqa qo'riqchisiz bo'lsa navbat O'SARDI va
+     * omborchining o'z amallari o'sha navbat orqasida kutib qolardi.
+     * Bayroq Compose state EMAS: u chizishda o'qilmaydi (o'qish ham, yozish
+     * ham UI thread'da — [CountScreen.onScreen] naqshi).
+     */
+    private var refreshing = false
+
     override fun title(shell: Shell): String = shell.str(R.string.tasks_title)
 
     @Composable
@@ -47,6 +71,18 @@ class TaskListScreen(private val shell: Shell) : Screen {
         if (loading) {
             EmptyState(stringResource(R.string.loading))
             return
+        }
+
+        val staleAt = cachedAt
+        if (staleAt != null) {
+            OfflineBadge(savedAt = staleAt, note = stringResource(R.string.cache_note))
+            Spacer(Modifier.height(10.dp))
+            // Aloqa qaytganda JIM yangilash (izohi `CountScreen.refreshQuietly`).
+            LaunchedEffect(retry, staleAt) {
+                delay(CacheShape.RETRY_MS)
+                refreshQuietly()
+                retry++
+            }
         }
 
         if (items.length() == 0) {
@@ -121,10 +157,49 @@ class TaskListScreen(private val shell: Shell) : Screen {
     private fun load() {
         loading = true
         shell.io {
-            val fetched = shell.api.myTasks(shell.employeeId)
+            val fetched = try {
+                shell.api.myTasks(shell.employeeId)
+            } catch (e: ApiClient.ApiException) {
+                // 🔴 T10 — aloqa yo'q: oxirgi ko'rilgan ro'yxat chiziladi.
+                // Ilgari bu holat ekranni «Yuklanmoqda…» da abadiy qoldirardi
+                // (`loading` hech qachon tushmasdi) — ya'ni topshiriqni
+                // ko'rishning HECH QANDAY yo'li qolmasdi.
+                val hit = if (e.retriable) shell.cache.taskList(shell.employeeId) else null
+                shell.main {
+                    loading = false
+                    if (hit == null) return@main
+                    items = hit.body.optJSONArray("items") ?: JSONArray()
+                    cachedAt = hit.savedAt
+                }
+                if (hit == null) shell.error(e.message ?: "")
+                return@io
+            }
+            shell.cache.putTaskList(shell.employeeId, fetched)
             shell.main {
                 items = fetched
+                cachedAt = null
                 loading = false
+            }
+        }
+    }
+
+    /** T10 — aloqa qaytganda jim yangilash: xato KO'RSATILMAYDI. */
+    private fun refreshQuietly() {
+        if (refreshing) return
+        refreshing = true
+        shell.io {
+            val fetched = try {
+                shell.api.myTasks(shell.employeeId)
+            } catch (e: ApiClient.ApiException) {
+                Diagnostics.log("CACHE topshiriqlar jim yangilanmadi: " + (e.message ?: ""))
+                shell.main { refreshing = false }
+                return@io
+            }
+            shell.cache.putTaskList(shell.employeeId, fetched)
+            shell.main {
+                items = fetched
+                cachedAt = null
+                refreshing = false
             }
         }
     }

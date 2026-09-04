@@ -104,6 +104,13 @@ dependencies {
     // YO'Q (U-reja «Ochiq qolganlar») — bu bog'liqlik FAQAT `src/test` uchun
     // va APK'ga tushmaydi (`testImplementation`).
     testImplementation("junit:junit:4.13.2")
+
+    // T10 — `CacheShape` keshga TUSHADIGAN maydonlarni oq ro'yxat bilan
+    // kesadi va bu qaror JSON ustida ishlaydi. `android.jar` dagi `org.json`
+    // esa unit-testda faqat stub («not mocked» xatosi), shuning uchun testga
+    // HAQIQIY implementatsiya qo'shiladi. `testImplementation` — APK'ga
+    // TUSHMAYDI va ilova baribir Android'ning o'z `org.json` ini ishlatadi.
+    testImplementation("org.json:json:20240303")
 }
 
 // Imzosiz release APK'ni O'RNATIB BO'LMAYDI, lekin build muvaffaqiyatli
