@@ -216,6 +216,54 @@ skew'li stsenariy.
 - ✔ Chek raqami mantig'i (`document_sequences`, 2026-09-02) o'zgarmagan; zaxira shox saqlangan.
 - ✔ Serverga yangi maydon yuborilmagan (§2 qoida 3 isboti).
 
+**Qamrov eslatmasi:** `fmtReceiptDate` ni tuzatish **qarz chekini ham** yopadi —
+`lib/pos/receipt-debt-model.ts:71` (`moment: r.paidAt`) o'sha `buildReceiptModel` orqali o'tadi.
+
+<details><summary><b>S2 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-04-kassa-vaqt-ishonchliligi.md` ni TO'LIQ o'qi — §1 (ayniqsa §1.1 va §1.5),
+   §2 (o'zgarmas qoidalar), §4 (modul shartnomasi) va §5 dagi S2 bo'limi, hamda §6 dagi
+   S0 va S1 hisobotlari.
+2) Sen FAQAT **S2 — Qog'oz: chek va proforma sanasi** fazasini bajarasan. Faqat web (`apps/web`);
+   serverga (`apps/api`) TEGILMAYDI.
+3) 🔴 QIZIL CHIZIQ: POS serverga `moment` YUBORMAYDI va yubora boshlamaydi. Proforma chekining
+   `moment`i faqat QOG'OZGA boradi, hech qanday so'rovga kirmaydi. `retail-sale.service.ts` ga
+   tegilmaydi. Hisobotda buni `git diff --stat` bilan yozma isbotla.
+4) 🔴 IKKINCHI VAQT MANBASI YARATMA. S1 da `apps/web/src/lib/clock.ts` bor: `serverNow()` va
+   `POS_TZ`. Yangi skew mantig'i, yangi NTP, yangi `Date` o'qish — TAQIQ.
+5) Ish:
+   a) `app/(app)/sotuv/page.tsx:966` — `const now = new Date()` → `serverNow()`. `:982` dagi
+      chek `moment`i va `:977` dagi zaxira `CHEK-HHMMSS` raqami SHUNDAN kelsin.
+   b) `lib/pos/receipt-model.ts:225-227` — `fmtReceiptDate` ga `timeZone: POS_TZ` qo'shiladi.
+      🔴 LOKALNI O'ZGARTIRMA: `'ru-RU'` qog'oz-format qarori (moysklad pariteti), faqat
+      `timeZone` qo'shiladi. `lib/pos` `pos-bcp47-guard` skaneriga kirmaydi — bu bo'shliq
+      emas, S4 doirasi.
+   c) Chek raqami mantig'i (`document_sequences`, 2026-09-02) va tarmoq yiqilgandagi zaxira
+      shox O'ZGARMAYDI — faqat vaqt manbasi almashadi.
+6) Testlar (majburiy, yangi mantiqqa YANGI test):
+   - `lib/pos/receipt-model.test.ts` — `vi.setSystemTime` bilan qurilma soatini BOSHQA KUNGA
+     siljitib, `dateLabel` server `moment`iga mos qolishini qulfla;
+   - `lib/pos/receipt-proforma-model.test.ts` — skew'li stsenariy (qurilma sanasi xato,
+     chekdagi sana to'g'ri);
+   - yugurt: `cd apps/web && npx vitest run src/lib/pos src/app/\(app\)/sotuv`
+     (to'liq suite SHART EMAS — S2 umumiy transportga tegmaydi);
+   - gate: `pnpm --filter @moysklad/web typecheck` · `npx biome check <o'zgargan fayllar>` ·
+     `pnpm i18n:gate`.
+7) Git: `git add` FAQAT o'zing tegan yo'llar bilan. Ish daraxtida T3 (TSD qidiruv) ning
+   commit qilinmagan ishi turibdi — unga TEGMA va commitingga qo'shma. Commit subject kichik harf.
+8) 🔴 Manba fayllarni `Get-Content`/`Set-Content` bilan qayta yozma — faqat Edit/Write
+   (2026-09-01 kodlash hodisasi).
+9) Deploy QILMA (§2 qoida 9) — kassa jonli ishlayapti, deploy uni to'xtatadi.
+10) Tugagach §6 ga «### S2 — …» hisobotini yoz: fayllar, yangi testlar SONI, test natijalari
+    raqam bilan, qabul mezonining har bandi ✔/✘, «bu o'zgarish qaysi mavjud oqimni buzishi
+    mumkin?» javobi, ochiq qolganlar.
+11) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
+
 ---
 
 ### S3 — «O'tgan vaqt» hisoblari
