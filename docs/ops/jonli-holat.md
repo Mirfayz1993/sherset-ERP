@@ -407,6 +407,27 @@ Reja va to'liq retsept: `docs/plans/2026-08-25-kassa-qarzi-undirish-reyestri.md`
 > sanoq bilan to'ldirish) tugagandan KEYIN, egasi tanlagan 5–8 tovarda bo'ladi.
 > O'lchov va nomzodlar jadvali: J-rejaning §5 → J2 hisoboti.
 
+| **2026-09-05 (J3 sinov sanog'i)** | 🟢 **BO'LAK REYESTRIGA BIRINCHI MARTA YOZILDI — SINOV, izi tozalangan.** Egasining tasdig'i bilan **Muxriddin** (Katta omborchi) tokeni ostida 6 qadamli zanjir yuritildi: butun rulon (250 m, yorliqsiz) → bo'lak (`37,5` **vergul bilan** → `37.500000`, yorliq `BLK-000002`) → yorliqni skanerlash (AYNAN o'sha qator ochildi) → begona kod `4780000000001` (**400 — RAD**, ya'ni 7.3 ishlayapti) → ikkala qatorni «tugadi» qilish. Natija **6/6 ✔**, boshlang'ich holat **qaytdi** (faol qator 0), **`Stock.qty` 5 854,5 → 5 854,5 (STOK-NEYTRAL)**. ⚠️ Birinchi urinish 4/6 da uzildi (skriptning xatosi: `close` ga tana yuborilmagan → Fastify 400) va 2 qator `active` qolgan edi — `--cleanup` bilan yopildi. **Yakuniy holat: `stock_pieces` = 4 qator, HAMMASI `consumed`, faol 0; `piece_tracked = true` = 0** (mustaqil SQL bilan tekshirildi). Yorliqlar `BLK-000001`/`BLK-000002` band ⇒ haqiqiy sanoq **`BLK-000003`** dan boshlanadi. **Bayroqqa TEGILMADI** — kassa bu ma'lumotni umuman ko'rmadi. Egasi pilot ro'yxatini tasdiqladi: `Uz apunp 2x4` · `Uz punp 2x2.5` · `Uz punp 2x1.5` · `Uz pugnp 2x1` · `Azia apunp 2x6` (hammasi «Taqsimlanmagan», yacheykasiz, manba 1) | Claude, `ops-j3-trial-count.ts --apply` va `--apply --cleanup` (UI bosadigan `POST /stock-pieces` va `POST /stock-pieces/:id/close` marshrutlari, **SQL YO'Q**); DRY oldin yuritildi; skript serverda vaqtinchalik `apps/api/src/scripts-j3/` da yugurtirilib **o'chirildi**; qaytarish — `--cleanup` yoki K2 ekranidagi «tugadi» | — (ombor tuzilmasiga tegmaydi; `warehouse-state.ts` amaldan KEYIN: **EXIT=0**, split mos 1456 / mos emas 0, «POS yeta olmaydigan qoldiq **0**», «Reyestrga MOS») |
+
+> 🔴 **J3 topgan QARZ (J4 dan OLDIN yopilishi shart):** **J1 ning kodi jonliga
+> CHIQMAGAN** — serverdagi `packages/db/scripts/warehouse-state.ts` va
+> `create-cells.ts` da «bo'lak»/`stockPiece` so'zi **0 marta** uchraydi
+> (o'lchandi 2026-09-05). Reyestr bo'sh ekan xavf yo'q; omborchi sanoqni
+> kiritgan kundan boshlab `warehouse-split.ts` bo'laklarni eski omborda
+> qoldiradi va `create-cells.ts --revert` bo'lagi bor yacheykani jimgina
+> o'chiradi (J-reja 3.1). **T1 qarzi repoda yopilgan, PRODUKSIYADA ochiq.**
+>
+> ⚠️ **J3 topgan ikkinchi nosozlik:** `AccountOwner` roli **eskirgan** — unda
+> `piecetracking`, `retailcontrol`, `returnacceptance`, `warehousenumbering`
+> entity'lari YO'Q (Administrator 594 ruxsat, AccountOwner 570 = 4 × 6).
+> Shablonda `owner` = `ALL_FULL`, ya'ni `topup-role-permissions.ts` bu rol
+> uchun yuritilmagan. Amalda: **Ravshan** to'rtta ekranni ocholmaydi.
+>
+> ⚠️ **Uchinchi o'lchov:** «Uz kabel» / «Vayr kabel» / «Azia kabel» degan
+> **papka jonlida umuman yo'q** — tirik 547 metrli tovarning atigi 18 tasida
+> papka bor (hammasi «Delixi»). J2 hisobotidagi «papka» ustuni aslida NOM
+> PREFIKSI edi. K6/J5 dagi «kabel guruhiga yoyish» qarori papkaga tayanmasin.
+
 > Yangi qator qo'shganda: sana, nima, kim/nima bilan, va reyestr (1-bo'lim JSON +
 > 2-bo'lim jadval) yangilanganini belgilang.
 

@@ -1,14 +1,20 @@
 # Bo'lak hisobini JONLI ISHGA TUSHIRISH (J-reja)
 
 > **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) ·
-> **Holat:** **J1 ✅ TUGADI** · **J2 ⚠️ QISMAN** (ikkalasi ham 2026-09-04).
+> **Holat:** **J1 ✅ TUGADI** (repoda) · **J2 ✅ TUGADI** · **J3 ⚠️ QISMAN**
+> (2026-09-05).
 > J1 — ombor skriptlari endi bo'lak reyestrini ko'radi (T1 qarzi yopildi),
-> jonli bazaga faqat DRY (O'QISH) so'rovlar ketdi.
-> J2 — **oltala `piece_tracked` bayrog'i JONLIDA O'CHIRILDI** (15:38 UTC,
-> egasining tasdig'i bilan, `POST /stock-pieces/flag` orqali — SQL emas) va
-> pilot doirasi o'lchandi. Qabul mezonining 3 tadan 2 tasi bajarildi;
-> **ochiq qolgani — egasi 5–8 tovarlik pilot ro'yxatini tanlashi** (§5 → J2
-> → 7-band). 🔴 **J3 shu ro'yxatsiz BOSHLANMAYDI.**
+> jonli bazaga faqat DRY (O'QISH) so'rovlar ketdi. 🔴 **LEKIN J1 ning kodi
+> jonliga CHIQMAGAN** — serverdagi `warehouse-state.ts`/`create-cells.ts` da
+> «bo'lak» so'zi hamon 0 marta (J3, §5 → 5(b)). **J4 dan OLDIN chiqarilsin.**
+> J2 — **oltala `piece_tracked` bayrog'i JONLIDA O'CHIRILDI** (2026-09-04
+> 15:38 UTC, `POST /stock-pieces/flag` orqali — SQL emas) va pilot doirasi
+> o'lchandi. Egasi 2026-09-05 da **5 tovarlik pilot ro'yxatini** tasdiqladi
+> (§5 → J2 → 7-band) ⇒ qabul mezoni 3/3.
+> J3 — pilot ro'yxati yopildi, ijrochi (**Muxriddin**) tayin va huquqi
+> o'lchandi, **K2 oqimi jonlida 6/6 isbotlandi** (kiritish → yorliq → skaner →
+> sverka → yopish, stok-neytral, izi tozalangan). **Ochiq qolgani — omborchi
+> 5 tovarni JISMONAN sanashi** va yorliqning jonli printerda bosilishi.
 > Migratsiya ham, deploy ham hech bir fazada bo'lmadi.
 > 🔴 J2 ikki o'lchovni tuzatdi: metrli tovar §1 dagi **632 emas, 634**
 > (547 tirik + 87 o'chirilgan) va kabel doirasi **73 emas, 94** — §5 ga qarang.
@@ -491,9 +497,356 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
 
 ## 5. HISOBOTLAR (har faza o'z hisobotini SHU YERGA yozadi)
 
-### J2 — Bayroq gigienasi + pilot doirasini o'lchash · ⚠️ QISMAN (qoida 11) · 2026-09-04 · `2fc81625`
+### J3 — Reyestrni jismoniy sanoq bilan to'ldirish · ⚠️ QISMAN (qoida 11) · 2026-09-05
 
-**Holat: QISMAN.** Qabul mezonining **uchtadan ikkitasi** bajarildi: jonlida
+**Holat: QISMAN.** J3 ning ikkita qabul mezoni bor va **ikkalasi ham hali
+yopilmagan**, chunki ularning ikkalasi ham OMBORDA, odam qo'li bilan
+bajariladigan ish: pilot tovarlari hali **sanalmagan** va yorliq **jonli
+printerda bosilmagan**. Faza «TUGADI» deb yopilmaydi (qoida 11 — hukm
+yumshatilmaydi).
+
+**Lekin sanoqni bloklab turgan hamma narsa yopildi va oqim jonlida
+ISBOTLANDI:**
+
+1. 🟢 **J3 ning kirish sharti yopildi** — egasi pilot ro'yxatini tanladi
+   (J2 hisobotining 7-bandi to'ldi, J2 endi ✅ TUGADI);
+2. 🟢 **Ijrochi tayin va huquqi O'LCHANDI** — Muxriddin, `piecetracking`
+   view+create+update+print;
+3. 🟢 **K2 oqimi jonlida uchma-uch ishlashi isbotlandi** — Muxriddin tokeni
+   ostida 6 qadamli sinov zanjiri **6/6 ✔**, izi tozalandi, `Stock.qty`
+   tegilmadi;
+4. 🟢 **Omborchi uchun ko'rsatma tayyor** —
+   [`docs/ops/2026-09-05-bolak-sanoq-korsatmasi.md`](../ops/2026-09-05-bolak-sanoq-korsatmasi.md);
+5. 🔴 **Uchta to'siq topildi** (5-band) — biri J4 ni bevosita xavf ostiga
+   qo'yadi.
+
+Migratsiya YO'Q, deploy YO'Q. Jonli bazada o'zgargan YAGONA jadval —
+`stock_pieces` (4 qator qo'shildi, **hammasi `consumed`**, faol 0).
+`products`, `stocks`, `stock_by_cell`, `store_cells` — **bir bayt ham
+tegilmadi** (o'lchandi).
+
+---
+
+**0. Boshlang'ich o'lchov (2026-09-05, jonlidan, skriptdan TASHQARIDA ham
+tekshirilgan).**
+
+| O'lchov | Qiymat |
+|---|---|
+| `stock_pieces` | **0 qator** (sessiya boshida) |
+| `products.piece_tracked = true` | **0** (J2 qoldirgan holat) |
+| Pilot tovarlarining ombori | hammasi **«Taqsimlanmagan»**, **yacheykasiz**, rezerv **0** |
+| Jonli VPS HEAD | sessiya davomida **ikki marta** o'zgardi: `f1e6dbea` → `c315f70a` |
+
+---
+
+**1. 🔴 SANOQ VARAG'I — omborchi shu jadvalni to'ldiradi.**
+
+Chap ustunlar TIZIMDAN olindi (2026-09-05, jonli). O'ng ustunlar **BO'SH** va
+ularni faqat Muxriddin, omborda, jismoniy sanoq bilan to'ldiradi.
+
+| # | Tovar | Tizimdagi son (м) | Butun rulon (dona × uzunlik) | Bo'laklar (uzunliklari) | Sanoq Σ | Farq |
+|---|---|---|---|---|---|---|
+| 1 | `Uz apunp 2x4` | 5 854,5 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 2 | `Uz punp 2x2.5` | 9 068 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 3 | `Uz punp 2x1.5` | 9 588 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 4 | `Uz pugnp 2x1` | 10 276 | ⬜ | ⬜ | ⬜ | ⬜ |
+| 5 | `Azia apunp 2x6` | 7 632 | ⬜ | ⬜ | ⬜ | ⬜ |
+| | **JAMI** | **42 418,5** | | | ⬜ | ⬜ |
+
+🔴 **Bu jadvalni tizimdagi sondan «to'g'rilab» to'ldirish TAQIQLANADI**
+(qoida 5). Farq chiqsa — bu **topilma**, u shu yerga yoziladi va tuzatish
+inventarizatsiya orqali qilinadi.
+
+⚠️ **Farq chiqishi KUTILADI.** J-reja 3.3 aytganidek, bu sonlarning to'rttasi
+«yumaloq» (9 068 · 9 588 · 10 276 · 7 632) va ular jismoniy sanoq bilan hech
+qachon tasdiqlanmagan. Birinchi kunning katta farqi — nosozlik emas, J3 ning
+butun ma'nosi.
+
+**Yorliq oralig'i:** haqiqiy sanoq **`BLK-000003`** dan boshlanadi
+(`BLK-000001` va `BLK-000002` sinovda band bo'ldi — 3-band).
+
+---
+
+**2. Ikki tomonlama bog'liqlik javobi (qoida 10 — «bu o'zgarish qaysi mavjud
+oqimni buzishi mumkin?»).**
+
+| Oqim | Ta'sir | Dalil |
+|---|---|---|
+| **Kassa sotuvi / taqsimot** | **YO'Q** | Bayroq hamma joyda **o'chiq** (amaldan keyin ham `piece_tracked = true` soni **0** — o'lchandi). 7.1 istisnosi kuchga kirmagan, kassa reyestrni umuman ko'rmaydi. Bu J-rejaning «avval MA'LUMOT, keyin XULQ» tartibining aynan o'zi. |
+| **Qoldiq (`Stock` / `StockByCell`)** | **YO'Q** | `Uz apunp 2x4` qoldig'i sinovdan oldin ham, keyin ham **5 854,5** (skriptda ham, mustaqil SQL da ham o'lchandi). Chaqirilgan yagona yozuvchi marshrutlar — `POST /stock-pieces` va `POST /stock-pieces/:id/close`, ikkalasi ham stok-neytral (K2 poydevori). |
+| **Bo'lak reyestri (`stock_pieces`)** | ⚠️ **O'ZGARDI — 4 ta `consumed` iz** | Sinov zanjiri 2 marta yugurdi (birinchisi mening skriptimdagi xato tufayli uzildi — 4-band). Faol qator **0**, ya'ni sverkaga ta'siri yo'q. `DELETE` marshruti ATAYLAB yo'q (K2), shuning uchun izlar qoladi. |
+| **Sverka hisoboti (`/reports/piece-reconciliation`)** | ⚠️ **KO'RMAYDI** | 5(a) bandiga qarang — bayrog'i o'chiq tovar hisobotda farq QATORI bo'lib chiqmaydi. J3 ning o'lchovi K2 ekrani orqali olinadi. |
+| **«Hal qilinmagan» ro'yxati (K6/3)** | **YO'Q** | Bayroqqa tegilmadi ⇒ qaror muhri ham yangilanmadi. |
+| **Ruxsat matritsasi / rollar** | **YO'Q** | Yangi entity ham, marshrut ham, grant ham qo'shilmadi. Skript mavjud xodim tokeni ostida ishladi. |
+| **`packages/db` skriptlari (J1)** | **YO'Q, LEKIN 🔴** | Tegilmadi — lekin J1 ning kodi jonliga **CHIQMAGAN** (5(b) bandi). |
+| **TSD / kiosk / i18n** | **YO'Q** | Yangi sirt yo'q; skript CLI, matni o'zbekcha. |
+| **Eng yomon holat** | Zanjir yarim yo'lda uziladi | **Aynan shu sodir bo'ldi** (4-band): ikkita qator `active` bo'lib qoldi. Oqibati — faqat sverka farqi, kassa buni ko'rmaydi (bayroq o'chiq), qoldiq tegilmaydi. `--cleanup` bilan bir buyruqda yopildi. |
+
+---
+
+**3. Jonli sinov zanjiri — Muxriddin tokeni ostida, 6/6 ✔.**
+
+K2 ning qabul mezonidagi «jonli» bandlar sanoqdan OLDIN sinaldi: agar oqim
+buzuq bo'lsa, buni omborchi 42 000 m ni sanab bo'lgandan KEYIN emas, hozir
+bilish kerak edi.
+
+| # | Qadam | Kutilgan | O'lchangan | Natija |
+|---|---|---|---|---|
+| 1 | Butun rulon qo'shish (250 m, yorliqsiz) | Σ 250 · farq −5 604,5 | Σ 250 · farq −5 604,5 | ✔ |
+| 2 | Bo'lak qo'shish — **`37,5` VERGUL bilan** | Σ 287,5 · farq −5 567 | Σ 287,5 · farq −5 567 | ✔ |
+| 3 | Yorliqni skanerlash (`BLK-000002`) | AYNAN o'sha bo'lak | aynan o'sha qator (id + label mos) | ✔ |
+| 4 | Begona kodni skanerlash (`4780000000001`) | **RAD etilishi shart** | **400** | ✔ |
+| 5 | Bo'lakni «tugadi» qilish | Σ 250 · farq −5 604,5 | Σ 250 · farq −5 604,5 | ✔ |
+| 6 | Butun rulonni «tugadi» qilish | Σ 0 · farq −5 854,5 | Σ 0 · farq −5 854,5 | ✔ |
+
+**Qaytganlik ✔** (faol qator 0, reyestr Σ 0) · **Stok-neytrallik ✔**
+(`Stock.qty` 5 854,5 → 5 854,5) · **EXIT=0**.
+
+🟢 **Uchta ishonch shu zanjirdan chiqdi:**
+
+- **7.3 ISBOTLANDI (K2 ning ochiq bandi, yarmi).** `BLK-` makoni tovar
+  shtrixidan chindan ajratilgan: yorliq AYNAN bitta qatorni ochdi, begona kod
+  esa «topilmadi» emas, **RAD** bo'ldi (400) ⇒ omborchi bo'lakni skanerlaganda
+  tovar multi-hit tanlovi ochilmaydi.
+- **Vergul tuzog'i yo'q.** `37,5` → `37.500000` (bazadan o'qildi). uz/ru
+  klaviaturasidan kelgan vergul jimgina yo'qolmaydi.
+- **Stok-neytrallik jonlida o'lchandi**, kodda emas — K2 poydevori haqiqatan
+  turibdi.
+
+⚠️ **Nima ISBOTLANMADI:** yorliqning **jonli printerda bosilishi**. K2 yorlig'i
+brauzerning `window.print()` i orqali chiqadi (K2 hisoboti, 3/2-chetlashish) —
+uni skript yugurta olmaydi, u odam qo'li bilan, brauzerdan bajariladi. Bu K2
+qabul mezonining ochiq qolgan yarmi va u sanoq kunida yopiladi
+(ko'rsatmaning 6-qadami).
+
+**Sinov izlari (ataylab qoldirildi):**
+
+| Yorliq | Uzunlik | Turi | Holat |
+|---|---|---|---|
+| — | 250 | butun rulon | `consumed` |
+| `BLK-000001` | 37,5 | bo'lak | `consumed` |
+| — | 250 | butun rulon | `consumed` |
+| `BLK-000002` | 37,5 | bo'lak | `consumed` |
+
+---
+
+**4. 🔴 SINOV BIRINCHI URINISHDA UZILDI — mening skriptimdagi xato.**
+
+Halol qayd: birinchi `--apply` yugurishida zanjir **4/6** da to'xtadi va
+**ikkita qator jonlida `active` bo'lib qoldi** (250 + 37,5 = 287,5 m).
+
+**Sabab — mahsulot nuqsoni EMAS, skriptning xatosi:** `POST
+/stock-pieces/:id/close` ga tana **umuman** yuborilmagan edi, Fastify esa
+`content-type: application/json` bilan kelgan tanasiz so'rovni rad etadi
+(`Body cannot be empty when content-type is set to 'application/json'`). K2
+ekrani bu marshrutga bo'sh obyekt yuboradi (`api.post(…, {})`) — skript ham
+shunday qilishi kerak edi.
+
+**Tuzatish:** `CLOSE_BODY = {}` yadroga qo'yildi va **test bilan qulflandi**
+(«tugadi» qadamlari TANA bilan yuboriladi). Skriptga `--cleanup` rejimi
+qo'shildi — u FAQAT `close` ni chaqiradi.
+
+**Tozalash natijasi (o'lchandi):** 2/2 qator yopildi (201), reyestr Σ **0**,
+faol qator **0**, `Stock.qty` **5 854,5 → 5 854,5 (neytral)**. Shundan keyin
+zanjir toza boshlang'ichdan qayta yuritildi va 6/6 bo'ldi.
+
+⚠️ **Nima o'rganildi:** uzilgan zanjirning oqibati aynan J-reja bashorat
+qilgandek bo'ldi — bayroq o'chiq bo'lgani uchun **kassa hech nima sezmadi**,
+qoldiq tegilmadi, tuzatish esa bitta buyruq bo'ldi. «Avval ma'lumot, keyin
+xulq» tartibi o'zini oqladi.
+
+---
+
+**5. 🔴 UCHTA TO'SIQ TOPILDI (dalil bilan).**
+
+**(a) 🔴 Sverka hisoboti bayrog'i O'CHIQ tovarning farqini KO'RSATMAYDI.**
+
+J3 ning 4-vazifasi «har tovar kiritilgach `/reports/piece-reconciliation` da
+sverka tekshiriladi» deydi. Kod esa boshqacha ishlaydi
+([stock-piece-core.ts:366-376](../../apps/api/src/modules/stock-piece/stock-piece-core.ts#L366-L376)):
+bayrog'i o'chiq tovarning bo'lagi `pieces-without-flag` **ogohlantirishi**ga
+aylanadi va `continue` bilan bo'g'inga **qo'shilmaydi** ⇒ hisobotda farq
+QATORI umuman paydo bo'lmaydi. J3 esa bayroqlar o'chiq holda yuradi (J4 gacha).
+
+🟢 **Yechim (kodni o'zgartirmasdan):** o'lchov **K2 ekranining o'zidan**
+olinadi. `buildRegistryView`
+([stock-piece-registry-core.ts:302-400](../../apps/api/src/modules/stock-piece/stock-piece-registry-core.ts#L302-L400))
+`pieceTracked` ga **umuman qaramaydi** — u har mutatsiya javobida
+(Qoldiq · Reyestr · Farq) ni qaytaradi. Sinov zanjiridagi oltala son aynan
+shu yo'ldan o'lchandi. Ko'rsatma shunga ko'ra yozildi.
+
+⇒ **J4 uchun eslatma:** bayroq yoqilgach hisobot ham to'ladi; o'sha payt
+hisobotdagi son ekrandagi son bilan mos kelishi TEKSHIRILSIN.
+
+**(b) 🔴 J1 ning kodi jonliga CHIQMAGAN — T1 qarzi PRODUKSIYADA hamon ochiq.**
+
+O'lchandi: serverdagi `packages/db/scripts/warehouse-state.ts` va
+`create-cells.ts` da «bo'lak»/`stockPiece` so'zi **0 marta** uchraydi. Jonli
+`warehouse-state.ts` yuritildi — **EXIT=0**, «POS yeta olmaydigan qoldiq: 0»,
+split mos **1456**, lekin **bo'lak sverkasi bo'limi chiqmadi** (J1 qo'shgan
+5-vazifa).
+
+Ya'ni J1 hisoboti «✅ TUGADI» — bu **repo uchun** to'g'ri, **jonli uchun
+emas**. Reyestr to'lgan kundan boshlab (J3 dan keyin) jonli serverdagi
+`warehouse-split.ts` yacheykani ko'chirsa bo'laklar eski omborda qoladi, va
+`create-cells.ts --revert` bo'lagi bor yacheykani jimgina o'chirib yuboradi
+(J-reja 3.1).
+
+🔴 **Talab:** **J4 dan OLDIN** jonli daraxtga J1 ning to'rt skripti chiqarilsin
+(deploy yoki `git pull`). Reyestr bo'sh ekan xavf nolga teng — sanoq
+boshlangan zahoti xavf doimiy bo'ladi.
+
+**(c) ⚠️ Rollar: egasi bo'lak ekranini OCHOLMAYDI, oddiy omborchi ham.**
+
+Jonlida `piecetracking` grantlari o'lchandi:
+
+| Rol | `piecetracking` | Kim biriktirilgan |
+|---|---|---|
+| Administrator | to'liq | Admin User, **Ilhom** |
+| Katta omborchi | view create update print | **Muxriddin** |
+| Manager · Employee · ReadOnly · B2B | mavjud | — |
+| 🔴 **AccountOwner** | **YO'Q** | **Ravshan** |
+| ⚠️ **Omborchi** | **YO'Q** | Ilhom, TSD sinov |
+| Kassir · PointOfSale | YO'Q (ataylab) | — |
+
+- 🔴 **`AccountOwner` da to'rtta entity yetishmaydi**: `piecetracking`,
+  `retailcontrol`, `returnacceptance`, `warehousenumbering` (Administrator da
+  594 ruxsat, AccountOwner da 570 = 4 × 6). Shablonda esa `owner` = `ALL_FULL`
+  ([role-templates.ts:225](../../apps/api/src/modules/permissions/role-templates.ts#L225))
+  ⇒ bu **eskirgan rol**, ya'ni `topup-role-permissions.ts` bu rol uchun
+  yuritilmagan. Amaliy oqibati: **Ravshan `/omborchi/bolaklar` ni ocholmaydi**
+  (va vozvrat qabuli, chakana nazorat, ombor raqamlashini ham).
+- ⚠️ **«Omborchi» rolida `piecetracking` umuman yo'q** — bu K2 ning ONGLI
+  qarori (yozish faqat katta omborchida), lekin J3/J5 ni rejalashtirganda
+  buni bilish shart: **oddiy omborchi bo'lak kirita olmaydi**.
+
+**(d) ⚠️ «Kabel guruhi» degan papka jonlida YO'Q.**
+
+K6 «bayroq FAQAT kabel guruhiga yoqiladi» deydi, J2 esa nomzodlarni «Uz kabel /
+Vayr kabel / Azia kabel» papkalari bo'yicha ko'rsatgan edi. Jonli o'lchov:
+**shunday nomli papka umuman yo'q**, tirik 547 metrli tovarning atigi **18
+tasida** papka bor (hammasi «Delixi»), qolgan **529 tasi papkasiz**.
+
+⇒ J2 ning «papka» ustuni aslida **nom prefiksi** («Uz…», «Azia…») bo'lgan.
+Bu J3 ni to'smaydi (pilot ISM bilan tanlandi), lekin **J5/J7 dagi «guruhga
+yoyish» qarori papkaga tayanib qurilmasin** — tayanadigan papka yo'q.
+
+---
+
+**6. Nima qurildi (4 fayl, migratsiya YO'Q).**
+
+**`apps/api/src/scripts/j3-trial-core.ts`** — sof yadro (Prisma yo'q, HTTP
+yo'q, SQL yo'q). Butun qiymati bitta intizomda: **kutilgan sonlar jonli
+javobdan OLDIN yoziladi**. Agar kutilma javobdan keyin hisoblansa, sinov har
+qanday natijaga moslashib ketardi va hech nimani isbotlamasdi. `planTrial`
+olti qadamni, `expectAfter` har qadamdan keyingi (reyestr Σ · faol qator ·
+farq) ni, `isRestored` / `stockVerdict` esa hukmni beradi.
+
+**`apps/api/src/scripts/ops-j3-trial-count.ts`** — DRY sukut; `--apply` bilan
+zanjirni yuritadi, `--cleanup` bilan uzilgan sinov izini yopadi. Bayroq
+marshruti skriptda **umuman yo'q**. Ikki to'siq: bayrog'i YOQIQ tovarda va
+reyestrida FAOL qator bor tovarda `--force` siz to'xtaydi.
+
+**Testlar (+37):** `j3-trial-core.test.ts` **21** (zanjir tartibi, vergulli
+kiritma, kutilgan sonlar, qaytganlik, hukmlar) + `j3-trial-guard.test.ts`
+**16** — skript SHAKLINI matndan qulflaydi (`j2-pilot-audit-guard` naqshi,
+izohlar olib tashlanadi): `--apply` siz yozish shoxi ochilmasligi; token faqat
+o'sha shoxda imzolanishi; **birorta yozadigan Prisma chaqirig'i yo'qligi**
+(mexanik ro'yxat); **so'rov tanasi FAQAT yadrodan kelishi**;
+`/stock-pieces/flag` ning yo'qligi; tozalash rejimi faqat `close` ni
+chaqirishi.
+
+---
+
+**7. Testlar / darvozalar.**
+
+| Gate | Natija |
+|---|---|
+| Yangi `j3-trial-core.test.ts` | **21** ✅ |
+| Yangi `j3-trial-guard.test.ts` | **16** ✅ |
+| `apps/api/src/scripts/` to'plami | 16 fayl · **389 test** ✅ (J2 da 354 edi) |
+| `tsc --noEmit` — `apps/api` | ✅ 0 xato |
+| biome (tegilgan 4 fayl) | ✅ 0 **error** (CLI skriptlaridagi `noConsole` OGOHLANTIRISHLARI avvaldan bor) |
+| Jonli `warehouse-state.ts` (serverdagi versiya) | **EXIT=0** · split mos **1456**, mos emas 0 · **POS yeta olmaydigan qoldiq 0** · «✅ Reyestrga MOS» |
+| Fayl kodlashi (2026-09-01 hodisasi qo'riqchisi) | 4 fayl ham **UTF-8, BOM yo'q** — faqat Edit/Write ishlatildi |
+
+**Jonli yugurish intizomi (J1/J2 naqshi):** skript jonli daraxtga MERGE
+QILINMADI — ikki fayl izolyatsiyalangan `apps/api/src/scripts-j3/` katalogiga
+qo'yildi (nisbiy importlar AYNAN bir xil chuqurlikda), yugurtirildi va
+**katalog o'chirildi**. Yugurishdan keyin serverda bizning bir ham faylimiz
+yo'q (`git status` bilan tekshirildi).
+
+---
+
+**8. Qabul mezoni — bandma-band (qoida 11).**
+
+| # | Mezon | Holat |
+|---|---|---|
+| 1 | J2 ro'yxatidagi HAR tovarda reyestr to'lgan | ✘ **BAJARILMAGAN** — jismoniy sanoq hali qilinmagan (1-band jadvali bo'sh) |
+| 2 | Sverka farqi **0** (yoki farq hujjatlashtirilgan) | ✘ **BAJARILMAGAN** — 1-bandga bog'liq |
+| 3 | Kamida bitta yorliq **jonli printerda** bosilib, skanerlanganda AYNAN o'sha bo'lak ochilgani | ⚠️ **YARIM** — skaner tomoni jonlida ISBOTLANDI (`BLK-000002`, 3-band), **printer tomoni** hali yo'q (`window.print()` — odam qo'li bilan) |
+
+**Ikkitadan noli, uchinchisining yarmi ⇒ J3 «QISMAN».**
+
+---
+
+**9. Qaytarish yo'li (qoida 12).**
+
+- **Jonli o'zgarish:** sinov qatorlari allaqachon `consumed` — qaytaradigan
+  hech nima qolmadi. Kelgusi sanoqda xato kiritilsa: `--cleanup` yoki K2
+  ekranidagi «tugadi» tugmasi (qoldiqqa tegmaydi). Bayroq o'chiq bo'lgani
+  uchun xato kiritish savdoga UMUMAN ta'sir qilmaydi.
+- **Kod:** `git revert <J3 commit>` — repoga faqat YANGI fayllar qo'shildi,
+  mavjud birorta KOD fayli o'zgartirilmadi (o'zgargani — shu hujjat,
+  `docs/ops/jonli-holat.md` va yangi ko'rsatma fayli).
+  ⚠️ Commit **faqat J3 fayllari bilan** qilindi (`git commit --only -- …`):
+  ishchi daraxtda PARALLEL sessiyalarning ishi bor (manager-app / X-reja /
+  TSD) va unga tegilmadi.
+
+**Qoida 14:** VPS'da yozilgan skript YO'Q — ikkita fayl repodagi nusxalari edi
+va yugurishdan keyin katalog bilan birga o'chirildi.
+
+**Qoida 13 (uchma-uch smoke):** J3 kassa xulqini o'zgartirmadi (bayroq o'chiq)
+⇒ to'liq smoke QO'LLANMAYDI. Uning o'rniga (i) 6 qadamli K2 zanjiri va
+(ii) `warehouse-state.ts` qo'riqchisi yuritildi. To'liq smoke — J4 ning ishi.
+
+---
+
+**10. Ochiq qolganlar / keyingi fazalarga.**
+
+- 🔴 **OMBORCHIGA (Muxriddin):** 5 tovarni sanash va kiritish —
+  [ko'rsatma](../ops/2026-09-05-bolak-sanoq-korsatmasi.md). Natija shu
+  hisobotning 1-bandidagi jadvalga yoziladi. **J4 shusiz boshlanmaydi.**
+- 🔴 **J4 DAN OLDIN:** J1 ning `packages/db` skriptlari jonliga chiqarilsin —
+  5(b) bandi. Reyestr to'lgan zahoti bu BLOKLOVCHI bo'ladi.
+- 🔴 **EGASIGA:** `AccountOwner` roli eskirgan (5(c) bandi) — Ravshan to'rtta
+  ekranni ocholmaydi. Tuzatish `topup-role-permissions.ts` bilan, alohida ish
+  (J-rejaning doirasidan tashqarida, lekin J5 da omborchi/egasi tasdig'i
+  kerak bo'lganda halaqit beradi).
+- ⚠️ **J4 uchun:** bayroq yoqilgach hisobotdagi sverka ekrandagi bilan mos
+  kelishi tekshirilsin (5(a) bandi).
+- ⚠️ **J5/J7 uchun:** «kabel guruhi» papkasi jonlida yo'q (5(d) bandi) —
+  yoyish qarori papkaga tayanmasin.
+- ⚠️ **Pilotdan tashqarida qolgan ikki eng ko'p sotiladigan tovar**
+  (`Uz pugnp 2x1.5` — 181 chek, `Uz pugnp 2x2.5` — 141 chek): qoldig'i ikki
+  omborda. Ular pilotga qo'shilishidan oldin «Ombor 07» dagi 5,1 va 77 m
+  asosiy hovuzga yig'ilsin.
+- ℹ️ **Sinov izlari:** `stock_pieces` da 4 ta `consumed` qator va band bo'lgan
+  `BLK-000001` / `BLK-000002` yorliqlari. Haqiqiy sanoq `BLK-000003` dan
+  boshlanadi.
+- ℹ️ **Jonli VPS beqaror:** sessiya davomida HEAD ikki marta o'zgardi
+  (`f1e6dbea` → `c315f70a`) — parallel deploylar ketmoqda. J4 o'z fazasini
+  boshlashdan oldin HEAD ni QAYTA o'lchasin.
+
+---
+
+### J2 — Bayroq gigienasi + pilot doirasini o'lchash · ✅ TUGADI · 2026-09-04 · `2fc81625` · (7-band 2026-09-05 da to'ldi)
+
+> 🟢 **2026-09-05 YANGILANISHI:** ochiq qolgan yagona band — egasining pilot
+> ro'yxati — J3 sessiyasida to'ldi (7-bandga qarang). Qabul mezoni **3/3**,
+> faza **✅ TUGADI**. Quyidagi matn 2026-09-04 dagi holatni saqlaydi.
+
+**Holat (2026-09-04 da): QISMAN.** Qabul mezonining **uchtadan ikkitasi** bajarildi: jonlida
 `piece_tracked = true` tovarlar soni **0** (o'lchandi, bashorat emas) va audit
 skripti nomzodlarni manba soni bilan ko'rsatdi. Uchinchi band — **egasi 5–8
 tovarlik pilot ro'yxatini ISM bilan tasdiqlashi** — hali bajarilmagan: egasi
@@ -718,15 +1071,42 @@ emas (J-S5 shu haqda).
 
 ---
 
-**7. TANLANGAN PILOT RO'YXATI — ⏳ KUTILMOQDA**
+**7. TANLANGAN PILOT RO'YXATI — ✅ TO'LDI (2026-09-05, J3 sessiyasida)**
 
-| # | Tovar | Kim tanladi | Sana |
-|---|---|---|---|
-| — | *(egasi hali tanlamadi)* | — | — |
+Egasi «A to'plami» ni tanladi: **manbasi AYNAN 1 ta, qoldig'i 5 800–10 300 m
+oralig'idagi 5 tovar**. Mezon: eng ko'p sotiladiganlari orasidan omborchi bir
+kunda jismonan sanay oladigan hajm (~42 000 m). Sonlar J3 sessiyasida
+(2026-09-05) MUSTAQIL qayta o'lchandi va J2 ning 6-banddagi jadvali bilan
+chekma-chek mos tushdi.
 
-🔴 **J3 shu jadval to'lmaguncha boshlanmaydi.** To'lgach: shu hisobotning
-holati ✅ TUGADI ga o'zgaradi va `docs/ops/jonli-holat.md` ga ro'yxat qatori
-qo'shiladi.
+| # | Tovar | Qoldiq (м) | Manba | 30k chek | Kim tanladi | Sana |
+|---|---|---|---|---|---|---|
+| 1 | `Uz apunp 2x4` | 5 854,5 | 1 | 54 | Ozodbek (egasi) | 2026-09-05 |
+| 2 | `Uz punp 2x2.5` | 9 068 | 1 | 51 | Ozodbek (egasi) | 2026-09-05 |
+| 3 | `Uz punp 2x1.5` | 9 588 | 1 | 38 | Ozodbek (egasi) | 2026-09-05 |
+| 4 | `Uz pugnp 2x1` | 10 276 | 1 | 37 | Ozodbek (egasi) | 2026-09-05 |
+| 5 | `Azia apunp 2x6` | 7 632 | 1 | 35 | Ozodbek (egasi) | 2026-09-05 |
+| | **JAMI** | **42 418,5** | | **215** | | |
+
+🟢 **Beshalasining ham qoldig'i BITTA joyda:** ombor «Taqsimlanmagan»
+(`968f9da2-6dbb-4375-b5e2-d19799b51de6`), **yacheykasiz**, rezervi **0**.
+Ya'ni J4 da bayroq yoqilganda 7.1 istisnosi («bitta manba qoplasin») ularning
+birorta chekini yiqitmaydi.
+
+🔴 **Ataylab KIRITILMAGANLAR:** `Uz pugnp 2x1.5` (181 chek) va `Uz pugnp 2x2.5`
+(141 chek) — jonlidagi eng ko'p sotiladigan ikkita metrli tovar. Sababi:
+qoldig'i IKKI omborda (asosiy hovuz + «Ombor 07» da 5,1 va 77 m) ⇒ manba 2 ta
+⇒ J4 da bayroq yoqilsa chek `no-single-source` bilan 400 olardi. Ular pilotga
+qo'shilishidan OLDIN o'sha kichik qoldiq bitta omborga yig'ilishi kerak
+(alohida ish, J5/J7 ga).
+
+**Ijrochi:** **Muxriddin** (`1787027244777@hr.local`, rollar: *Kassir* +
+*Katta omborchi*) — egasining tanlovi, 2026-09-05. Huquqi jonlida o'lchandi:
+`piecetracking` **view + create + update + print** ✔.
+
+⇒ J2 ning qabul mezoni **3/3** bo'ldi ⇒ **J2 holati «⚠️ QISMAN» dan «✅
+TUGADI» ga o'zgardi** (yuqoridagi sarlavha va hujjat boshidagi holat qatori
+shunga ko'ra yangilandi).
 
 ---
 
