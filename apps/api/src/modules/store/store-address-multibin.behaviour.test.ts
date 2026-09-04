@@ -119,7 +119,14 @@ function makeService() {
     ) => Promise<unknown>,
   };
   client.$transaction = async (fn: (t: unknown) => Promise<unknown>) => fn(client);
-  const svc = new StoreAddressService({ client } as never, {} as never, {} as never, {} as never);
+  const svc = new StoreAddressService(
+    { client } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    // N2 — sanoq izi qatlami; bu testlar `setCellStock` ni chaqirmaydi.
+    { recordCount: async () => ({ recorded: false }) } as never,
+  );
   return { svc, products, links };
 }
 

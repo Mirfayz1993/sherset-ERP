@@ -46,7 +46,14 @@ function makeService(opts: FakeOpts): StoreAddressService {
     },
     $queryRaw: vi.fn(async () => (opts.boundCellNames ?? []).map((name) => ({ name }))),
   };
-  return new StoreAddressService({ client } as never, {} as never, {} as never, {} as never);
+  return new StoreAddressService(
+    { client } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    // N2 — sanoq izi qatlami; bu testlar `setCellStock` ni chaqirmaydi.
+    { recordCount: async () => ({ recorded: false }) } as never,
+  );
 }
 
 describe('getAddressStorage — occupied flag', () => {

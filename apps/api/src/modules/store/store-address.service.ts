@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@moysklad/db';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { z } from 'zod';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { EnterService } from '../enter/enter.service.js';
@@ -10,6 +10,8 @@ import { formatDecimalScaled, parseDecimalScaled, subtractDecimals } from '../sh
 import { PlacementSource, allocatePlacement, totalTakenMicro } from '../shared/pool-placement.js';
 import { findPoolStore, sumAssignedByAssortment } from '../stock/pool-store.util.js';
 import { StockService } from '../stock/stock.service.js';
+import type { CountSessionAutoDoc } from '../tsd/count-session.js';
+import { CountSessionService } from '../tsd/count-session.service.js';
 import {
   CellRangeError,
   type CellRangeSpec,
@@ -46,6 +48,8 @@ import {
  */
 @Injectable()
 export class StoreAddressService {
+  private readonly logger = new Logger(StoreAddressService.name);
+
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     // «Umumiy sanash» true-up: the counted cell qty posts an auto Enter/Loss so
@@ -54,6 +58,9 @@ export class StoreAddressService {
     @Inject(LossService) private readonly losses: LossService,
     // F7 — sanashda hovuz/o'z-qoldiqdan joylashtirish (applyDeltas/lockBalances).
     @Inject(StockService) private readonly stock: StockService,
+    // N-reja §5-N2 — sanash sessiyasining IZ qatlami. Faqat `recordCount`
+    // chaqiriladi va u qoldiqqa TEGMAYDI (`count-session.service.ts`).
+    @Inject(CountSessionService) private readonly countSessions: CountSessionService,
   ) {}
 
   // -------------------------------------------------------------------
@@ -407,6 +414,13 @@ export class StoreAddressService {
     const products = await this.prisma.client.product.findMany({
       where: {
         accountId,
+        // N-reja §5-N2 (5-vazifa; T-reja T6 dan qolgan qarz): yumshoq
+        // o'chirilgan tovar bu ro'yxatga TUSHMASLIGI kerak. Qo'shni
+        // `getCellStock` da bu filtr BOR edi, bu yerda YO'Q — ya'ni ikki
+        // endpoint bir xil savolga («shu yacheykada nima bor?») ikki xil
+        // javob berardi va web'ning «Ko'rish» ekranida o'lik tovar
+        // ko'rinardi (`__yacheyka` atributi o'chirilgan qatorda ham qoladi).
+        deletedAt: null,
         OR: [
           { attributes: { path: ['__yacheyka'], equals: cell.name } },
           { id: { in: linkedIds.map((l) => l.productId) } },
@@ -534,6 +548,11 @@ export class StoreAddressService {
     }
 
     let stockDoc: { type: 'enter' | 'loss'; name: string } | null = null;
+    // N-reja §5-N2 — sanoq izi qatoriga yoziladigan avto-hujjat (DENORMAL:
+    // `id` bilan birga NOMI ham, hujjat keyinchalik o'chirilsa ham bosh
+    // omborchi qog'ozdagi raqamni ko'rsin). Javobdagi `stockDoc` shakli
+    // O'ZGARMADI — bu alohida o'zgaruvchi.
+    let autoDoc: CountSessionAutoDoc | null = null;
     let placedQty = '0';
     if (willPostDoc && org && userId) {
       const note = `Sanash (yacheyka ${cell.name}) — avto-tenglash`;
@@ -568,8 +587,9 @@ export class StoreAddressService {
                 cell: cell.name,
               },
             ],
-          })) as { name?: string };
+          })) as { id?: string; name?: string };
           stockDoc = { type: 'enter', name: doc?.name ?? '' };
+          autoDoc = { type: 'enter', id: doc?.id ?? null, name: doc?.name ?? '' };
         }
       } else {
         const doc = (await this.losses.create(accountId, userId, {
@@ -578,10 +598,51 @@ export class StoreAddressService {
           applicable: true,
           description: note,
           positions: [{ assortmentId, quantity: String(-delta), cellId, cell: cell.name }],
-        })) as { name?: string };
+        })) as { id?: string; name?: string };
         stockDoc = { type: 'loss', name: doc?.name ?? '' };
+        autoDoc = { type: 'loss', id: doc?.id ?? null, name: doc?.name ?? '' };
       }
     }
+    // 🔴 N-reja §5-N2 ILGAGI — sanoq IZI. Uch qattiq qoida:
+    //
+    //  1. **Sanoq yo'li sessiyaga BOG'LIQ EMAS.** Ilgak amalning ENG OXIRIDA,
+    //     qoldiq allaqachon tenglashgandan keyin turadi va `try/catch` bilan
+    //     o'ralgan: iz yozilmasa ham omborchining sanog'i muvaffaqiyatli
+    //     qaytadi. Iz qatlami HECH QACHON omborchini bloklamaydi.
+    //  2. **APPEND**, `InventoryService.update()` EMAS — u `positions`
+    //     berilganda `deleteMany` qiladi va butun izni o'chirardi.
+    //  3. **Sonlar javobdagi AYNI stringlar:** `expectedQty` = `previousQty`,
+    //     `actualQty` = `qty`, `varianceQty` = server hisoblagan `delta`.
+    //     `mode: 'add'` da ham shu — qatorda MUTLAQ sonlar turadi (26 → 126,
+    //     farq 100), ya'ni hisobot ikkala rejimda bir xil o'qiladi.
+    if (userId) {
+      try {
+        await this.countSessions.recordCount({
+          accountId,
+          userId,
+          storeId,
+          cellId,
+          cellName: cell.name,
+          assortmentId,
+          expectedQty: String(oldQty),
+          actualQty: String(finalQty),
+          varianceQty: String(delta),
+          // K5 — `setCellStock` sirtida bo'lak tarkibi kirishi HOZIRCHA YO'Q
+          // (`SetCellStockSchema` da `pieceEntry` maydoni yo'q va hech bir
+          // klient yubormaydi: TSD'da tarkib kiritish ekrani yo'q, u WEB'dagi
+          // inventarizatsiya orqali kiritiladi — K-reja). Kirish paydo
+          // bo'lganda AYNAN shu joyda uzatiladi va qatorga tushadi.
+          pieceEntry: null,
+          autoDoc,
+        });
+      } catch (e) {
+        // Ikkinchi qavat: `recordCount` ning o'zi ham xato chiqarmaydi.
+        this.logger.error(
+          `Sanash izi yozilmadi (cell=${cellId}): ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+
     // `qty` — YAKUNIY qoldiq (ikkala rejimda ham), `previousQty` — sanashdan
     // oldingi qoldiq. Additiv: eski iste'molchilar faqat `qty` ni o'qiydi.
     return {

@@ -122,6 +122,32 @@ export const TSD_ALLOWED: readonly Rule[] = [
     why: 'yacheykaga biriktirilgan tovarlar (sanash ro`yxati)',
   },
 
+  // ── Sanash SESSIYASI (N-reja N2) ──────────────────────────────────────────
+  //
+  // 🔴 «Bu javobda narx bormi?» — YO'Q, va bu TUZILMAVIY: javob
+  // `count-session.ts` dagi `COUNT_SESSION_SELECT` oq ro'yxati ustida
+  // quriladi va unda `Inventory.sumMinor` («Стоимость») ATAYLAB yo'q;
+  // hisoblagichlar ham faqat SANOQ (`cellCount`/`lineCount`/`surplusLines`/
+  // `shortageLines`). Sessiya qatorlarida `cost_minor` NULL qoladi.
+  //
+  // 🔴 `/inventories` HAMON YO'Q va ochilmaydi: uning javobida `sumMinor` va
+  // qator `costMinor` bor. Sessiya mavjud `Inventory` hujjatida yashasa ham
+  // terminal unga faqat MANA SHU uchta narxsiz yo'l orqali tegadi.
+  // Uchalasi ham `exact` — sub-yo'llar jimgina ochilmasin.
+  { prefix: '/tsd/count-sessions', methods: ['POST'], exact: true, why: 'sanashni boshlash' },
+  {
+    prefix: '/tsd/count-sessions/active',
+    methods: ['GET'],
+    exact: true,
+    why: 'ochiq sessiya va sanoq hisoblagichlari — narx yo`q',
+  },
+  {
+    prefix: '/tsd/count-sessions/:id/close',
+    methods: ['POST'],
+    exact: true,
+    why: 'sessiyani yopish (qoldiqqa tegmaydi)',
+  },
+
   // ── Bildirishnomalar ──────────────────────────────────────────────────────
   {
     prefix: '/notifications',

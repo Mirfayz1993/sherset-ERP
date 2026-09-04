@@ -109,13 +109,18 @@ function makeService(
     ),
   };
   const stock = new StockService({ client: {} } as never);
+  // N2 — sanoq izi qatlami. Bu fayl AVVALGI xulqni (avto-hujjat semantikasi)
+  // qulflaydi, shuning uchun ilgak «sessiya yo'q» deb javob beradi: sanoq
+  // yo'li sessiyasiz AVVALGIDEK ishlashi shu testlar bilan ham isbotlanadi.
+  const countSessions = { recordCount: vi.fn(async () => ({ recorded: false })) };
   const svc = new StoreAddressService(
     { client } as never,
     enters as never,
     losses as never,
     stock as never,
+    countSessions as never,
   );
-  return { svc, captured, client, ledger };
+  return { svc, captured, client, ledger, countSessions };
 }
 
 const CALL = { assortmentId: '11111111-1111-4111-8111-111111111111' };

@@ -83,6 +83,23 @@ describe('isTsdAllowed — omborchi ishi OCHIQ', () => {
     expect(isTsdAllowed('PUT', '/admin/stores/s1/cells/c1/stock')).toBe(true);
   });
 
+  it('N2 — sanash SESSIYASI: uch yo`l ochiq, har biri AYNAN o`z chuqurligida', () => {
+    expect(isTsdAllowed('POST', '/tsd/count-sessions')).toBe(true);
+    expect(isTsdAllowed('GET', '/tsd/count-sessions/active')).toBe(true);
+    expect(isTsdAllowed('POST', '/tsd/count-sessions/inv-1/close')).toBe(true);
+    // `exact` — sub-yo'llar va boshqa amallar jimgina ochilmaydi.
+    expect(isTsdAllowed('GET', '/tsd/count-sessions')).toBe(false);
+    expect(isTsdAllowed('GET', '/tsd/count-sessions/inv-1')).toBe(false);
+    expect(isTsdAllowed('POST', '/tsd/count-sessions/inv-1')).toBe(false);
+    expect(isTsdAllowed('DELETE', '/tsd/count-sessions/inv-1')).toBe(false);
+    expect(isTsdAllowed('POST', '/tsd/count-sessions/inv-1/close/undo')).toBe(false);
+    expect(isTsdAllowed('POST', '/tsd/count-sessions/inv-1/confirm')).toBe(false);
+    expect(isTsdAllowed('POST', '/tsd/count-sessions/active')).toBe(false);
+    // Segment chegarasi.
+    expect(isTsdAllowed('POST', '/tsd/count-sessions-admin')).toBe(false);
+    expect(isTsdAllowed('POST', normalizePath('/api/v1/tsd/count-sessions'))).toBe(true);
+  });
+
   it('bildirishnoma oqimi va minimum', () => {
     expect(isTsdAllowed('GET', '/notifications/stream')).toBe(true);
     expect(isTsdAllowed('POST', '/auth/refresh')).toBe(true);
@@ -113,6 +130,25 @@ describe('isTsdAllowed — NARX hech qayerdan chiqmaydi', () => {
     expect(isTsdAllowed('GET', normalizePath('/api/v1/products?search=kabel'))).toBe(false);
     expect(isTsdAllowed('GET', normalizePath('/api/v1/products?limit=1&search=k'))).toBe(false);
     expect(isTsdAllowed('GET', '/tsd/search')).toBe(true);
+  });
+
+  it('🔴 N2 — sanash sessiyasi qo`shilgach ham `/inventories` YOPIQ QOLDI', () => {
+    // Sessiya mavjud `Inventory` hujjatida yashaydi (N-reja Q1) va eng oson
+    // yechim `/inventories` ni ochish bo'lardi — uning javobida hujjat
+    // `sumMinor` («Стоимость») va qator `costMinor` bor. Bu test o'sha yo'lni
+    // QULFLAYDI: terminal sessiyaga faqat narxsiz `/tsd/count-sessions`
+    // sirti orqali tegadi.
+    expect(isTsdAllowed('GET', '/inventories')).toBe(false);
+    expect(isTsdAllowed('GET', '/inventories/inv-1')).toBe(false);
+    expect(isTsdAllowed('POST', '/inventories')).toBe(false);
+    expect(isTsdAllowed('PUT', '/inventories/inv-1')).toBe(false);
+    expect(isTsdAllowed('POST', '/inventories/inv-1/transitions/post')).toBe(false);
+    expect(isTsdAllowed('POST', '/inventories/position-meta')).toBe(false);
+    expect(isTsdAllowed('GET', normalizePath('/api/v1/inventories?state=counted'))).toBe(false);
+    // Va `/products` ham — sessiya sirti uni ochishga sabab bermadi.
+    expect(isTsdAllowed('GET', '/products')).toBe(false);
+    // Ochiq bo'lgani — faqat narxsiz uchlik.
+    expect(isTsdAllowed('POST', '/tsd/count-sessions')).toBe(true);
   });
 
   it('narx modullari YOPIQ', () => {

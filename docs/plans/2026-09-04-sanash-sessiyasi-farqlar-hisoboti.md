@@ -121,7 +121,7 @@ qo'shiladi (N1).
 | Faza | Nima | Tegiladi | Prioritet | Holat |
 |---|---|---|---|---|
 | **N1** | Migratsiya + post-qo'riqchisi | server, prisma | 🔴 poydevor | REJA |
-| **N2** | Sessiya sirti va `setCellStock` ilgagi | server, allowlist | 🔴 o'zak | REJA |
+| **N2** | Sessiya sirti va `setCellStock` ilgagi | server, allowlist | 🔴 o'zak | ✅ TUGADI (2026-09-05) |
 | **N3** | TSD ilova — sessiyani boshlash/yopish | ilova | 🟡 | REJA |
 | **N4** | Web — farqlar hisoboti va tasdiqlash | web, i18n | 🟡 | REJA |
 | **N5** | Mavjud `inventory-variance` hisobotini kengaytirish | server, web | 🔵 | REJA |
@@ -668,3 +668,273 @@ commit qilish (va tugagach begonalarini qaytarish).
 5. `attributes` bo'yicha eslatma: sessiya belgisi ustunda bo'lgani bilan, kelajakda
    kimdir `attributes.__countSession` yozib qo'ymasin — u **hech qanday kuchga ega emas**
    (`validateAndNormalize` uni tashlaydi, qo'riqchi esa faqat ustunni o'qiydi).
+---
+
+### N2 — Sessiya sirti va `setCellStock` ilgagi · **TUGADI** · 2026-09-05 · `<commit>`
+
+**0. N1 qo'riqchisi joyidami? (prompt 3-bandi — TEKSHIRILDI, JOYIDA)**
+
+Fazani boshlashdan oldin koddan o'qib tasdiqlandi:
+
+| Nima | Qayerda | Holat |
+|---|---|---|
+| `count_session`/`counted_by`/`closed_at`/`confirmed_by`/`confirmed_at` | `schema.prisma:7624–7634` | ✔ ustunlar bor |
+| `auto_doc_type`/`auto_doc_id`/`auto_doc_name` | `schema.prisma:7705–7707` | ✔ |
+| `@@index([accountId, countSession, closedAt])` | `schema.prisma:7657` | ✔ |
+| `assertNotCountSession` | `inventory.service.ts:136` | ✔ |
+| `post`/`cancel` taqiqi (`transition` da, `findById` dan keyin) | `inventory.service.ts:697` | ✔ |
+| `update` taqiqi | `inventory.service.ts:588` | ✔ |
+
+Qo'riqchi joyida ⇒ faza bajarildi.
+
+**Nima qilindi**
+
+| Fayl | Nima |
+|---|---|
+| `apps/api/src/modules/tsd/count-session.ts` (yangi, 168) | SOF yadro: `COUNT_SESSION_SELECT` / `COUNT_SESSION_LINE_SELECT` oq ro'yxatlari, `summarizeCountSessionLines`, `buildCountSessionLine`, `COUNT_SESSION_STATE = 'counted'` |
+| `apps/api/src/modules/tsd/count-session.service.ts` (yangi, 245) | `open` (idempotent) / `active` / `close` / `recordCount` (ilgak) |
+| `apps/api/src/modules/tsd/count-session.controller.ts` (yangi, 45) | `POST /tsd/count-sessions`, `GET /tsd/count-sessions/active`, `POST /tsd/count-sessions/:id/close` |
+| `apps/api/src/modules/tsd/tsd.module.ts` (+7) | Yangi kontroller/servis; `CountSessionService` EKSPORT qilinadi |
+| `apps/api/src/modules/store/store.module.ts` (+4) | `TsdModule` import (bir tomonlama — halqa yo'q) |
+| `apps/api/src/modules/store/store-address.service.ts` (+48) | 🔴 `setCellStock` ILGAGI (amal oxirida, `try/catch` da); `autoDoc` (id+nom) yig'ish; 5-vazifa: `getCellProducts` ga `deletedAt: null` |
+| `apps/api/src/modules/auth/tsd-policy.ts` (+25) | Uchta `exact` qator + «bu javobda narx bormi?» ga yozma javob |
+| `apps/api/src/modules/inventory/inventory-number.ts` (yangi, 33) | `nextInventoryName` — hujjat raqamining YAGONA manbai |
+| `apps/api/src/modules/inventory/inventory.service.ts` (+18/−16) | `nextName` shu manbaga bog'landi; qo'riqchiga `delete` amali qo'shildi |
+| `apps/api/src/modules/inventory/inventory.schema.ts` (+11) | `InventoryStateSchema` ga `counted` (faqat ro'yxat filtri uchun) |
+| Testlar | `count-session.test.ts` (15), `count-session.service.test.ts` (24), `store-address-count-session.behaviour.test.ts` (11), `store-address-deleted-product.behaviour.test.ts` (4), `tsd-policy.test.ts` (+2), `inventory.count-session.test.ts` (+4), `inventory.schema.test.ts` (+2) |
+
+**Qaror sabablari**
+
+1. **`InventoryService` CHAQIRILMADI, alohida servis yozildi.** Uning `create()`
+   yo'li `attributes` ni normalizatsiya qiladi, qatorlarni majburlaydi va
+   sessiya bayrog'ini bilmaydi; `update()` esa `deleteMany` qiladi. Yagona
+   umumiy narsa — hujjat RAQAMI, u `inventory-number.ts` ga ko'chirildi
+   (nusxalansa ikkita hisoblagich paydo bo'lib, ikki hujjat bir nom bilan
+   `(account_id, name)` unikaliga urilardi).
+2. **Hujjat nomi — reja `ИН-YYYY-NNNNN` degan, KOD boshqa.** O'lchandi:
+   `nextName` moysklad-parity **prefikssiz 5 xonali** raqam beradi (`00042`).
+   Reja matni eskirgan; sessiya mavjud ketma-ketlikdan raqam oladi (niyat
+   bajarildi), formati esa boshqa inventarizatsiya hujjatlari bilan bir xil.
+3. **Bir omborchida bitta ochiq sessiya.** Shu omborda takroriy `open` —
+   mavjudini qaytaradi (idempotent, terminal qayta yuborsa ro'yxat bo'sh
+   hujjatlar bilan to'lmaydi). BOSHQA omborda ochiq sessiya bo'lsa — **400**,
+   jimgina qaytarish emas: aks holda omborchi 02-omborni sanab, iz
+   01-omborning hujjatiga tushardi.
+4. **Yopilgan sessiyani qayta yopish — xato EMAS**, o'zgartirmasdan qaytadi
+   (`closedAt` birinchi yopishnikidek qoladi). Terminal javobni olmasdan qayta
+   yuborishi real hodisa; 400 omborchini chalg'itardi.
+5. **`state = 'counted'` uchun `InventoryStateSchema` kengaytirildi** (N1
+   hisobotining 1-bandi). Sabab FAQAT ro'yxat filtri (`InventoryFilterSchema`
+   shu enumdan foydalanadi) — usiz N4 web'da `?state=counted` bilan
+   sessiyalarni ajratib ololmasdi. `InventoryTransitionSchema` ATAYLAB
+   tegilmadi: `counted` ga API orqali O'TIB bo'lmaydi (test bilan qulflandi).
+6. **🔴 `delete()` qo'riqchisi QO'SHILDI** (N1 hisobotining 2-bandi qarorni N2
+   ga qoldirgandi). N2 da xavf HAQIQIY bo'ldi: sessiya ochadigan sirt paydo
+   bo'ldi, OCHIQ sessiya esa `state = 'draft'` da turadi — ya'ni `delete()`
+   ning `state !== 'draft'` sharti uni **to'smasdi** va omborchining izi bir
+   so'rov bilan yumshoq o'chib ketardi. Sessiyani «bekor qilish» yo'li — uni
+   YOPISH, o'chirish emas.
+7. **`position` raqami `_max + 1`.** `@@index([inventoryId, position])` unikal
+   EMAS, ya'ni ikki parallel sanoq bir raqam olsa ham yozuv yiqilmaydi — eng
+   yomoni ikki qator bir tartibda turadi (iz uchun zararsiz). Unikal cheklov
+   qo'yish sanoqni bloklash xavfini tug'dirardi — qoida 3 ga zid.
+
+**🔴 Narx qoidasi — YOZMA ISBOT (§3 qoida 4)**
+
+«Ekranda ko'rsatmayapmiz» isbot emas, shuning uchun uch qavat:
+
+1. **`select` OQ RO'YXATI.** Har so'rov `COUNT_SESSION_SELECT` bilan ketadi.
+   Prisma `select` berilmasa HAMMA skalyar ustunni qaytaradi — shu jumladan
+   `Inventory.sumMinor` («Стоимость»). Oq ro'yxatda u **YO'Q**:
+   `id, name, storeId, state, countSession, countedBy, closedAt, confirmedBy,
+   confirmedAt, moment, createdAt`. Qator hisoblagichlari uchun esa faqat
+   `cellId, varianceQty`.
+2. **Tur oq ro'yxatning aksi** (`CountSessionRow` — `tsd.service.ts` dagi
+   `TsdProductRow` naqshi): kimdir `select` ga narx ustuni qo'shsa TypeScript
+   uni o'tkazmaydi.
+3. **Test soxta bazani ham NARXLI qiladi.** `count-session.service.test.ts`
+   dagi fake `select` ni HURMAT QILADI va baza qatoriga ataylab
+   `sumMinor: 123456n` qo'shadi. Javobda u **yo'q** — ya'ni kesish haqiqatda
+   `select` bilan bo'layapti, fake soddaligidan emas.
+
+Sessiya QATORLARIDA `cost_minor` — **NULL**: `buildCountSessionLine` u kalitni
+umuman yozmaydi (`undefined` ham emas — kalitning O'ZI yo'q) va bu test bilan
+qulflangan (`expect('costMinor' in row).toBe(false)`).
+
+`/products` va `/inventories` — **HAMON YOPIQ**, `tsd-policy.test.ts` da
+alohida test bilan: `/inventories`, `/inventories/:id`, `POST /inventories`,
+`PUT /inventories/:id`, `/inventories/:id/transitions/post`,
+`/inventories/position-meta`, `?state=counted` — hammasi `false`.
+
+**Javob namunasi** (`GET /tsd/count-sessions/active`, haqiqiy koddan olingan):
+
+```json
+{
+  "session": {
+    "id": "ac1f0e2b-6d3a-4f21-9c88-5b0e1d7a4c33",
+    "name": "00042",
+    "storeId": "11111111-1111-4111-8111-111111111111",
+    "state": "draft",
+    "countSession": true,
+    "countedBy": "9f2b1c40-77aa-4d15-8f60-2c1e9d8b3a71",
+    "closedAt": null,
+    "confirmedBy": null,
+    "confirmedAt": null,
+    "moment": "2026-09-05T09:12:00.000Z",
+    "createdAt": "2026-09-05T09:12:00.000Z",
+    "counters": { "cellCount": 2, "lineCount": 3, "surplusLines": 1, "shortageLines": 1 }
+  }
+}
+```
+
+Sessiya yo'q bo'lsa — `{ "session": null }`. `POST /tsd/count-sessions` va
+`POST /tsd/count-sessions/:id/close` AYNI shaklni beradi (test bilan
+qulflangan), yopilganida `state: "counted"` va `closedAt` — vaqt.
+
+**O'lchandi**
+
+| Buyruq | Natija |
+|---|---|
+| `npx vitest run src/modules/tsd/` | **5 fayl / 94 test yashil** (yangi: yadro 15, servis 24) |
+| `npx vitest run src/modules/store/` | **15 fayl / 199 test yashil** (avval 13/184; yangi: ilgak 11, o'chirilgan tovar 4) |
+| `npx vitest run src/modules/inventory/` | **6 fayl / 64 test yashil** (avval 6/58) |
+| `npx vitest run src/modules/auth/tsd-policy.test.ts` | **26 test yashil** (avval 24) |
+| `pnpm --filter @moysklad/api typecheck` | **yashil**, xatosiz |
+| `npx biome check` (tegilgan modullar) | **xatosiz** (3 ta ogohlantirish — tegilmagan fayllarda, avvaldan bor) |
+| To'liq `npx vitest run` (apps/api) | **709 fayl / 10 386 test**, 1 tasi qizil — **BEGONA ish**, quyida |
+
+⚠️ **To'liq to'plamdagi yagona qizil — meniki EMAS.**
+`src/modules/permissions/mutation-guard-coverage.test.ts` `HrDavomatPingController#myRemoteRequest`
+(`/hr/attendance-geo/ping.controller.ts`) ni ro'yxatsiz mutatsiya deb topdi.
+Bu fayl ish daraxtida **X-reja sessiyasining commit qilinmagan o'zgarishi**
+(`git status`: `M apps/api/src/modules/hr/attendance-geo/ping.controller.ts`),
+men unga bir bayt ham tegmadim. **Mening kontrollerim o'sha testdan O'TDI** —
+uchala yo'lda ham `@RequirePermission` bor (ro'yxatda faqat bitta begona
+element chiqdi).
+
+**Qabul mezoni**
+
+- ✔ Sessiya ochish **idempotent** — shu omborda takroriy `open` yangi hujjat
+  ochmaydi (`inventory.create` chaqirilmagani bilan isbotlandi); boshqa
+  omborda — 400.
+- ✔ Sanoq **qator qo'shadi**; `expected/actual/variance` raqamlari
+  `stock_by_cell` dan hisoblangan sonlar va `setCellStock` javobidagi
+  (`previousQty`/`qty`) **AYNI stringlar** (test buni javob bilan solishtiradi).
+- ✔ Sessiya yo'q bo'lsa sanoq **avvalgidek** ishlaydi (`recorded: false`, hech
+  narsa yozilmaydi, xato yo'q) — orqaga moslik.
+- ✔ Qator yozish xatosi sanoqni **yiqitmaydi**: `recordCount` xato chiqarsa ham
+  `setCellStock` to'liq javob qaytaradi va avto-hujjat yozilgan qoladi.
+- ✔ `getCellProducts` yumshoq o'chirilgan tovarni **qaytarmaydi** (5-vazifa).
+- ✔ `tsd-policy.test.ts` yashil; `/products` va `/inventories` yopiqligi test
+  bilan isbotlangan.
+- ✔ Javob namunasi keltirildi; narx yo'qligi `select` oq ro'yxati bilan **yozma**
+  isbotlandi.
+
+**Ikki karra qo'llash qo'riqchisi (§3 qoida 3) — DALIL**
+
+Sessiya hujjati bu fazada ham **post qilinmaydi va qilinolmaydi**:
+
+1. **Sirt post yo'lini bermaydi.** Uchta endpoint bor: ochish, o'qish, yopish.
+   Yopish `state = 'counted'` yozadi — `posted` EMAS (test:
+   `expect(updates[0].state).toBe('counted')`). `counted`
+   `InventoryTransitionSchema` da YO'Q, ya'ni
+   `POST /inventories/:id/transitions/counted` ham ishlamaydi (test bilan
+   qulflandi).
+2. **`applyDeltas` sessiya qatorlari uchun HECH QACHON chaqirilmaydi.**
+   `count-session.service.test.ts` fake'i har qoldiq yozuvini
+   (`stock.upsert/update`, `stockByCell.upsert/update/deleteMany`,
+   `stockOperation.createMany`) ro'yxatga oladi. Uchala amalda ham:
+   `open → stockTouches = []`, `close → stockTouches = []`,
+   `recordCount → stockTouches = []`.
+3. **Manba intizomi testi:** `count-session.service.ts` MANBA MATNIDA
+   `applyDeltas`, `stockByCell`, `stockOperation`, `$executeRaw` so'zlari
+   umuman yo'q (K-reja naqshi — «hozircha tegmayapti» dan kuchliroq
+   shartnoma).
+4. **Ilgak APPEND qiladi.** `store-address-count-session.behaviour.test.ts` da
+   `inventoryTouches = []` — `inventory.update()` ham,
+   `inventoryPosition.deleteMany` ham chaqirilmaydi. Iz faqat
+   `inventoryPosition.create` bilan qo'shiladi.
+5. **Terminal `/inventories` ga yeta olmaydi** (allowlist testi) — ya'ni TSD
+   sessiyasidan `transitions/post` ni `curl` bilan urish ham mumkin emas.
+
+**Qaysi oqimni buzishi mumkin? (dalil bilan)**
+
+1. **Bugungi sanash oqimi — buzilmaydi.** Ilgak amalning ENG OXIRIDA turadi
+   (test: `enters.create` chaqiruv tartibi `recordCount` dan KICHIK) va
+   `try/catch` da. Ochiq sessiya bo'lmasa `recordCount` darhol
+   `{ recorded: false }` qaytaradi. Jonlida hozircha sessiya OCHADIGAN klient
+   yo'q (N3 hali yozilmagan) ⇒ ilgak amalda no-op. Mavjud
+   `store-address-count-mode.behaviour.test.ts` (avto-hujjat semantikasi)
+   o'zgarmagan holda yashil.
+2. **`getCellProducts` javobi QISQARADI — bu KO'RINADIGAN o'zgarish.**
+   O'lchov (test bilan): tuzatishdan **OLDIN 2 qator** (tirik + yumshoq
+   o'chirilgan), **KEYIN 1 qator** (faqat tirik). Ta'sir qiladigan joy —
+   **web'ning «Ko'rish» ekrani** va `lookupCellByBarcode` javobidagi
+   `products` ro'yxati.
+   ⚠️ **Asos ochiq aytiladi:** bu «sessiya izini qutqarmaydi» — T12 dan keyin
+   TSD ilovasi bu endpointni umuman chaqirmaydi (rejaning o'zi shuni
+   ta'kidlagan). Haqiqiy asos: o'lik tovar «Ko'rish» da ko'rinmasin va ikki
+   endpoint (`getCellStock` va `getCellProducts`) BIR XIL qoidaga bo'ysunsin —
+   qo'shni endpointda filtr allaqachon bor edi. **Natija egasiga aytilsin:**
+   yacheyka kartochkasida ilgari ko'rinib turgan o'chirilgan tovarlar endi
+   ko'rinmaydi.
+3. **`/inventories` javobiga yangi holat qiymati (`counted`) chiqishi mumkin** —
+   faqat sessiya yopilganda. Web'ning holat ustuni bilmagan qiymatni xom
+   ko'rsatadi — N4 ning ishi. Ro'yxat filtri endi `?state=counted` ni QABUL
+   QILADI (avval 400 berardi).
+4. **`delete()` endi sessiya hujjatini rad etadi (400).** Bugungi jonli
+   hujjatlarda `count_session = true` **0 ta** (N1 zondi) ⇒ hozircha hech
+   kimga ta'sir qilmaydi; sessiyalar paydo bo'lgach ular o'chirilmaydi
+   (ataylab).
+5. **Modul halqasi yo'q:** `StoreModule → TsdModule → AuthModule`.
+   `TsdModule` `StoreModule` ni import QILMAYDI; `typecheck` yashil.
+6. **Migratsiya YO'Q** — bu faza sxemaga bir bayt ham qo'shmadi (ustunlar N1 da).
+
+**Ruxsat (prompt 8-bandi)**
+
+`role-templates.ts` ga **TEGILMADI**. Uchala endpoint mavjud yacheyka amali
+ruxsatiga tayanadi: ochish/yopish — `storecell:update` (sanashning o'zi ham shu
+ruxsat bilan: `PUT /admin/stores/:id/cells/:cellId/stock`), ko'rish —
+`storecell:view`. `storekeeper` shabloni ikkalasini ham `ALL` bilan oladi
+(`role-templates.ts:475`) ⇒ yangi ruxsat kerak emas.
+
+**Commit gigienasi**
+
+Ish daraxtida parallel sessiyalar ishi turibdi (X-reja `hr/attendance-geo` +
+`schema.prisma`, J-reja skriptlari, `auth/*`, `permissions/role-templates.*`).
+Commitga faqat o'z fayllarim kirdi (yuqoridagi jadval) + `docs/progress.json`
+(pre-commit hook avtomatikasi).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. 🔴 **Jonli/lokal `curl` BAJARILMADI** — qabul mezonida yo'q, lekin prompt
+   uni eslatgan. Sabab: lokal `sherset_v2_dev` bazasiga ulanish paroli bu
+   sessiyada yo'q (`postgres:postgres` autentifikatsiyadan o'tmadi), demak
+   server ko'tarilmadi. Sirt **test bilan** isbotlandi (94 ta TSD testi +
+   javob shakli qulfi). **N6 smoke rejasiga kiritilsin:** uchala endpointni
+   haqiqiy TSD tokeni bilan bir marta chaqirib, javobda narx yo'qligini ko'z
+   bilan tasdiqlash.
+2. 🟡 **K5 — `pieceEntry` hozircha HAR DOIM `null`.** O'lchandi:
+   `SetCellStockSchema` da bunday maydon yo'q va hech bir klient yubormaydi
+   (TSD'da bo'lak tarkibini kiritish ekrani yo'q — u WEB'dagi inventarizatsiya
+   orqali kiritiladi, K-reja). Ilgak va `buildCountSessionLine` uni **qabul
+   qiladi va qatorga ko'chiradi** (test bilan), ya'ni kirish paydo bo'lganda
+   bitta qatorlik o'zgarish yetarli. Sirtga inert maydon ATAYLAB QO'SHILMADI:
+   qabul qilinib `stock_pieces` reyestriga qo'llanmaydigan tarkib — yolg'on iz
+   bo'lardi.
+3. 🟡 **Hujjat nomi formati rejadagidan farq qiladi** (yuqorida, 2-qaror
+   sababi). N4 web ekranida sessiya `00042` ko'rinishida chiqadi.
+4. 🟡 **Bir omborchi — bitta ochiq sessiya.** Ikki omborchi bir omborni bir
+   vaqtda sanasa, ikkita alohida sessiya bo'ladi (har biri o'ziniki). N4
+   hisoboti buni hisobga olsin: bitta ombor bo'yicha bir necha sessiya qatori.
+5. 🟡 **`confirmedBy`/`confirmedAt` hali HECH KIM yozmaydi** — bosh omborchi
+   tasdig'i N4 ning ishi. Ustunlar tayyor.
+6. ⚠️ **`mutation-guard-coverage.test.ts` hozir qizil** — X-reja sessiyasining
+   commit qilinmagan ishi tufayli (yuqorida). O'sha sessiya o'z fazasini
+   yopganda tuzalishi kutiladi; N3/N4 agenti buni MENING ishim deb o'ylamasin.
+7. ⚠️ **§4 xaritasida N1 qatori hamon «REJA»** — N1 hisoboti «TUGADI» degan
+   bo'lsa ham. Men faqat O'Z qatorimni yangiladim (§3 qoida 2). Reja egasi
+   yoki N3 agenti buni to'g'rilab qo'ysin.
+8. ⚠️ **N1 dan meros:** migratsiyalar zanjiri boshidan qayta o'ynatilmaydi va
+   lokal dev baza `20260822` dan keyingi migratsiyalarni olmagan (N1 hisoboti
+   3- va 4-bandlar) — o'zgarmadi.

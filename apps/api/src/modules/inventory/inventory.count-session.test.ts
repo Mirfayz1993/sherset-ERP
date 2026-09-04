@@ -139,6 +139,8 @@ function makeService(doc: Partial<FakeDoc>, tx: unknown) {
     ...doc,
   };
   const created: Array<Record<string, unknown>> = [];
+  /** `delete()` yozgan `deletedAt` — bo'sh qolishi = hujjat o'chmagani. */
+  const softDeletes: Array<Record<string, unknown>> = [];
   const prisma = {
     client: {
       inventory: {
@@ -147,6 +149,11 @@ function makeService(doc: Partial<FakeDoc>, tx: unknown) {
         create: vi.fn(async (args: { data: Record<string, unknown> }) => {
           created.push(args.data);
           return { id: 'inv-2', ...args.data };
+        }),
+        // N2 — `delete()` yumshoq o'chirish uchun shu yo'ldan boradi.
+        update: vi.fn(async (args: { data: Record<string, unknown> }) => {
+          softDeletes.push(args.data);
+          return { id: 'inv-1' };
         }),
       },
       product: { findMany: vi.fn(async () => [{ id: 'prod-1', buyPrice: 0n }]) },
@@ -166,7 +173,7 @@ function makeService(doc: Partial<FakeDoc>, tx: unknown) {
   const attrs = { validateAndNormalize: vi.fn(async () => ({})) };
   const webhook = { fireForEvent: vi.fn() };
   const svc = new InventoryService(prisma as never, stock, attrs as never, webhook as never);
-  return { svc, prisma, created };
+  return { svc, prisma, created, softDeletes };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -177,8 +184,8 @@ describe("assertNotCountSession — sof qo'riqchi", () => {
     expect(() => assertNotCountSession({ countSession: null }, 'update')).not.toThrow();
   });
 
-  it("bayroqli hujjatda har uch amal uchun 400 va O'ZIGA XOS xabar beradi", () => {
-    for (const action of ['post', 'cancel', 'update'] as const) {
+  it("bayroqli hujjatda har TO'RT amal uchun 400 va O'ZIGA XOS xabar beradi", () => {
+    for (const action of ['post', 'cancel', 'update', 'delete'] as const) {
       expect(() => assertNotCountSession({ countSession: true }, action)).toThrow(
         BadRequestException,
       );
@@ -188,6 +195,8 @@ describe("assertNotCountSession — sof qo'riqchi", () => {
       /bekor qilinmaydi/,
     );
     expect(() => assertNotCountSession({ countSession: true }, 'update')).toThrow(/tahrirlanmaydi/);
+    // N2 da qo'shildi (N1 hisoboti bu qarorni N2 ga qoldirgan edi).
+    expect(() => assertNotCountSession({ countSession: true }, 'delete')).toThrow(/o'chirilmaydi/);
   });
 });
 
@@ -301,5 +310,52 @@ describe("clone() — bayroq nusxaga KO'CHMAYDI", () => {
     await svc.clone('acc', 'user', 'inv-1');
 
     expect(created[0]?.countSession).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+/**
+ * N-reja §5-N2 — N1 hisoboti «Ochiq qolganlar» 2-bandi: `delete()` sessiya
+ * hujjatini bloklamasdi. Qaror N2 ga qoldirilgandi va N2 da xavf HAQIQIY
+ * bo'ldi (sessiya ochadigan sirt paydo bo'ldi): OCHIQ sessiya `state='draft'`
+ * da turadi, ya'ni `delete()` ning `state !== 'draft'` sharti uni
+ * TO'SMAYDI — omborchining izi bir so'rov bilan yumshoq o'chib ketardi.
+ */
+describe("delete() — ochiq sessiya izsiz o'chmaydi (N2 qarori)", () => {
+  it('draft sessiya hujjati 400 bilan rad etiladi va `deletedAt` YOZILMAYDI', async () => {
+    const { tx } = makeTx();
+    const { svc, softDeletes } = makeService({ countSession: true, state: 'draft' }, tx);
+
+    await expect(svc.delete('acc', 'user', 'inv-1')).rejects.toThrow(BadRequestException);
+    await expect(svc.delete('acc', 'user', 'inv-1')).rejects.toThrow(/o'chirilmaydi/);
+    expect(softDeletes).toEqual([]);
+  });
+
+  it("yopilgan sessiya (`counted`) ham o'chmaydi", async () => {
+    const { tx } = makeTx();
+    const { svc, softDeletes } = makeService({ countSession: true, state: 'counted' }, tx);
+
+    await expect(svc.delete('acc', 'user', 'inv-1')).rejects.toThrow(BadRequestException);
+    expect(softDeletes).toEqual([]);
+  });
+
+  it("ORQAGA MOSLIK: bayroqsiz draft hujjat AVVALGIDEK o'chadi", async () => {
+    const { tx } = makeTx();
+    const { svc, softDeletes } = makeService({ countSession: false, state: 'draft' }, tx);
+
+    await expect(svc.delete('acc', 'user', 'inv-1')).resolves.toEqual({ ok: true });
+    expect(softDeletes).toHaveLength(1);
+    expect(softDeletes[0]?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it('ORQAGA MOSLIK: bayroqsiz POSTED hujjat avvalgi xato bilan rad etiladi', async () => {
+    const { tx } = makeTx();
+    const { svc, softDeletes } = makeService(
+      { countSession: false, state: 'posted', applicable: true },
+      tx,
+    );
+
+    await expect(svc.delete('acc', 'user', 'inv-1')).rejects.toThrow(/draft/);
+    expect(softDeletes).toEqual([]);
   });
 });

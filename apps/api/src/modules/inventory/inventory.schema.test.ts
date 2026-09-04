@@ -13,6 +13,23 @@ describe('InventoryStateSchema', () => {
       expect(InventoryStateSchema.parse(s)).toBe(s);
     }
   });
+
+  it('N-reja N2 — `counted` (yopilgan sanash sessiyasi) ham qabul qilinadi', () => {
+    expect(InventoryStateSchema.parse('counted')).toBe('counted');
+    // Ro'yxat filtri shu enumdan foydalanadi — usiz web `?state=counted` bilan
+    // sessiyalarni ajratib ololmasdi.
+    expect(InventoryFilterSchema.parse({ state: 'counted' }).state).toBe('counted');
+    expect(() => InventoryStateSchema.parse('closed')).toThrow();
+  });
+
+  it('🔴 `counted` ga API orqali O`TIB bo`lmaydi — u transition EMAS', () => {
+    // Holat FAQAT sessiyani yopish yo'li bilan yoziladi
+    // (`count-session.service.ts`), `POST /inventories/:id/transitions/...`
+    // orqali emas: post/cancel `applyDeltas` chaqiradi va sessiya hujjatida
+    // bu qoldiqni ikki karra siljitardi (N-reja §2.1).
+    expect(() => InventoryTransitionSchema.parse('counted')).toThrow();
+    expect(() => InventoryTransitionSchema.parse('close')).toThrow();
+  });
 });
 
 describe('InventoryTransitionSchema', () => {

@@ -6,7 +6,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { allocateDocumentNumber } from '../../prisma/document-number.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { AttributeMetadataService } from '../attribute-metadata/attribute-metadata.service.js';
 import { tashkentRangeBounds } from '../report/report-date-bounds.util.js';
@@ -32,6 +31,7 @@ import { applyPieceRecount } from '../stock-piece/stock-piece-intake.service.js'
 import { findPoolStore, sumAssignedByAssortment } from '../stock/pool-store.util.js';
 import { type StockDelta, StockService } from '../stock/stock.service.js';
 import { WebhookFireService } from '../webhook/webhook-fire.service.js';
+import { nextInventoryName } from './inventory-number.js';
 import {
   type CreateInventoryInput,
   CreateInventorySchema,
@@ -109,12 +109,13 @@ export function reverseVarianceCost(varianceQty: string, unitCostMinor: bigint):
 }
 
 /** `assertNotCountSession` rad etadigan amallar. */
-export type CountSessionGuardedAction = 'post' | 'cancel' | 'update';
+export type CountSessionGuardedAction = 'post' | 'cancel' | 'update' | 'delete';
 
 const COUNT_SESSION_REFUSAL: Record<CountSessionGuardedAction, string> = {
   post: 'Sanash sessiyasi post qilinmaydi: qoldiq allaqachon avto-hujjatlar bilan tenglashgan',
   cancel: 'Sanash sessiyasi bekor qilinmaydi: qoldiq allaqachon avto-hujjatlar bilan tenglashgan',
   update: 'Sanash sessiyasi tahrirlanmaydi: hujjat omborchining sanoq izi',
+  delete: "Sanash sessiyasi o'chirilmaydi: hujjat omborchining sanoq izi",
 };
 
 /**
@@ -127,7 +128,12 @@ const COUNT_SESSION_REFUSAL: Record<CountSessionGuardedAction, string> = {
  *   · `post`   — `applyDeltas` farqni qoldiqqa IKKINCHI marta yozardi;
  *   · `cancel` — u ham `applyDeltas` chaqiradi, ya'ni HECH QACHON qo'llanmagan
  *                deltani «teskari» qilib qoldiqni buzardi;
- *   · `update` — `positions` berilganda `deleteMany` sanoq izini yo'q qilardi.
+ *   · `update` — `positions` berilganda `deleteMany` sanoq izini yo'q qilardi;
+ *   · `delete` — N2 da qo'shildi (N1 hisoboti bu qarorni N2 ga qoldirgan edi).
+ *                OCHIQ sessiya `state = 'draft'` da turadi, ya'ni `delete()`
+ *                ning `state !== 'draft'` sharti uni TO'SMASDI va omborchining
+ *                izi bir so'rov bilan yumshoq o'chib ketardi. Sessiyani
+ *                «bekor qilish» yo'li — uni YOPISH (`counted`), o'chirish emas.
  *
  * Bayroq ATAYLAB haqiqiy ustunda (`inventories.count_session`), `attributes` da
  * EMAS — `validateAndNormalize` metadatasiz kalitni jimgina tashlab, birinchi
@@ -705,6 +711,9 @@ export class InventoryService {
 
   async delete(accountId: string, userId: string, id: string) {
     const inv = await this.findById(accountId, id);
+    // 🔴 N-reja §5-N2: ochiq sessiya `draft` da turadi ⇒ quyidagi shart uni
+    // o'tkazib yuborardi va sanoq izi izsiz yo'qolardi.
+    assertNotCountSession(inv, 'delete');
     if (inv.applicable || inv.state !== 'draft') {
       throw new BadRequestException("Faqat 'draft' holatidagini o'chirish mumkin");
     }
@@ -1336,22 +1345,13 @@ export class InventoryService {
     if (!store) throw new BadRequestException('Ombor topilmadi');
   }
 
-  private async nextName(accountId: string): Promise<string> {
-    const n = await allocateDocumentNumber(this.prisma.client, accountId, 'inventory', async () => {
-      // moysklad-parity: plain 5-digit zero-padded «Номер» (no prefix). Seed = highest
-      // TRAILING number across all names (handles legacy prefixed + new plain) → continues.
-      const rows = await this.prisma.client.inventory.findMany({
-        where: { accountId },
-        select: { name: true },
-      });
-      let max = 0;
-      for (const r of rows) {
-        const m = r.name.match(/\d+$/);
-        if (m) max = Math.max(max, Number.parseInt(m[0], 10) || 0);
-      }
-      return max;
-    });
-    return String(n).padStart(5, '0');
+  /**
+   * N-reja §5-N2: mantiq `inventory-number.ts` ga ko'chirildi — TSD sanash
+   * sessiyasi ham AYNI ketma-ketlikdan raqam oladi va ikkita hisoblagich
+   * paydo bo'lmaydi. Xulq bayt-baytga o'sha (`nextInventoryName` izohi).
+   */
+  private nextName(accountId: string): Promise<string> {
+    return nextInventoryName(this.prisma.client, accountId);
   }
 
   private async logAudit(

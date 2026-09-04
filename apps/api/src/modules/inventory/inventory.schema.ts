@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import { csvUuid } from '../shared/csv.js';
 
-export const InventoryStateSchema = z.enum(['draft', 'posted', 'cancelled']);
+/**
+ * `counted` — N-reja §5-N2: YOPILGAN sanash sessiyasi. `posted` EMAS va hech
+ * qachon bo'lmaydi: qoldiq `setCellStock` yozgan avto-hujjatlar bilan
+ * ALLAQACHON tenglashgan (§2.1 qo'riqchisi `post` ni 400 bilan rad etadi).
+ *
+ * Bu yerga qo'shilishining sababi FAQAT ro'yxat filtri: `InventoryFilterSchema`
+ * shu enumdan foydalanadi va usiz web `?state=counted` bilan sessiyalarni
+ * ajratib ololmasdi. `InventoryTransitionSchema` esa ATAYLAB tegilmadi —
+ * `counted` ga o'tish API orqali EMAS, faqat sessiyani yopish yo'li bilan
+ * yoziladi (`count-session.service.ts`).
+ */
+export const InventoryStateSchema = z.enum(['draft', 'posted', 'cancelled', 'counted']);
 export type InventoryState = z.infer<typeof InventoryStateSchema>;
 
 export const InventoryTransitionSchema = z.enum(['post', 'cancel']);
