@@ -1,11 +1,12 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04, `fd271d18` — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda), T10 TUGADI (2026-09-04, `8c0fd338`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04, `fd271d18` — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda), T10 TUGADI (2026-09-04, `8c0fd338`), **T11 QISMAN** (2026-09-04 — qamrov egasidan tasdiqlandi va ish alohida **N-rejaga** ajratildi, kod yozilmadi)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
 > **Bog'liq rejalar:** U-reja (`2026-09-01-tsd-zamonaviy-ui.md`), G-reja (`2026-08-23-omborchi-tsd-mijozlar.md`),
-> F-reja (`2026-08-23-ombor-restrukturizatsiya.md`), K-reja (`2026-08-25-bolinadigan-tovar-bolak-hisobi.md`).
+> F-reja (`2026-08-23-ombor-restrukturizatsiya.md`), K-reja (`2026-08-25-bolinadigan-tovar-bolak-hisobi.md`),
+> **N-reja** (`2026-09-04-sanash-sessiyasi-farqlar-hisoboti.md` — T11 dan ajralib chiqqan).
 >
 > **Ijro tartibi (O'ZGARMAS):** har faza **ALOHIDA sessiyada**. Agent shu faylni to'liq o'qiydi, FAQAT o'z fazasini
 > bajaradi, testlardan o'tkazadi, §5 «Hisobotlar» ga o'z fazasi ostiga yozadi va **TO'XTAYDI** —
@@ -128,7 +129,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
 | **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | **QISMAN** |
 | **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | **TUGADI** |
-| **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | REJA |
+| **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | **QISMAN — N-rejaga ajratildi** |
 
 **Tartib sababi:** T1 eng arzon va rasmdagi holatni darhol yaxshilaydi; T2 matn kiritishning poydevori
 (usiz T3 dagi qidiruv maydoniga qo'lda yozish ham xavf ostida); T3 eng katta va eng muhim funksiya.
@@ -577,6 +578,12 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventari
 ---
 
 ### T11 — Inventarizatsiya sessiyasi va farqlar hisoboti
+
+> ➡️ **2026-09-04: qamrov egasidan TASDIQLANDI va ish alohida rejaga ajratildi —
+> [`2026-09-04-sanash-sessiyasi-farqlar-hisoboti.md`](2026-09-04-sanash-sessiyasi-farqlar-hisoboti.md)
+> (N-reja, fazalar N1…N6).** Quyidagi eskiz tarixiy holicha qoldirilgan; amaldagi qarorlar
+> (jumladan «`CountSession` jadvali EMAS, mavjud `Inventory` hujjati») N-reja §2 da. Batafsil —
+> §5 dagi T11 hisoboti.
 
 **Maqsad.** Sanash **izli** bo'lsin: kim, qachon, qaysi yacheykalarni sanadi va **farq qancha** —
 hozir avto-Оприходование/Списание jimgina yoziladi va keyin uni hech kim tushuntira olmaydi.
@@ -2334,3 +2341,80 @@ Hajm: `yozuvSoniChegarasi` · `baytChegarasiHamKesadi` · **`engQalinYacheykaBol
    kutilayotgan ikki ishi (zaxira + jonli o'tish). T10 ularga tegmadi.
 8. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T10 commitiga ham
    qo'shilmadi (§2 qoida 6). Keyingi faza agenti ham o'z commitiga qo'shmasin.
+
+---
+
+### T11 — Inventarizatsiya sessiyasi va farqlar hisoboti · **QISMAN — qamrov tasdiqlandi, ijro N-rejada** · 2026-09-04
+
+**Nima qilindi.** §4-T11 prompti 3-bandi bo'yicha **avval qamrov egasidan tasdiqlandi**, keyin
+4-bandi bo'yicha ish alohida rejaga ajratildi. **Kod yozilmadi** — bu ataylab: faza jonli qoldiq
+mantig'iga tegadi va tasdiqsiz kod yozish taqiqlangan edi.
+
+Yaratilgan fayl: **`docs/plans/2026-09-04-sanash-sessiyasi-farqlar-hisoboti.md`** (N-reja,
+fazalar N1…N6). Tegilgan fayllar: shu reja (§3 jadval, §4-T11 havolasi, sarlavha holati).
+
+**Egasining qarorlari (2026-09-04):**
+
+| # | Savol | Qaror |
+|---|---|---|
+| Q1 | Sessiya modeli | **Mavjud `Inventory` hujjati** (yangi `CountSession` jadvali EMAS) |
+| Q2 | Kim ochadi/yopadi | **Omborchi TSD'da o'zi**; web'da faqat ko'rinadi |
+| Q3 | Farqni kim tasdiqlaydi | **Bosh omborchi**; tasdiq FAQAT iz, **qoldiqqa tegmaydi** |
+| Q4 | Avto-hujjatlar | **Saqlanadi** — sessiya ularning ustiga iz qatlami |
+
+**O'lchandi (koddan, taxmin emas).** Qamrovni belgilagan uchta fakt:
+
+1. 🔴 **Q1 + Q4 birga «ikki karra qo'llash» xavfini tug'diradi.** `transition('post')`
+   `stock.applyDeltas` ni chaqiradi (`inventory.service.ts:940`), `cancel` ham
+   (`inventory.service.ts:1120`). Avto-Оприходование deltani allaqachon yozgan bo'lsa, hujjat
+   post qilinishi bilan farq jonli qoldiqqa **ikkinchi marta** tushardi — «361 885 soxta son»
+   sinfidagi hodisa. **Yechim:** sessiya hujjati hech qachon post qilinmaydi, holati `counted`,
+   `post`/`cancel` server tomonda qattiq taqiqlanadi (N-reja §2.1, N1 fazasi).
+2. 🔴 **Sessiya belgisi `attributes` da YASHAY OLMAYDI.**
+   `AttributeMetadataService.validateAndNormalize`
+   (`attribute-metadata.service.ts:172–196`) metadatada ro'yxatdan o'tmagan HAR kalitni jimgina
+   tashlaydi (`for (const meta of metas) … return out`), `inventory.create()` va `update()`
+   ikkalasi ham shundan o'tkazadi ⇒ `__countSession` belgisi web'dagi birinchi tahrirda
+   yo'qolardi va u bilan birga 1-banddagi qo'riqchi ham. **Yechim:** haqiqiy ustunlar
+   (`count_session`, `counted_by`, `closed_at`, `confirmed_by`, `confirmed_at`) — N1 migratsiyasi.
+3. **`inventory.update()` qatorlarni almashtiradi** (`deleteMany` + qayta `create`,
+   `inventory.service.ts:~588`) ⇒ omborchi bittalab qo'shadigan sanoq qatorlari uchun yaroqsiz;
+   **append** sirti kerak (N2).
+
+Qo'shimcha o'lchovlar: `InventoryPosition` da kerakli maydonlarning **hammasi allaqachon bor**
+(`cellId`, `cell`, `expectedQty`, `actualQty`, `varianceQty`, `costMinor?`, K5 `pieceEntry`) —
+`schema.prisma:7583–7680`; yetishmayotgani faqat «qaysi avto-hujjat» havolasi.
+`reports/inventory-variance` ham bor, lekin `AND i.state = 'posted'` bilan cheklangan va
+`varianceCostMinor` (**narx**) beradi (`report/inventory-variance.service.ts:100–125`) — shuning
+uchun TSD unga tegmaydi, hisobot esa N5 da kengaytiriladi.
+
+**Qabul mezoni** (§4-T11 prompti bo'yicha):
+
+- ✔ §1.3, §2, §4-T11, §5 + F-rejadagi «faqat yacheyka kesimi» qoidasi + `docs/ops/jonli-holat.md` o'qildi.
+- ✔ FAQAT T11 bajarildi; boshqa fazaga tegilmadi.
+- ✔ Qamrov egasidan tasdiqlandi (Q1–Q4); tasdiqdan oldin kod yozilmadi.
+- ✔ Ish katta bo'lgani uchun alohida rejaga ajratildi va havola §3 jadvalida, §4-T11 boshida
+  hamda sarlavhada qoldirildi.
+- ✔ §5 ga hisobot yozildi.
+- ⏳ Ijro (migratsiya, sirt, ilova, web) — **N1…N6**, hali boshlanmagan.
+
+**Qaysi oqimni buzishi mumkin?** — **Hech qaysi: bu sessiyada ijro kodi yozilmadi.** O'zgargani
+faqat `docs/plans/` ichidagi ikki `.md` fayl; server, ilova, web, migratsiya, jonli baza
+TEGILMADI. Kelajakdagi xavflar N-reja §2.1/§3 da qizil chiziq sifatida qayd etilgan: ikki karra
+qo'llash (N1 qo'riqchisi bilan yopiladi), sanoq yo'lining sessiyaga bog'lanib qolishi (N2 da
+iz qatlami hech qachon sanoqni bloklamaydi), narx sizishi (sessiya qatorlarida `cost_minor` NULL,
+`/inventories` TSD allowlist'ida hamon YO'Q).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar:**
+
+1. **Ijro N1 dan boshlanadi** (migratsiya + post-qo'riqchisi) — u poydevor, usiz N2 jonli
+   qoldiqqa xavf tug'diradi.
+2. **Sessiya hujjati nomi** mavjud `nextName()` ketma-ketligidan (`ИН-YYYY-NNNNN`) olinadi deb
+   taklif qilingan (N2). Egasi alohida prefiks (masalan `САН-`) xohlasa — N2 boshida aytsin.
+3. **`role-templates.ts` tegilmaydi** deb rejalashtirilgan (mavjud yacheyka-amali ruxsatiga
+   tayaniladi). Agar N2 da yangi ruxsat kerak bo'lsa — hisobotda alohida asoslansin.
+4. ⚠️ **Ish daraxti hamon iflos: 39 fayl** (`apps/api`, `apps/web`, `packages/db` skriptlari,
+   `android/manager-app` — X/J/S rejalarining ishi). N-reja fazalari ham o'z commitiga begona
+   fayl qo'shmasin (§2 qoida 6 / N-reja qoida 9).
+5. **T8 (jonli qurilma smoke) hamon REJA** va T9 egasidan kutilayotgan ikki ishi bilan QISMAN —
+   T11 ularga tegmadi.
