@@ -119,7 +119,7 @@ o'qib tasdiqlangan (taxmin emas):**
 
 | Faza | Nima | Server ishi | Prioritet | Holat |
 |---|---|---|---|---|
-| **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | **TUGADI** |
+| **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | 🔴 **PREMISSASI NOTO'G'RI** (2026-09-04 qayta baholandi — §5) |
 | **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | **TUGADI** |
 | **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | **TUGADI** |
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | **TUGADI** |
@@ -649,7 +649,40 @@ rasmdagi holatda omborchining oxirgi zaxira yo'li ham yopiq edi.
 **Ochiq qolganlar:** hech bir faza boshlanmagan; `android/tsd-app` da U-rejadan qolgan commit
 qilinmagan ish bor (§2, qoida 6).
 
-### T1 — Yacheykaga biriktirilgan tovarlar (Sanash ekrani) · **TUGADI** · 2026-09-03 · `9c7276e8`
+### T1 — Yacheykaga biriktirilgan tovarlar (Sanash ekrani) · ~~TUGADI~~ → 🔴 **QAYTA BAHOLANDI: PREMISSASI NOTO'G'RI** · 2026-09-03 · `9c7276e8`
+
+> 🔴 **2026-09-04 tekshiruvi (egasi so'rovi bilan, T11 sessiyasida). T1 hal qilgan muammo
+> ALLAQACHON hal bo'lgan edi; fazaning yagona jonli ta'siri — ZARARLI.** Quyidagi zanjirning
+> har bo'g'ini koddan o'qib tasdiqlangan:
+>
+> 1. `getCellStock` **2026-08-06 dan beri** (`49445838`, T-rejadan bir oy OLDIN) biriktirilgan
+>    tovarlarni `qty: 0` qator qilib javobga O'ZI qo'shadi
+>    (`store-address.service.ts:220–252`), va u yerda `deletedAt: null` filtri **BOR**.
+> 2. T1 dan OLDINGI `CountScreen` `stock` massivining **hamma** qatorini chizardi — miqdor
+>    filtri YO'Q, `EmptyState` faqat `items.length() == 0` da (`git show 9c7276e8^`).
+> 3. ⇒ **Bo'sh yacheykada biriktirilgan tovarlar T1 gacha ham ro'yxat bo'lib chiqardi.**
+>    Ya'ni §1.2 dagi **2-ildiz sabab NOTO'G'RI o'lchangan**: «ilova `products` ni tashlab
+>    yuboryapti» rost, lekin «shuning uchun ro'yxat ko'rinmaydi» — **yolg'on**, ro'yxat
+>    `stock` orqali allaqachon kelardi.
+> 4. `boundOnly()` = `products` \ `stock`. Ikki so'rov AYNI shartga ega, farqi FAQAT
+>    `deletedAt: null` (`getCellProducts:407–417` da u YO'Q) ⇒ bu ayirma amalda **faqat
+>    yumshoq o'chirilgan tovarlarni** beradi.
+> 5. ⇒ T1 ning «biriktirilgan · qoldiq 0» guruhi eng yaxshi holatda **bo'sh**, eng yomon
+>    holatda **o'lik tovarni** ko'rsatadi va u sanalganda server **404** beradi. Bu aynan
+>    serverda 2026-07-26 da yopilgan nuqson — `getCellStock` izohi uni nomi bilan yozgan:
+>    «bulk count picked a dead id and the save 404'd».
+> 6. Sarlavhadagi «biriktirilgan **M**» hisoblagichi ham shu zaharlangan to'plamni sanaydi.
+>
+> **Nega o'tib ketgan.** Qabul mezoni «**kodda ko'rsatilsin**» degan va hisobotdagi dalil
+> ham **tuzilmaviy**: «`boundOnly()` bor, `pick()` chaqiriladi». Hech kim «bu ro'yxatga
+> AMALDA nima tushadi?» degan savolni bermagan. Xato ijroda emas — **mezonning o'zida**.
+>
+> **Nima qilinadi.** N-reja N2 dagi bir qatorlik tuzatish (`getCellProducts` ga
+> `deletedAt: null`) 404 ni yopadi va shundan keyin T1 guruhi **abadiy bo'sh** bo'ladi —
+> ya'ni o'lik kod. **Egasining qarori kerak:** guruh butunlay olib tashlansinmi (kod
+> soddalashadi), yoki bo'sh holicha qoldirilsinmi. Faza holati shu qaror bilan yopiladi.
+>
+> Quyidagi asl hisobot **o'zgartirilmadi** — tarix sifatida qoladi.
 
 **Nima qilindi**
 
@@ -2458,6 +2491,20 @@ qabul mezoniga kirmagan** (ya'ni bitta ham faza noto'g'ri yopilmagan):
 2 va 3 ning ikkalasi ham **bir qatorlik**, lekin §2 qoida 2 («yo'l-yo'lakay tuzatdim» TAQIQ)
 bo'yicha T11 ularga TEGMADI. Ular uchun kichik bir fazani (T12) ochish yoki T8 jonli smoke'i
 bilan birga qilish — egasining qarori.
+
+**Uchala qarzning ILDIZI — egasining «chala qoldirilganmi?» so'roviga javob (2026-09-04):**
+
+| # | Faza nima va'da qilgan | Faza nima qilgan | Hukm |
+|---|---|---|---|
+| 1 | T1 §4 vazifa 2: «`bound` dan `stock` da BO'LMAGANLARI» ro'yxat bo'lsin | Aynan shu yozilgan — LEKIN o'sha ayirma amalda faqat **o'chirilgan** tovarni beradi | 🔴 **Ijro halol, PREMISSA noto'g'ri.** Batafsil dalil zanjiri — T1 hisoboti boshidagi qizil blokda. Muammo mezonda: «kodda ko'rsatilsin» tuzilmani so'radi, xulqni emas |
+| 2 | T5 §4 vazifa 4: «**Sanash va Joylashtirish** ekranlarida ishlasin; **kesim** uzunligiga ham» | Uchalasi ham bajarilgan: `CountScreen.kt:353,477` · `PlaceScreen.kt:177` · `CutScreen.kt:113,124` — `expression = true` | ✅ **Chala EMAS.** `ShortageScreen` T5 vazifasida **umuman nomlanmagan** ⇒ bu **reja bo'shlig'i**, ijro nuqsoni emas |
+| 3 | T3 §4 vazifa 8: kartada «nom, artikul, **jami qoldiq**, uy-yacheykasi» | To'rttasi ham bor (`Widgets.kt:404–421`); `uom` esa vazifa 2 da FAQAT **javob shakli** uchun talab qilingan va u shaklda BOR (`tsd-scan.ts:29`) | ✅ **Chala EMAS.** `uom` ni KO'RSATISH hech qachon so'ralmagan ⇒ **reja bo'shlig'i** |
+
+**Umumiy saboq (jarayon nuqsoni, kod nuqsoni emas):** T1, T4, T5, T6, T7 ning qabul mezoni
+bir xil «**kodda ko'rsatilsin**» iborasi bilan yozilgan va jonli tekshiruv T8 ga surilgan.
+Bu ibora **tuzilmaviy** dalilni («funksiya bor, chaqiriladi») yetarli deb qabul qiladi va
+T1 aynan shu teshikdan o'tib ketdi. Keyingi rejalarda (N-reja shu jumladan) mezon
+«**shu ro'yxatga AMALDA nima tushadi — misol bilan**» darajasida yozilishi kerak.
 
 **Ataylab qoldirilgan, nuqson EMAS** (hisobotlarda asoslangan savdolar): `take: 30` nozik
 saralashdan oldin ishlaydi (`tsd.service.ts:225–243` — DB tartibi aniq, `truncated` bayrog'i
