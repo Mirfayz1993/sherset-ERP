@@ -2344,7 +2344,7 @@ Hajm: `yozuvSoniChegarasi` · `baytChegarasiHamKesadi` · **`engQalinYacheykaBol
 
 ---
 
-### T11 — Inventarizatsiya sessiyasi va farqlar hisoboti · **QISMAN — qamrov tasdiqlandi, ijro N-rejada** · 2026-09-04
+### T11 — Inventarizatsiya sessiyasi va farqlar hisoboti · **QISMAN — qamrov aniqlandi, ijro N-rejada** · 2026-09-04 · `6b2aac77`
 
 **Nima qilindi.** §4-T11 prompti 3-bandi bo'yicha **avval qamrov egasidan tasdiqlandi**, keyin
 4-bandi bo'yicha ish alohida rejaga ajratildi. **Kod yozilmadi** — bu ataylab: faza jonli qoldiq
@@ -2398,6 +2398,18 @@ uchun TSD unga tegmaydi, hisobot esa N5 da kengaytiriladi.
 - ✔ §5 ga hisobot yozildi.
 - ⏳ Ijro (migratsiya, sirt, ilova, web) — **N1…N6**, hali boshlanmagan.
 
+**O'lchandi (darvozalar).** Ijro kodi yo'q, shuning uchun vitest/gradle yuritilmadi (yuritadigan
+narsa yo'q). Push darvozalari: `turbo typecheck` **10/10 muvaffaqiyatli** (9 kesh, 17,9 s),
+source-scan guard darvozasi **OK**. Commit `6b2aac77` (3 fayl: ikkita reja + pre-commit hook
+qo'shgan `docs/progress.json` vaqt tamg'asi), push `b8fa4e3b..6b2aac77` → `mirfayz`.
+
+⚠️ **Push `CHECK_LINT=0` bilan qilindi** va sabab **o'lchab tekshirildi** (T10 dagidek taxmin
+emas): `node scripts/check-lint.mjs` → **4 xato**, hammasi BEGONA, hali commit qilinmagan
+fayllarda — `apps/api/src/modules/hr/hr-kpi/my-kpi.service.ts` (format + organizeImports),
+`my-kpi.service.test.ts`, `my-kpi-view.util.test.ts` (format); `git status` da uchalasi ham `??`.
+§2 qoida 2 bo'yicha ularga TEGILMADI. (T10 hisobotida aytilgan `pos-calendar.ts` esa endi toza —
+u S-reja tomonidan tuzatilgan.) `--no-verify` ISHLATILMADI: typecheck va guard darvozalari o'tdi.
+
 **Qaysi oqimni buzishi mumkin?** — **Hech qaysi: bu sessiyada ijro kodi yozilmadi.** O'zgargani
 faqat `docs/plans/` ichidagi ikki `.md` fayl; server, ilova, web, migratsiya, jonli baza
 TEGILMADI. Kelajakdagi xavflar N-reja §2.1/§3 da qizil chiziq sifatida qayd etilgan: ikki karra
@@ -2413,8 +2425,10 @@ iz qatlami hech qachon sanoqni bloklamaydi), narx sizishi (sessiya qatorlarida `
    taklif qilingan (N2). Egasi alohida prefiks (masalan `САН-`) xohlasa — N2 boshida aytsin.
 3. **`role-templates.ts` tegilmaydi** deb rejalashtirilgan (mavjud yacheyka-amali ruxsatiga
    tayaniladi). Agar N2 da yangi ruxsat kerak bo'lsa — hisobotda alohida asoslansin.
-4. ⚠️ **Ish daraxti hamon iflos: 39 fayl** (`apps/api`, `apps/web`, `packages/db` skriptlari,
-   `android/manager-app` — X/J/S rejalarining ishi). N-reja fazalari ham o'z commitiga begona
-   fayl qo'shmasin (§2 qoida 6 / N-reja qoida 9).
+4. ⚠️ **Ish daraxti hamon iflos: 33 fayl** (`apps/api` `hr-kpi`, `packages/db` skriptlari,
+   `android/manager-app` — X/J rejalarining ishi). N-reja fazalari ham o'z commitiga begona
+   fayl qo'shmasin (§2 qoida 6 / N-reja qoida 9). Ular commit qilinmaguncha `CHECK_LINT=0`
+   har push'da kerak bo'lib qolaveradi — bu **darvozani ko'r qiladigan** holat, egasi yoki
+   X-reja agenti `hr-kpi` fayllarini `biome check --apply` bilan tuzatsa yopiladi.
 5. **T8 (jonli qurilma smoke) hamon REJA** va T9 egasidan kutilayotgan ikki ishi bilan QISMAN —
    T11 ularga tegmadi.
