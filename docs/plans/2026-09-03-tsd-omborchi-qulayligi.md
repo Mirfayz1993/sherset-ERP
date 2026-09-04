@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -121,7 +121,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T1** | Yacheykaga biriktirilgan tovarlar — Sanash ekranida | yo'q (javobda bor) | 🔴 blok | **TUGADI** |
 | **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | **TUGADI** |
 | **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | **TUGADI** |
-| **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | REJA |
+| **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | REJA |
 | **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | REJA |
 | **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | REJA |
@@ -1124,3 +1124,217 @@ rejasiga tegishli, tegilmadi va commit qilinmadi** (T1/T2 hisobotlaridagi eslatm
    («faqat birinchi 10 tasi») — T6 (sanash progressi) bilan birga.
 7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) va
    ularga T3 da ham tegilmadi — keyingi T-faza agenti ham o'z commitiga qo'shmasin.
+
+### T4 — Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi · **TUGADI** · 2026-09-04 · `c339187f`
+
+**Nima qilindi**
+
+*Yangi fayl*
+
+- **`android/tsd-app/app/src/main/java/uz/sherset/tsd/Feedback.kt`** (YANGI, 136 qator) — global obyekt
+  (`Diagnostics` naqshi: `Activity` ni ko'rmaydi, ya'ni uni ekranlar ham, `MainActivity` ham chaqira oladi
+  va `Shell` shartnomasi ortiqcha o'smaydi):
+  - `ok()` — `ToneGenerator.TONE_PROP_BEEP` (1400+2060 Gs, **yuqori**) 120 ms + bitta 60 ms tebranish;
+  - `fail()` — `TONE_SUP_CONGESTION` (425 Gs, **past**, 200 ms yoqilgan / 200 ms o'chgan ⇒ 600 ms da
+    ikkita past signal) + `createWaveform([0,120,110,120], -1)` ya'ni **ikkita** turtki.
+    Ikki signal ataylab ikki o'lchovda farq qiladi (balandlik **va** uzunlik) — ombor shovqinida bitta
+    o'lchov yetmaydi.
+  - Oqim **`STREAM_NOTIFICATION`**, media EMAS (reja talabi): media oqimi terminalda odatda past turadi
+    va qurilmaning ovoz tugmasiga bo'ysunmaydi.
+  - 🔴 **Eskirgan API'dan qochildi:** `Context.VIBRATOR_SERVICE` API 31 dan eskirgan va `compileSdk = 34`
+    da u **build ogohlantirishi** berardi (§2, qoida 4 buni taqiqlaydi). Shuning uchun ikkala shox ham
+    turdan oladi: API 31+ da `getSystemService(VibratorManager::class.java)?.defaultVibrator`, undan
+    pastda `getSystemService(Vibrator::class.java)`.
+  - **Chidamlilik:** `ToneGenerator` konstruktori ba'zi qurilmalarda `RuntimeException` tashlaydi va
+    `startTone` audio resursi yo'qolganda `false` qaytaradi. Ikkalasi ham `runCatching`/qayta yaratish
+    bilan yopilgan — ovoz QULAYLIK, uning yo'qligi ilovani yiqitmasligi kerak. Ovoz chiqmasa ham
+    **tebranish ishlayveradi**.
+  - `release()` — `onDestroy` da audio resursi qaytariladi.
+
+*Manifest — YAGONA yangi ruxsat*
+
+- **`AndroidManifest.xml`** (+16 / −0): `<uses-permission android:name="android.permission.VIBRATE" />`.
+  Izohda yozilgan: bu «normal» darajadagi ruxsat (o'rnatishda tizim beradi, omborchidan hech nima
+  so'ralmaydi, hech qanday ma'lumotga yo'l ochmaydi). Mavjud «kamera/lokatsiya YO'Q» izohiga
+  **mikrofon (`RECORD_AUDIO`) ham YO'Q** qatori qo'shildi: T4 ovozni faqat CHIQARADI.
+
+*Xato banneri*
+
+- **`Shell.kt`** (+29 / −1): shartnoma uch darajaga bo'lindi — `toast()` (BETARAF), `success()`
+  (toast + `Feedback.ok()`), `error()` (**qizil banner** + `Feedback.fail()`). Har uchtasining
+  KDoc'ida qachon ishlatilishi yozilgan, ya'ni keyingi fazalar «toast qo'yaymi banner qo'yaymi» deb
+  o'ylamaydi.
+- **`Widgets.kt`** (+41 / −0): `ErrorBanner` — `Palette.DangerContainer` fonli, `Palette.Danger` chegarali
+  kartochka: ⛔ · matn · ✕. **Butun kartochka bosiladigan** (4" ekranda kichkina ✕ ga tegish qiyin;
+  ✕ faqat ko'rsatkich).
+- **`MainActivity.kt`** (+183 / −26): `errorText` + `errorSeq` state, `ErrorHost` (avto-yopish
+  taymeri + bosib yopish), `AuthStage` (juftlash/PIN uchun), `success()`/`error()` amalga oshirilishi,
+  `ERROR_BANNER_MS = 6_000L`.
+  - **Joylashuvi:** ish ekranlarida banner **skan maydonining OSTIDA va ro'yxatning USTIDA**.
+    Sabab kodda yozilgan: (a) maydon USTIGA qo'yilsa banner chiqqanda skan maydoni pastga sakrardi —
+    omborchi aynan o'sha maydonga yozadi/skanerlaydi; (b) ro'yxat ICHIGA qo'yilsa u skroll bilan ketib,
+    xato yana ko'rinmay qolardi. Yuqori panel to'silmaydi — «orqaga»/«chiqish» banner turganda ham
+    bosiladi.
+  - Juftlash va PIN bosqichlarida (`AuthStage`) banner **ustiga qoplanadi**: bu ekranlarda yuqori panel
+    yo'q va oqimga qo'yilsa PIN klaviaturasining oxirgi qatori ekrandan chiqib ketardi.
+  - `errorSeq` — aynan bir xil matnli xato ketma-ket kelsa taymer QAYTADAN boshlansin (aks holda
+    ikkinchi banner birinchisidan qolgan vaqtda yo'q bo'lardi).
+  - Bosqich almashganda banner tozalanadi (`logout`, muvaffaqiyatli PIN) — «PIN noto'g'ri» ish stoliga,
+    «Yacheyka topilmadi» esa PIN ekraniga ergashib o'tmaydi. 401 sababli chiqarilgan xato **yo'qolmaydi**:
+    `onSessionLost` avval, `io()` ning banneri esa KEYIN ishlaydi (ikkalasi UI thread navbatida).
+
+*Ekran o'chmasligi*
+
+- **`MainActivity.onCreate`**: `window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)` —
+  sozlamada emas, **doimiy** (reja talabi). Ilova fonga ketganda bayroq o'z-o'zidan kuchdan qoladi,
+  ya'ni terminal cho'ntakda yotganda ekran yonib turmaydi.
+
+*Sozlama*
+
+- **`config.xml`** (+13 / −0): `<bool name="feedback_sound">true</bool>` — reja «bitta bayroq» degan va
+  ayni shunday qilindi. Tebranish uchun alohida bayroq **ataylab yo'q**: u ovozsiz kanal va uni
+  o'chirishning sababi yo'q (ovoz o'chirilganda ham ishlayveradi).
+- **`strings.xml`** (+5 / −0): `error_unknown` («Xatolik — amal bajarilmadi») — matnsiz 5xx da bannerda
+  bo'sh qator turmasin.
+
+**Qaysi yo'llar BANNERGA o'tdi (hammasi)**
+
+| Fayl | Yo'l | Nega xato |
+|---|---|---|
+| `MainActivity` | `io()` ning **ikkala** `catch` i (`ApiException` + `Exception`) | ekranlar o'zi tutmagan HAMMA xatoning oxirgi to'ri — toast qolsa qoidada teshik qolardi |
+| `MainActivity` | `QueueFullException` (navbat to'ldi) | yangi amal RAD ETILDI (IS-5) |
+| `MainActivity` | `flushQueue`: `r.offline` · `r.rejected > 0` | amal yuborilmadi / rad etildi |
+| `MainActivity` | `login_failed` va PIN dagi boshqa xatolar | kirish o'tmadi |
+| `MainActivity` | `update_check_failed`, `update_needs_permission` | yangilanish o'tmadi |
+| `CountScreen` | `count_need_cell_first`, `scan_none` (×2), `scan_piece`, `cell_not_found`, `cell_ambiguous`, `count_qty_hint`, saqlash `catch` (`count_offline` yoki server matni) | 9 yo'l |
+| `PlaceScreen` | `scan_piece`, `place_need_product`, `cell_not_found`, `cell_ambiguous`, `place_need_cell`, `place_qty_hint`, yuborish `catch` | 7 yo'l |
+| `CutScreen` | `cut_piece_not_in_line`, `cut_length_hint`, yuborish `catch` (`cut_offline` yoki server matni) | 3 yo'l |
+| `ShortageScreen` | `shortage_qty_hint`, yuborish `catch` | 2 yo'l |
+| `TaskDetailScreen` | `scan_piece`, `scan_none`, `confirmByProduct` `catch`, `confirmLine` `catch` | 4 yo'l |
+| `SearchScreen` | qidiruv `catch` | 1 yo'l |
+| `QueueScreen` | `r.offline` · `r.rejected > 0` | 2 yo'l |
+
+**Qaysi toast QOLDI va nega (ikkitasi, sanab o'tilgan)**
+
+1. **`TaskDetailScreen.onScan` → `scan_working` («Qidirilmoqda…»).** Bu na muvaffaqiyat, na xato —
+   «so'rov ketdi» degan **betaraf** xabar. Bannerga chiqarilsa qizil rang «xato bo'ldi» degan ma'no
+   berardi; ovoz berilsa esa bitta skanga ikkita signal chiqardi (avval «ketdi», keyin natija).
+   Natija kelganda `onScanResult` o'zi ok/fail ni aytadi.
+2. **`MainActivity.checkUpdate` → `update_up_to_date` («eng so'nggi versiya»).** Bu ham betaraf javob
+   va u FAQAT omborchi tugmani o'zi bosganda chiqadi (`silent = false`); hech qanday amal
+   bajarilmagan, ya'ni ovoz ham, banner ham ortiqcha.
+
+**Muvaffaqiyat — toast bo'lib QOLDI (banner emas), ustiga ovoz qo'shildi**
+
+`count_saved`, `place_saved`, `shortage_saved`, `line_confirmed` (×2), `cut_saved`/`cut_saved_labels`,
+`pair_done`, `offline_queued`, toza `queue_sent`. Sabab: har saqlashda banner chiqsa 4" ekranning
+uchdan biri doimiy band bo'lardi va u xato bannerining kuchini yo'qotardi (hamma narsa banner bo'lsa
+banner hech nima demaydi). Muvaffaqiyat uchun **ovoz+tebranish** yetarli — omborchi aynan shuni kutadi.
+
+**Matnsiz signal (`Feedback` to'g'ridan-to'g'ri) — 6 nuqta**
+
+`MainActivity.routeScan` (topildi/topilmadi — `isEmptyHit`: `kind: "none"` yoki `piece.found != true`),
+`CountScreen` yacheyka ochildi · tovar tanildi (bitta va multi-hit), `PlaceScreen` tovar tanildi ·
+maqsad yacheyka qabul qilindi, `CutScreen` bo'lak yorlig'i qatordan topildi, `TaskDetailScreen`
+multi-hit ro'yxati ochilmoqda. Bu joylarda **xabar yo'q** (natija ekranning O'ZIDA ko'rinadi), lekin
+omborchi ekranga qaramasdan skan qabul qilinganini bilishi kerak.
+`TaskDetailScreen` da **bitta** tovar topilganda signal ATAYLAB berilmaydi: darhol `confirm-scan`
+ketadi va uning javobi o'z signalini beradi — aks holda bitta skanga ikkita ovoz chiqardi.
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 51s** · **36 task, 35 bajarildi** · exit 0 |
+| Ogohlantirish | o'sha buyruq, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build'da o'lchandi — `UP-TO-DATE` task natijani yashirmadi) |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat c339187f` da `apps/` yo'q) |
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` ogohlantirishsiz | ✔ | toza build, `w:`/`warning`/`e:` — **0 qator**. Ayniqsa `Context.VIBRATOR_SERVICE` (API 31 dan eskirgan) ATAYLAB ishlatilmadi — u yagona ehtimoliy ogohlantirish manbai edi |
+| Hamma xato yo'llari bannerga o'tgani; toast qolgan joylar hisobotda sanab o'tilgan | ✔ | yuqoridagi ikki jadval. `grep -rn "toast(" app/src/main/java/` da butun ilova bo'yicha **atigi 2 ta** chaqiruv qoldi (`scan_working`, `update_up_to_date`) + `Shell`/`MainActivity` dagi ta'rifning o'zi |
+| Ovoz/tebranish ruxsati manifestda (`VIBRATE`) | ✔ | `<uses-permission android:name="android.permission.VIBRATE" />` |
+| U **yagona** yangi ruxsat (kamera/lokatsiya YO'Q — G5 qoidasi) | ✔ | `git diff AndroidManifest.xml` da qo'shilgan yagona `uses-permission` — `VIBRATE`. Manifestda kamera, lokatsiya, fon-servis va mikrofon **YO'Q** (izohlarda ochiq yozilgan). Ovoz uchun ruxsat umuman kerak emas: `ToneGenerator` — chiqish qurilmasi |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Serverga **bitta bayt ham** tegilmadi: `apps/`, `packages/`, `prisma/` diffda umuman yo'q. Yangi javob
+maydoni ham, allowlist qatori ham, yangi API chaqiruvi ham qo'shilmadi (`ApiClient.kt` diffda yo'q).
+Banner **mavjud** matnlarni ko'rsatadi va ularning hech birida narx yo'q; `Feedback` esa umuman matn
+ko'rmaydi (faqat `ok()`/`fail()`).
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Sanash semantikasi** — buzilmadi. `CountScreen.save()` ning MANTIG'IGA tegilmadi: hamon
+  `setCellStock(..., qty)`, ya'ni `mode: 'set'` (mutlaq son). O'zgargani faqat javob KANALI
+  (`toast` → `success`/`error`). `count_qty_hint` bo'sh maydonda saqlashni ilgarigidek to'xtatadi.
+- **Oflayn navbat** — buzilmadi va bu muhim: `enqueue()` **xato emas** (`success`), chunki amal
+  yo'qolmadi, keyinroq yuboriladi; xato bo'lib faqat **navbat to'lgani** va **rad etilganlar** chiqadi.
+  `ActionQueue`/`QueueSender`/`DeviceStore`/`ScannerBridge`/`ApiClient` diffda **umuman yo'q**
+  (§2, qoida 10). FIFO, `clientOpId` idempotentligi, 4xx → «rad etilganlar» — hammasi joyida.
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi. `Feedback.ok()` qo'shilgan joylarda tanlov
+  mantig'i o'zgarmadi: multi-hit hamon `PickProductScreen` ni ochadi, ilova hech qachon o'zi tanlamaydi.
+- **Skaner (T2 ishi)** — buzilmadi. `ScanBar.kt` diffda **umuman yo'q**: 350 ms zaxirasi ham,
+  `TypingWatch` ham, ⏎ tugmasi ham tegilmagan. `ScannerBridge` broadcast qismi ham tegilmagan.
+- **Fokus intizomi** — buzilmadi. Banner **fokus olmaydi** (u `Text` lar ichidagi `Card`, matn maydoni
+  emas) va `ScanBar` fokusni faqat `LaunchedEffect(screenKey)` da so'raydi. Banner chiqishi ekran
+  almashishi EMAS, ya'ni `screenKey` o'zgarmaydi va fokus qayerda bo'lsa o'sha yerda qoladi.
+- **Skroll holati** — banner skroll konteynerining TASHQARISIDA, ya'ni u chiqqanda/ketganda
+  ro'yxatning skroll pozitsiyasi qayta hisoblanmaydi (ichkarida bo'lsa qator ostiga siljirdi).
+- **Ekran balandligi (4")** — banner ~64 dp joy egallaydi va u FAQAT xato bo'lganda paydo bo'ladi;
+  6 soniyadan keyin joy qaytadi. Sanashdagi sanoq maydoni va Saqlash tugmasi skrollda, ya'ni ular
+  ekrandan «chiqib ketmaydi», pastroqqa suriladi.
+- **`FLAG_KEEP_SCREEN_ON` va batareya** — terminal smena davomida quvvat tokchasida turadi (egasining
+  ish tartibi), ya'ni bu bayroqning narxi yo'q. Ilova fonga ketganda (`onPause`) Android bayroqni
+  o'zi hisobga olmaydi — ekran odatdagi tartibda o'chadi. Qulflangan ekran/quvvat tugmasi ham
+  ilgarigidek ishlaydi (bayroq faqat AVTO o'chishni to'xtatadi).
+- **Ovoz «bezovta qilmaslik» rejimida** — `STREAM_NOTIFICATION` qurilma sozlamasiga bo'ysunadi, ya'ni
+  ovoz o'chirilgan terminalda signal jim chiqadi va **tebranish** ishlayveradi. Aksincha ham to'g'ri:
+  tebranishsiz terminalda ovoz qoladi.
+- **PIN ekrani va maxfiylik** — buzilmadi. `Diagnostics` ga yangi hech nima yozilmadi; banner matni
+  ham hech qayerga yuborilmaydi (faqat ekranda). PIN bosqichida `dispatchKeyEvent` ning diagnostika
+  qulfi (`if (stage == Stage.Work)`) tegilmadi.
+- **Eski ilova + yangi server / yangi ilova + eski server** — bu faza SERVERGA umuman tegmagani uchun
+  ikkala kombinatsiya ham ilgarigidek ishlaydi.
+
+**Git (§2, qoida 6)**
+
+`c339187f` — **16 fayl** (15 ta T4 fayli + `docs/progress.json`, uni loyihaning `pre-commit` hook'i o'zi qo'shadi). `apps/api` (menejer-planshet rejasi: `auth.*`, `tsd-device.service.*`,
+`permissions/*`, `seed-role-templates.ts`), `apps/api/src/scripts/ops-menejer-rol.ts`,
+`android/manager-app/` va `docs/plans/2026-09-02-menejer-planshet-apk.md` — **T4 ga tegishli emas,
+tegilmadi va commit qilinmadi** (T1/T2/T3 hisobotlaridagi eslatma bajarildi).
+
+⚠️ Ish davomida `apps/web` da ham qisqa vaqt commit qilinmagan o'zgarishlar ko'rindi
+(`pos-header.tsx`, `customer-display/page.tsx`, `api-client.ts` + testlar) va keyin ular o'z-o'zidan
+yo'qoldi — ehtimol yonma-yon ishlayotgan boshqa sessiya. Ularga TEGILMADI va commitga tushmadi
+(`git show --stat c339187f` da `apps/` umuman yo'q).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan** — ovozning haqiqiy balandligi, tebranish kuchi va tonlarning
+   ombor shovqinida ajralishi FAQAT iData 95W Pro'da o'lchanadi. Bu **T8** ning ishi; README'ning
+   G6 smoke ro'yxatiga **11-band** aynan shu uchun yozildi (eski «Narx tekshiruvi» 12 ga surildi).
+   T8 da tekshirilsin: (a) tonlar bir-biridan ajraladimi, (b) `TONE_SUP_CONGESTION` juda uzun emasmi
+   (600 ms), (c) banner 6 soniyasi yetarlimi.
+2. **Ton turlari taxminga tayanadi.** `TONE_PROP_BEEP` va `TONE_SUP_CONGESTION` ning aniq chastotalari
+   Android hujjatidan olindi, qurilmada o'lchanmadi. Ba'zi terminallarda `ToneGenerator` umuman jim
+   bo'lishi mumkin — o'shanda `SoundPool` + o'z `.ogg` fayllariga o'tish kerak bo'ladi (kod bitta
+   `Feedback.play()` ichida jamlangani uchun bu bitta funksiya almashtirish).
+3. **Banner ekranlar orasida saqlanmaydi.** `errorText` `MainActivity` da yashaydi va ekran
+   almashganda **qoladi** (bosqich almashganda esa tozalanadi) — bu ataylab: xato ekran o'zgargani
+   bilan yo'qolmasin. Lekin `back()` bosilsa ham banner turadi va u yangi ekranning xatosi kabi
+   ko'rinishi mumkin. T8 da bu chalkashlik kuzatilsa — `go()`/`back()` da tozalash bir qatorlik.
+4. **Ovozni sozlash — faqat qayta yig'ish bilan.** `feedback_sound` resursda, ya'ni uni o'zgartirish
+   uchun APK qayta yig'iladi. Jonlida tez o'chirish kerak bo'lsa (T2 dagi chegara kabi) uni
+   `DiagnosticsScreen` ga tugma qilib chiqarish mumkin — hozir qilinmadi, chunki reja «bitta bayroq»
+   degan va sozlama ekrani T4 doirasida emas.
+5. **Baland ovozli signal muvaffaqiyat uchun ham bir xil** — omborchi ketma-ket 20 ta tovar sanaganda
+   20 ta bir xil «bip» eshitadi. Jonlida bu charchatsa, T5/T6 bilan birga «faqat xatoda ovoz» rejimi
+   ko'rib chiqilsin (hozir bunday talab yo'q).
+6. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi** (hamon `4`/`0.4.0`),
+   `tools/publish.sh` chaqirilmadi. Egasi «chiqar» degandagina.
+7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
+   keyingi T-faza agenti ham o'z commitiga qo'shmasin. `apps/web` dagi vaqtinchalik o'zgarishlar
+   (yuqoridagi ⚠ bandi) T4 tugagunicha o'z-o'zidan yo'qoldi.
