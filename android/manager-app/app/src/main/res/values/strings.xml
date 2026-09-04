@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Matnlar — o'zbekcha (tsd-app naqshi). Ruscha kerak bo'lsa
+  `values-ru/strings.xml` qo'shiladi — kod o'zgarmaydi.
+-->
+<resources>
+    <string name="app_name">Sherset Menejer</string>
+
+    <!-- Kirish (v0.1 — email+parol) -->
+    <string name="login_title">Kirish</string>
+    <string name="login_id_hint">Email yoki username</string>
+    <string name="login_password_hint">Parol</string>
+    <string name="login_button">Kirish</string>
+    <string name="login_busy">Tekshirilmoqda…</string>
+    <string name="login_failed">Email yoki parol noto\'g\'ri</string>
+    <string name="login_fill_both">Email va parolni kiriting</string>
+    <string name="session_expired">Sessiya tugadi — qayta kiring</string>
+    <string name="logout">Chiqish</string>
+    <string name="back">← Orqaga</string>
+    <string name="loading">Yuklanmoqda…</string>
+    <string name="retry">Qayta urinish</string>
+    <string name="empty_dash">—</string>
+    <string name="no_permission">Ruxsat yo\'q (403) — rolingizda bu ekran huquqi yo\'q</string>
+
+    <!-- Bosh ekran -->
+    <string name="home_title">Bosh ekran</string>
+    <string name="home_section_management">BOSHQARUV</string>
+    <string name="home_section_myday">MENING KUNIM</string>
+    <string name="tile_briefing">Brifing</string>
+    <string name="tile_money">Tushum</string>
+    <string name="tile_kpi">KPI</string>
+    <string name="tile_collection">Undirish</string>
+
+    <!-- «Mening kunim» plitkalari (X1 — ekranlari X2–X6 da ulanadi) -->
+    <string name="tile_attendance">Davomat</string>
+    <string name="tile_my_tasks">Ishlarim</string>
+    <string name="tile_my_kpi">Mening KPI\'im</string>
+    <string name="tile_my_payroll">Oyligim</string>
+    <string name="tile_my_routes">Yo\'nalishlarim</string>
+    <string name="coming_soon_note">Bu bo\'lim keyingi yangilanishda ochiladi.</string>
+
+    <!-- Brifing -->
+    <string name="briefing_title">Brifing</string>
+    <string name="briefing_morning">Ertalabki</string>
+    <string name="briefing_evening">Kechki yakun</string>
+    <string name="briefing_status_quiet">Tinch kun — signal yo\'q</string>
+    <string name="briefing_status_attention">Diqqat talab qiladi</string>
+    <string name="briefing_status_incomplete">Bir qism manba o\'lchanmadi</string>
+    <string name="briefing_not_measured">o\'lchanmadi</string>
+    <string name="briefing_partial">qisman</string>
+    <string name="blk_stuck">Jarayonda turgan ish</string>
+    <string name="blk_sla_breach">SLA buzilishi</string>
+    <string name="blk_acceptance_pending">Qabul kutayotgan kunlar</string>
+    <string name="blk_stock_signal">Zaxira signali</string>
+    <string name="blk_revenue">Tushum</string>
+    <string name="blk_shift_acceptance">Qabul kutayotgan smenalar</string>
+    <string name="blk_cash_variance">Kassa farqi</string>
+    <string name="blk_open_items">Ochiq qolganlar</string>
+
+    <!-- Tushum / pul xaritasi -->
+    <string name="money_title">Pul qayerda</string>
+    <string name="money_net">Sof qoldiq</string>
+    <string name="money_net_incomplete">Sof qoldiq hisoblanmadi — bitta blok o\'lchanmagan</string>
+    <string name="money_not_measured">hisoblanmadi</string>
+    <string name="money_unconverted">Kursi yo\'q, jamiga qo\'shilmadi:</string>
+    <string name="money_liability">passiv</string>
+    <string name="mm_cash">Kassalarda</string>
+    <string name="mm_bank">Bank hisoblarida</string>
+    <string name="mm_customer_debt">Mijoz qarzida</string>
+    <string name="mm_supplier_debt">Ta\'minotchi qarzi (biz qarzdormiz)</string>
+    <string name="mm_driver_cash">Haydovchi qo\'lida</string>
+    <string name="mm_goods_in_transit">Yo\'ldagi tovarda</string>
+
+    <!-- KPI -->
+    <string name="kpi_title">Xodimlar KPI</string>
+    <string name="kpi_empty">Navbatda kun yo\'q</string>
+    <string name="kpi_total">Jami: %1$d kun</string>
+    <string name="kpi_date">Sana</string>
+    <string name="kpi_score_label">KPI ball</string>
+    <string name="kpi_no_score">hisoblanmagan</string>
+    <string name="kpi_receipts">Cheklar</string>
+    <string name="kpi_rev_per_hour">Soatiga tushum</string>
+    <string name="kpi_signals">⚠ signal: %1$d</string>
+    <string name="kpi_state_computed">Hisoblandi</string>
+    <string name="kpi_state_pending">Qaror kutmoqda</string>
+    <string name="kpi_state_accepted">Qabul qilindi</string>
+    <string name="kpi_state_rejected">Rad etildi</string>
+    <string name="kpi_state_escalated">Egaga chiqdi</string>
+    <string name="kpi_state_force_accepted">Majburiy yopildi</string>
+    <string name="kpi_state_stale">Qayta ko\'rik kerak</string>
+
+    <!-- Undirish -->
+    <string name="collection_title">Qarz undirish</string>
+    <string name="collection_empty">Undiriladigan qarz yo\'q</string>
+    <string name="collection_scope_due">Bugungi ish</string>
+    <string name="collection_scope_all">Hammasi</string>
+    <string name="collection_overdue">Kechikkan: %1$d</string>
+    <string name="collection_due_today">Bugun: %1$d</string>
+    <string name="collection_no_due">Muddatsiz: %1$d</string>
+    <string name="collection_problem">Muammoli: %1$d</string>
+    <string name="collection_truncated">Ro\'yxat kesildi: %1$d tadan %2$d tasi ko\'rsatildi</string>
+    <string name="collection_overdue_days">%1$d kun kechikkan</string>
+    <string name="collection_due_today_badge">Muddati bugun</string>
+    <string name="collection_upcoming">%1$d kundan keyin</string>
+    <string name="collection_no_due_badge">Muddatsiz</string>
+    <string name="collection_no_phone">Telefon yo\'q</string>
+    <string name="collection_responsible">Javobgar: %1$s</string>
+    <string name="collection_last_contact">Oxirgi aloqa: %1$s</string>
+    <string name="collection_source_retail">Kassa cheki</string>
+    <string name="collection_source_registry">Reyestr</string>
+    <string name="collection_readonly_note">O\'qish rejimi — eslatma/qo\'ng\'iroq web ERP\'dan</string>
+
+    <!-- Yangilanish (qurilmadan) -->
+    <string name="update_available">Yangi versiya bor</string>
+    <string name="update_download">Yuklab olish</string>
+    <string name="update_downloading">Yuklanmoqda… %1$d%%</string>
+    <string name="update_ready_note">O\'rnatilgach ilova qayta ishga tushadi. Sessiya saqlanadi.</string>
+    <string name="update_install">O\'rnatish</string>
+    <string name="update_failed">Yangilanmadi</string>
+    <string name="update_retry">Qayta urinish</string>
+    <string name="update_check">Versiya %1$s · yangilanishni tekshirish</string>
+    <string name="update_up_to_date">Eng so\'nggi versiya o\'rnatilgan</string>
+    <string name="update_check_failed">Serverga ulanib bo\'lmadi</string>
+    <string name="update_needs_permission">Ruxsat bering: «Noma\'lum manbalardan o\'rnatish» → so\'ng «O\'rnatish»ni yana bosing</string>
+</resources>
