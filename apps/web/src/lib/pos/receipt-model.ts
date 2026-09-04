@@ -33,6 +33,7 @@ import { amountInWords } from '@moysklad/money';
  * tashlash oson (`payments` massivini chizmaslik), lekin **jimgina** emas.
  */
 
+import { POS_TZ } from '@/lib/clock';
 import {
   type ReceiptPaymentRow,
   formatForeignMajor,
@@ -220,11 +221,25 @@ export function fmtQty(q: string): string {
  * 🔴 Namunada FAQAT SANA bor (soat yo'q) — `22.07.2026`. Soat kerak bo'lsa
  * u tizimdan (chek raqami bo'yicha) topiladi; qog'ozdagi ortiqcha raqam
  * mijozga hech nima bermaydi.
+ *
+ * 🔴 MINTAQA QOTIRILGAN (S-reja S2). Ilgari sana qurilma mintaqasida
+ * chizilardi: kassa mashinasining TZ'i adashgan bo'lsa (yoki server `moment`i
+ * yarim tunga yaqin bo'lsa) qog'ozda BOSHQA KUN chiqardi — mijozning qo'lida
+ * qoladigan eng qimmat xato. Endi u doim `Asia/Tashkent` kalendar kuni —
+ * API hisobotlari va HR sahifalari ishlatadigan ayni konvensiya.
+ *
+ * `'ru-RU'` lokali ATAYLAB qoladi — bu qog'oz-format qarori (`22.07.2026`,
+ * moysklad pariteti), tilga bog'liq emas.
  */
 export function fmtReceiptDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: POS_TZ,
+  });
 }
 
 /**

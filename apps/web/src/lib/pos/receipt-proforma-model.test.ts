@@ -13,7 +13,7 @@
  */
 
 import type { CartLine } from '@/app/(app)/sotuv/_components/pos-types';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildReceiptModel } from './receipt-model';
 import { cartToProformaReceipt } from './receipt-proforma-model';
 
@@ -93,5 +93,72 @@ describe('cartToProformaReceipt — savatdan chek-kirishi', () => {
     expect(m.subtotal).toBe('10 000');
     expect(m.discount).toBe('1 000');
     expect(m.total).toBe('9 000');
+  });
+});
+
+/**
+ * S2 (kassa vaqti) — SOTUVSIZ CHEKNING SANASI.
+ *
+ * Bu chek serverda hech qanday hujjat qoldirmaydi: uning sanasini keyin
+ * bazadan tekshirib bo'lmaydi, qog'ozdagi raqam YAGONA nusxa. Shuning uchun
+ * `moment` sahifada `serverNow()` dan olinadi — kassa mashinasining soatidan
+ * emas. Bu yerda sahifaning aynan shu oqimi (skew → `moment` → chek modeli)
+ * uchdan-uchi bilan qulflanadi.
+ *
+ * Skew modul holati bo'lgani uchun har test `vi.resetModules()` bilan TOZA
+ * `clock` nusxasini oladi (`lib/clock.test.ts` naqshi).
+ */
+describe('S2 — skew: qurilma sanasi xato, chekdagi sana to`g`ri', () => {
+  /** Faqat `headers` kerak — `noteServerDate` boshqa hech nimaga tegmaydi. */
+  const RES = (dateHeader: string): Response =>
+    ({ headers: new Headers({ Date: dateHeader }) }) as unknown as Response;
+
+  async function freshClock() {
+    vi.resetModules();
+    return await import('@/lib/clock');
+  }
+
+  /** Sahifadagi `printProforma` oqimining sof qismi (page.tsx bilan bir xil). */
+  const receiptDateFor = (moment: string): string =>
+    buildReceiptModel(cartToProformaReceipt([LINE()], 0, { ...CTX, moment })).dateLabel;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it('qurilma IKKI KUN orqada — chekda server kuni chiqadi, qurilmaniki emas', async () => {
+    const device = new Date('2026-08-14T09:15:30.000Z');
+    const server = new Date('2026-08-16T09:15:30.000Z');
+    vi.setSystemTime(device);
+
+    const clock = await freshClock();
+    clock.noteServerDate(RES(server.toUTCString()));
+
+    // Sahifa aynan shuni qiladi: `const now = serverNow()` → `moment`.
+    const label = receiptDateFor(clock.serverNow().toISOString());
+
+    expect(label).toBe('16.08.2026');
+    // Tuzatishdan OLDIN aynan shu qiymat qog'ozga bosilardi.
+    expect(label).not.toBe('14.08.2026');
+  });
+
+  it('yarim tun chegarasi: 20 daqiqalik skew ham kunni to`g`rilaydi', async () => {
+    // Qurilma: 23:50 (15-avgust, Toshkent). Server: 00:10 (16-avgust).
+    const device = new Date('2026-08-15T18:50:00.000Z');
+    const server = new Date('2026-08-15T19:10:00.000Z');
+    vi.setSystemTime(device);
+
+    const clock = await freshClock();
+    clock.noteServerDate(RES(server.toUTCString()));
+
+    expect(receiptDateFor(clock.serverNow().toISOString())).toBe('16.08.2026');
+    // Qurilma soati bilan chek bir kun oldingi sana bilan chiqardi.
+    expect(receiptDateFor(new Date().toISOString())).toBe('15.08.2026');
   });
 });

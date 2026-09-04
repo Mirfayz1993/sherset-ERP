@@ -1,6 +1,6 @@
 # Kassa vaqt ishonchliligi — qurilma soatidan qutulish (S-reja)
 
-> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1 TUGADI (2026-09-04)
+> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2 TUGADI (2026-09-04)
 > **Boshlang'ich nuqta:** `yacheyka-inventarizatsiya` branch, HEAD `8e698b11`. Jonli: `erp.sherset.uz`.
 > **Sabab (egasining xabari, 2026-09-04):** «kassada vaqt qurilma vaqti bilan ishlayapti va qurilmada vaqt
 > xato bo'lsa xato ko'rsatmoqda».
@@ -133,7 +133,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 | Faza | Nima | Server ishi | Prioritet | Holat |
 |---|---|---|---|---|
 | **S1** | Poydevor: `serverNow()` + skew (`Date` sarlavhasi) + `POS_TZ`; iste'molchi — 2 ta soat | yo'q | 🔴 blok | **TUGADI** |
-| **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | REJA |
+| **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | **TUGADI** |
 | **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | REJA |
 | **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | REJA |
 | **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | REJA |
@@ -417,3 +417,115 @@ u h24 ga tushib yarim tunni «24:00» qilib yozadi.
 - CFD navbat kartasidagi vaqt (`customer-display/page.tsx:886`) ATAYLAB tegilmadi — u S4 doirasi va
   unga bog'langan mavjud test (`customer-display.test.tsx:82`, `05:01`) mashina mintaqasida yozilgan;
   S4 uni test bilan birga ko'chirsin.
+
+---
+
+### S2 — 🔴 Qog'oz: chek va proforma sanasi · **TUGADI** · 2026-09-04
+
+**Nima qilindi** (faqat `apps/web` — 4 fayl, `apps/api` ga TEGILMADI)
+
+| Fayl | O'zgarish |
+|---|---|
+| `apps/web/src/app/(app)/sotuv/page.tsx` | `printProforma` da `const now = new Date()` → **`serverNow()`** (+ `@/lib/clock` importi). Chek `moment`i (`:989`) va tarmoq yiqilgandagi zaxira `CHEK-HHMMSS` raqami (`:985`) shu bitta manbadan oladi. |
+| `apps/web/src/lib/pos/receipt-model.ts` | `fmtReceiptDate` ga **`timeZone: POS_TZ`**. `'ru-RU'` lokali TEGILMADI (qog'oz-format qarori, moysklad pariteti). |
+| `apps/web/src/lib/pos/receipt-model.test.ts` | +3 test (yangi `describe`: qurilma soati / yarim tun chegarasi / qurilma mintaqasi). |
+| `apps/web/src/lib/pos/receipt-proforma-model.test.ts` | +2 test (skew'li uchdan-uchi stsenariy). |
+
+**Nima ATAYLAB o'zgarmadi:** chek raqami mantig'i (`POST /retail-sales/receipt-number` →
+`document_sequences`, 2026-09-02) va tarmoq yiqilgandagi zaxira shox — diffda ular bitta qator ham
+o'zgarmagan, faqat vaqt MANBASI almashdi. Yangi skew/NTP/`Date` o'qish mantig'i yaratilmadi —
+S1 ning `lib/clock.ts` idan iste'mol qilinadi.
+
+**Qamrov:** `fmtReceiptDate` — chekning YAGONA sana nuqtasi, shuning uchun bitta tuzatish oltita
+chaqiruvchini yopdi: savdo cheki, sotuvsiz (proforma) chek, **qarz cheki**
+(`receipt-debt-model.ts:71` → `buildReceiptModel`), `/print/retail-sale/[id]`,
+`/print/debt-payment/[batchId]`, `components/print/tovar-chek.tsx` va `/p/[token]` ommaviy cheki.
+
+**Yangi testlar soni:** **5** (3 + 2).
+
+**Test natijalari (raqam bilan)**
+
+- `src/lib/pos/receipt-model.test.ts` — **49/49** ✔ (ilgari 46 edi)
+- `src/lib/pos/receipt-proforma-model.test.ts` — **7/7** ✔ (ilgari 5 edi)
+- `npx vitest run src/lib/pos "src/app/(app)/sotuv"` — **35 fayl · 486/486** ✔
+- `fmtReceiptDate` ning QOLGAN chaqiruvchilari (`src/__tests__`, `src/lib/__tests__`,
+  `src/components/print`, `src/app/print`, `src/app/p`) — **111 fayl · 1703 o'tdi · 25 o'tkazib
+  yuborildi · 0 yiqildi** ✔ (`pos-bcp47-guard` shu to'plamda — yashil)
+- `pnpm --filter @moysklad/web typecheck` — **0 xato** ✔
+- `npx biome check` (o'zgargan 4 fayl) — **0 xato**, 9 ogohlantirish. To'qqiztasi ham
+  **MENDAN OLDIN bor edi**: `page.tsx` ning `useSortedClasses` (8 ta) va `noNonNullAssertion` (1 ta)
+  qatorlari — `git show HEAD:…` bilan aynan o'sha qatorlar HEAD'da ham tekshirildi
+  (177/181/186/204/212/268/542/1764). Men tekkan qatorlarda ogohlantirish yo'q.
+- `pnpm i18n:gate` — **20/20** ✔ (yangi matn qo'shilmadi)
+
+**Anti-vakuum (test haqiqatan tutadimi?):** `timeZone: POS_TZ` vaqtincha olib tashlanib yugurtirildi —
+mintaqa testi darhol qizardi: `expected '22.07.2026' to be '23.07.2026'`. Ya'ni test mavjud
+xatoni **haqiqatan** tutadi, keyin qator qaytarildi. (Test mashinaning o'z TZ'i `Asia/Tashkent`
+bo'lgani uchun mintaqa `vi.stubEnv('TZ', 'Pacific/Honolulu')` bilan siljitiladi — aks holda test
+shu mashinada hech qachon qizarmasdi va yolg'on-yashil bo'lardi.)
+
+**🔴 §2 qoida 3 — YOZMA ISBOT: serverga yangi maydon YUBORILMADI**
+
+`git diff --stat` (S2 ning o'z fayllari; qolgan `apps/api/*` qatorlari — T3 (TSD) ning MENDAN
+OLDIN turgan commit qilinmagan ishi, ularga TEGILMADI va commitga QO'SHILMADI):
+
+```
+ apps/web/src/app/(app)/sotuv/page.tsx              |  9 +-
+ apps/web/src/lib/pos/receipt-model.ts              | 17 ++-
+ apps/web/src/lib/pos/receipt-model.test.ts         | 45 ++++++-
+ apps/web/src/lib/pos/receipt-proforma-model.test.ts| 69 ++++++++++-
+```
+
+1. Diffda **`apps/api` yo'q** — `retail-sale.service.ts` ga tegilmadi.
+2. `printProforma` dagi YAGONA tarmoq chaqiruvi —
+   `api.post('/retail-sales/receipt-number', { sessionId })`; uning tanasi o'zgarmadi va unda
+   `moment` YO'Q.
+3. `now` ikki joyga boradi va **ikkalasi ham qog'oz**: zaxira raqam satri va
+   `cartToProformaReceipt(…).moment` → `printProformaReceiptViaAgent` → Electron `printSheet` /
+   lokal chop-agent / `window.open`. ERP API'ga chiqmaydi.
+4. Butun POS bo'ylab o'lchandi (`grep -rn moment app/(app)/sotuv components/pos`): yozish yo'nalishida
+   `moment` faqat `page.tsx:989` (yuqoridagi qog'oz yo'li). Qolgan hamma uchrashi — O'QISH:
+   `sortBy=moment` GET parametri va javobni ko'rsatish.
+
+**Qabul mezoni**
+
+- ✔ **Qurilma sanasi noto'g'ri bo'lganda qog'ozdagi sana to'g'ri.** Test bilan: qurilma «2019-yil
+  1-yanvar» deb tursa ham chek sanasi server `moment`ida (`22.07.2026`); skew testida qurilma ikki
+  kun orqada — chekda `16.08.2026`, `14.08.2026` EMAS; 20 daqiqalik skew ham yarim tun chegarasida
+  kunni to'g'rilaydi (`15.08` → `16.08`).
+- ✔ **Chek raqami mantig'i o'zgarmagan; zaxira shox saqlangan.** `document_sequences` chaqiruvi va
+  `CHEK-HHMMSS` shoxi diffda o'zgarmagan (yuqoridagi diff — faqat `new Date()` → `serverNow()`).
+- ✔ **Serverga yangi maydon yuborilmagan** — yuqoridagi 4 bandli isbot.
+
+**«Bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»**
+
+1. **`fmtReceiptDate` — eng keng ta'sir nuqtasi.** U endi DOIM `Asia/Tashkent` kalendar kunini
+   chizadi. Toshkent mintaqasidagi mashinada ko'rinish **aynan o'zgarmaydi** (barcha kassalar
+   O'zbekistonda), mintaqasi adashgan mashinada esa **tuzaladi**. Yagona ko'rinish o'zgaradigan
+   holat — `/p/[token]` ommaviy chekini mijoz **chet elda** ochsa: endi u ham do'kon kunini ko'radi.
+   Bu to'g'ri xulq: chek sanasi — savdo bo'lgan kun, o'quvchining mintaqasi emas.
+2. **`receipt-model.ts` endi `@/lib/clock` ni import qiladi.** Modul React'siz, `window` ga faqat
+   guard ostida tegadi, ya'ni `/print/*` server-komponentlarida ham xavfsiz. Buni typecheck va
+   `fmtReceiptDate` ning barcha chaqiruvchilari bo'yicha 111 fayl / 1703 test tasdiqladi.
+3. **Zaxira `CHEK-HHMMSS` raqami** endi server soatidan yasaladi. Takrorlanmaslik kafolati
+   o'zgarmadi (bir kun ichida sekund aniqligi), lekin soat raqami hamon qurilma MINTAQASIDA
+   (`now.getHours()`) — bu **identifikator, sana emas** (§2 qoida 4 dagi ajratma), TZ qotirish S4
+   doirasi. Ochiq qolganlarga yozildi.
+4. **Skew kechikishi.** Birinchi HTTP javob kelgunicha skew `0`, ya'ni nazariy jihatdan qurilma
+   vaqti. Amalda proforma bosilguncha smena/tovar/cheklar so'rovlari allaqachon o'nlab javob
+   qaytargan bo'ladi, qayta yuklashda esa skew `localStorage` dan tiklanadi (S1).
+5. **`useCallback` bog'liqliklari o'zgarmadi** — `serverNow` modul funksiyasi, dep emas; biome
+   `useExhaustiveDependencies` ogohlantirish bermadi.
+
+**Ochiq qolganlar**
+
+- Zaxira `CHEK-HHMMSS` dagi `getHours/getMinutes/getSeconds` hamon qurilma mintaqasida — **S4**.
+- Qoralama chipi vaqti (`page.tsx` `draftChips.timeLabel`) hamon `Date.now()` + mintaqasiz — **S3**
+  (rejada shunday belgilangan).
+- §1.3 dagi qolgan formatlash nuqtalari (`cheklar-mode`, `smena-mode`, `vozvrat-mode`,
+  `zakazlar-mode`, `customers-panel`, `customer-card-panel`, `debt-payment-dialog`,
+  `customer-display:886`, `print/cash-in`, `print/cash-out`) — **S4**.
+- `pos-bcp47-guard` skaneri `lib/pos` ni QAMRAMAYDI (S2 prompti buni bo'shliq emas deb belgilagan);
+  S4 ning yangi `pos-clock-discipline` guard'i doirani kengaytirishda buni ham hisobga olsin.
+- **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda, egasi «chiqar» desa
+  chiqariladi.

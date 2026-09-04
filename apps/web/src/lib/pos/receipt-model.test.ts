@@ -1,5 +1,5 @@
 import uz from '@/messages/uz.json';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RECEIPT_LABELS,
   type ReceiptSaleInput,
@@ -373,5 +373,48 @@ describe('formatlash yordamchilari', () => {
     const lines = wrapText('A'.repeat(70), 32);
     expect(lines.join('')).toBe('A'.repeat(70));
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(32);
+  });
+});
+
+/**
+ * S2 (kassa vaqti) — QOG'OZDAGI SANA QURILMAGA BOG'LIQ EMAS.
+ *
+ * Mijozning qo'lida qoladigan xato eng qimmati: chek chiqib ketgach uni
+ * qaytarib olib bo'lmaydi. Shu yerda ikkita bog'liqlik qulflanadi:
+ *   1. qurilmaning SOATI — sana faqat server `moment`idan chizilishi kerak;
+ *   2. qurilmaning MINTAQASI — kalendar kun doim `Asia/Tashkent` bo'yicha.
+ */
+describe('S2 — chek sanasi: qurilma soati ham, mintaqasi ham so`ralmaydi', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('qurilma soati BOSHQA KUNDA (hatto boshqa yilda) — sana server `moment`ida qoladi', () => {
+    vi.useFakeTimers();
+    // Kassa mashinasi «2019-yil 1-yanvar» deb o'ylayapti (BIOS batareyasi o'lgan
+    // mashinaning odatiy holati) — chekdagi sana bundan mutlaqo mustaqil.
+    vi.setSystemTime(new Date('2019-01-01T00:00:00.000Z'));
+
+    expect(buildReceiptModel(SALE()).dateLabel).toBe('22.07.2026');
+    expect(fmtReceiptDate('2026-07-22T09:15:00.000Z')).toBe('22.07.2026');
+    expect(buildReceiptModel(SALE()).dateLabel).not.toContain('2019');
+  });
+
+  it('server `moment`i yarim tundan keyin: UTC hali 22-si, Toshkent allaqachon 23-si', () => {
+    // 19:30 UTC = ertasi kun 00:30 Toshkentda. Kassa uchun kun `Asia/Tashkent`
+    // bo'yicha — API hisobotlari ham aynan shu kalendar kunni ishlatadi.
+    expect(fmtReceiptDate('2026-07-22T19:30:00.000Z')).toBe('23.07.2026');
+  });
+
+  it('qurilma MINTAQASI adashgan bo`lsa ham qog`ozda Toshkent kuni chiqadi', () => {
+    // Mashinaning TZ'i vaqtincha okean ortiga ko'chiriladi: `timeZone` qotirilgan
+    // bo'lmasa shu qatorda `22.07.2026` chiqadi — ya'ni MIJOZGA XATO KUN.
+    try {
+      vi.stubEnv('TZ', 'Pacific/Honolulu');
+      expect(fmtReceiptDate('2026-07-22T20:00:00.000Z')).toBe('23.07.2026');
+    } finally {
+      // Mutatsiya shu test faylining qolganiga oqib ketmasin.
+      vi.unstubAllEnvs();
+    }
   });
 });

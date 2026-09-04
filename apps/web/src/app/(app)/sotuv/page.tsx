@@ -32,6 +32,8 @@ import { useFillViewport } from '@/hooks/use-fill-viewport';
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-store';
+// S2 — chekdagi sana qurilma soatidan EMAS, serverdan keladi (S-reja §5).
+import { serverNow } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import {
@@ -963,7 +965,12 @@ function SalesScreen({
   // hech qanday ma'no bermasdi.
   const printProforma = useCallback(async () => {
     if (cart.length === 0 || cartLocked || payingSale != null) return;
-    const now = new Date();
+    // 🔴 VAQT SERVERNIKI (S-reja S2). Qog'ozdagi sana kassa mashinasining
+    // soatiga bog'liq bo'lmasin — u adashsa mijozning qo'lida XATO SANALI
+    // chek qolardi. `serverNow()` — HTTP `Date` sarlavhasidan tekislangan
+    // vaqt; YANGI so'rov qo'shilmaydi va bu qiymat serverga YUBORILMAYDI
+    // (proforma hech qanday hujjat yaratmaydi — faqat qog'ozga chiqadi).
+    const now = serverNow();
     // 🔴 So'rov yiqilsa chek TO'XTAMAYDI — eski vaqt-raqami zaxira bo'lib
     // qoladi. Tarmoq uzilgani uchun mijozni qog'ozsiz qoldirish yomonroq
     // natija; raqam takrorlanmasligini vaqt kafolatlaydi.
