@@ -43,6 +43,8 @@
 ## 2. Fazalar
 
 > Har faza: vazifalar → qabul mezonlari → sessiya-prompti. Fazalar tartibi majburiy (X1 poydevor, X7 yakun), lekin X2–X6 texnik jihatdan mustaqil.
+>
+> **X8–X9 — CHIQARISHDAN KEYINGI to'lqin** (2b-bo'lim): «xodim ish joyidan tashqarida» muammosi. Ular v0.2.0 qamroviga KIRMAYDI va X7 dan oldin boshlanmaydi.
 
 ---
 
@@ -206,6 +208,93 @@ konfiguratsiyasi (keystore'siz, yo'riqnoma bilan), publish.sh tayyorligi,
 docs/ops ga yagona smoke-reja, yakuniy tekshiruv va X1–X6 hisobotlari
 jamlamasi. Jonliga TEGMA. Bitta commit (push YO'Q), reja pastiga X7
 hisobotini yoz va TO'XTA.
+```
+
+---
+
+## 2b. Keyingi to'lqin — «xodim ish joyidan tashqarida» (v0.3, X7 dan KEYIN)
+
+> 🔴 **Bu ikki faza v0.2.0 QAMROVIDAN TASHQARIDA.** X7 chiqarish darvozasi bo'lib qolaveradi: X1–X7 chiqarilib, jonlida ishlagach boshlanadi. Sabab — X8 davomatning ANIQ-CHEGARASIGA (geofence) tegadi, uni chiqarish oldidan aralashtirish xavfli.
+>
+> **Muammo (X2 da o'lchandi):** xodim Toshkentga (yoki boshqa ombor/mijozga) ish bilan ketsa, «Keldim» tugmasi `reason: 'outside'` bilan rad etiladi va **hech qanday yozuv yaratilmaydi** — oylik tarixda o'sha kun «Kelmadi» (qizil) bo'lib qoladi. Ishlagan odam kelmagan bo'lib yozilib qoladi; tuzatishning yagona yo'li — HR web ERP'da qo'lda yozuv qo'shishi.
+>
+> **Yechim ikkiga bo'lindi ATAYLAB:** X8 — arzon va aldash yuzasini OCHMAYDIGAN qism (kompaniyaning o'z ombori); X9 — odam tasdig'i kerak bo'ladigan qism. X8 X9 siz ham to'liq foyda beradi, X9 esa X8 siz ortiqcha ish yaratadi (boshqa omborga borgan har xodim so'rov yozishga majbur bo'lardi). **Tartib majburiy: X8 → X9.**
+
+---
+
+### X8 — Geofence xodimga biriktirilgan HAMMA ish joyiga (boshqa omborga borish)
+
+**Faqat server.** Ilova o'zgarmaydi, migratsiya KERAK EMAS.
+
+**Hozirgi holat (kod bo'yicha o'lchandi):** `ping-ingest.service.ts` ning IKKALA yo'lida ham — `ingest()` (avtomatik ping) va `manualCheckIn()` («Keldim») — geofence FAQAT `emp.workLocationId` ga, ya'ni bitta biriktirilgan joyga solishtiriladi. Kompaniyada 7+ ombor bor.
+
+🟢 **Muhim topilma:** `HrEmployeeBranch` jadvali (xodim ↔ bir nechta `HrWorkLocation`, `@@id([employeeId, workLocationId])`) **bazada ALLAQACHON bor** — migratsiya `20260724133452_hr_timepay_attendance_core`. Lekin serverda HECH QAYERDA o'qilmaydi (`grep` — faqat generatsiya qilingan Prisma klientida uchraydi). Ya'ni jadval bor, kodi yo'q. **Egasidan so'raladi: jonlida bu jadval to'ldirilganmi?** Bo'sh bo'lsa X8 ni to'ldirish yo'li (HR ekranida biriktirish) ham kerak bo'ladi — buni faza boshida o'lchab, hisobotda ayt.
+
+**Vazifalar:**
+1. Yagona util/servis: `resolveAllowedLocations(accountId, employeeId)` → xodimning asosiy `workLocationId` **+** `HrEmployeeBranch` dagi qatorlari; `archived: false` bo'lgan `HrWorkLocation` lar, hammasi `accountId` bilan chegaralangan.
+2. `manualCheckIn()` va `ingest()` — ruxsat etilgan joylardan **BIRORTASIGA** kirsa `inside`. Yozuvga MOS KELGAN joyning `workLocationId` si yoziladi (hozir doim `emp.workLocationId` yoziladi — shu tuzatiladi, aks holda menejer paneli xodimni noto'g'ri filialda ko'rsatadi).
+3. Kechikish hisobi O'ZGARMAYDI — `resolveShift` xodimning o'z jadvalidan (§5.1 «yagona sanksiyalangan manba»).
+4. Hech bir ruxsat etilgan joyga kirmasa — hozirgidek `outside` (xulq o'zgarmaydi).
+5. `isInsideGeofence`/`haversine` utillariga TEGILMAYDI — faqat chaqiruvchi tomon o'zgaradi.
+
+🔴 **Xavfsizlik chegarasi — muhokama qilinmaydi:** ruxsat etilgan joylar **xodimga BIRIKTIRILGAN** bo'lishi shart. «Akkauntning hamma ish joylari» degan yechim TAQIQLANGAN — uyi boshqa ombor radiusiga tushadigan xodim uydan «keldim» bosib qo'yardi, ya'ni geofence ma'nosini yo'qotardi.
+
+**Qabul mezonlari:** yangi util testlari — asosiy joyda `inside` · qo'shimcha filialda `inside` · begona nuqtada `outside` · **arxivlangan joy hisobga OLINMAYDI** · **boshqa akkauntning joyi HECH QACHON hisobga olinmaydi** · yozuvdagi `workLocationId` mos kelgan joyniki; `ping-ingest.service.test.ts` ning mavjud 17 testi yashil; attendance-geo moduli yashil; typecheck 0. Ilova tegilmagani uchun assembleDebug shart emas.
+
+**Prompt:**
+```
+D:\sherset-v2\docs\plans\2026-09-03-xodim-profili-x-reja.md rejasini TO'LIQ o'qi.
+Sen X8-faza agentisan. 0-bo'limdagi o'zgarmas qoidalarga so'zsiz amal qil.
+FAQAT X8 ni bajar: geofence tekshiruvi xodimga biriktirilgan HAMMA ish
+joyiga (asosiy workLocationId + HrEmployeeBranch) solishtirilsin, yozuvga
+mos kelgan joy yozilsin — manualCheckIn va ingest yo'llarining IKKALASIDA.
+«Akkauntning hamma joylari» yechimi TAQIQLANGAN. Migratsiya YOZMA (jadval
+bazada bor). Testlar+typecheck yashil bo'lgach bitta commit (push YO'Q),
+reja pastiga X8 hisobotini yoz va TO'XTA — keyingi fazani BOSHLAMA.
+```
+
+---
+
+### X9 — «Tashqarida ish» — so'rov va menejer tasdig'i
+
+**Server + ilova + migratsiya.** X8 tugamaguncha BOSHLANMAYDI.
+
+**Vazifalar:**
+
+1. **Prisma modeli** (yangi jadval, mavjud jadvallarga ALTER YO'Q — «qo'shimcha-only» qoidasi): `HrAttendanceRemoteRequest` — `accountId`, `employeeId`, `requestedAt`, `lat`, `lng`, `accuracy`, `distanceMeters`, `reason` (matn), `status` (`pending|approved|rejected|expired`), `decidedById`, `decidedAt`, `decisionNote`, `attendanceId` (tasdiqlangach yaratilgan yozuv — xom FK, `workLocationId` naqshi). **Migratsiya YOZILADI, jonliga QO'LLANMAYDI** (0-bo'lim 4-qoidasi).
+2. **Server — xodim tomoni:**
+   - `POST /hr/attendance/my/remote-request` — JwtAuthGuard, `employeeId = user.sub`, tana `{lat, lng, accuracy, reason}`. `reason` MAJBURIY (bo'sh/probel — 400): sababsiz so'rov menejerga qaror qilish uchun hech narsa bermaydi.
+   - 🔴 **Masofani SERVER hisoblaydi** (`haversine.util.ts`), klient yuborgan masofaga ISHONILMAYDI.
+   - Bir kunda bitta ochiq so'rov — takrori `already_pending` (yangi qator YARATMAYDI).
+   - Ochiq so'rov `my/today` javobida ko'rinadi (ekran «tasdiq kutilmoqda» deb chizishi uchun).
+3. **Server — menejer tomoni:**
+   - `GET /hr/attendance/remote-requests?status=pending` — `@RequireHrPermission('employees','read')`.
+   - `POST /hr/attendance/remote-requests/:id/approve` va `/reject` — `@RequireHrPermission('employees','full')`, tanasida izoh.
+   - Javobda menejer ko'radigan HAMMASI: xodim, sabab, **koordinata va ish joyidan masofa**, so'rov vaqti. Aynan shu masofa oqimni halol saqlaydi — «Toshkentdaman» degan odam uyidan 200 m da bo'lsa menejer buni ko'radi.
+   - Tasdiqlanganda `HrAttendance` yaratiladi: 🔴 `checkInTime` = **SO'ROV vaqti**, tasdiq vaqti EMAS (aks holda xodim menejerning sekinligi uchun kechikkan bo'lib chiqadi); `source` = yangi qiymat (`remote_approved`), `workLocationId` = `null`, `editedById` = tasdiqlagan odam, `notes` = sabab. Kechikish `resolveShift` bo'yicha SO'ROV vaqtidan.
+4. **Muddat:** kun oxirigacha javob bo'lmasa kron `expired` qiladi va egaga chiqaradi (`davomat-autocheckout.cron.ts` naqshi). 🔴 Javobsiz qolgan so'rov JIMGINA «kelmadi» ga aylanib qolmasligi kerak.
+5. **Xabar:** mavjud infratuzilma — `HR_EVENT` + `attendance-notify.service.ts` (direktor Telegram sloti). Yangi kanal QURILMAYDI.
+6. **Ilova:** `AttendanceScreen` da `reason == 'outside'` javobidan keyin «Ish yumushi bilan tashqaridaman» tugmasi → sabab matni maydoni → so'rov. Holat kartasida «tasdiq kutilmoqda» ko'rinishi. (Sabab lug'ati tarjimasi allaqachon `reasonRes()` da.)
+7. **Tarixda ALOHIDA ko'rinsin:** tasdiqlangan kun `status: 'remote'` (yoki `approvedRemote: true`) — «keldi» bilan bir xil rangda EMAS. Oy jamlarida alohida sanaladi (`remoteDays`). 🔴 Halol raqamlar shartnomasi: GPS bilan tasdiqlangan kun va ODAM tasdiqlagan kun bir xil narsa emas.
+
+**Qabul mezonlari:** own-only manfiy testlar — o'zganing so'rovini yubora olmaslik, `employees:full` siz tasdiqlab bo'lmasligi (403), boshqa akkauntning so'rovi ko'rinmasligi; masofa serverda hisoblanishi (klient yolg'on masofa yuborsa e'tiborsiz); kechikish SO'ROV vaqtidan hisoblanishi; muddati o'tgan so'rov `expired` bo'lishi; takroriy so'rov qo'sh qator yaratmasligi; attendance-geo moduli yashil; typecheck 0; assembleDebug SUCCESSFUL.
+
+**Egasidan javob kutiladigan ochiq savollar (faza boshida so'ralsin, hisobotda yozilsin):**
+- **Kim tasdiqlaydi?** `employees:full` bo'lgan HAR KIMMI, yoki aniq bir odam/bo'lim boshlig'imi? Hozir «menejer» degan aniq egasi tizimda YO'Q.
+- **Avto-jarima** (`HrAttendanceNotifyConfig.lateFineEnabled`) tasdiq kutayotgan kunga qanday munosabatda bo'ladi — kutadimi, tasdiqdan keyin hisoblanadimi?
+- **Rejalashtirilgan xizmat safari** (oldindan ma'lum kunlar) alohida kerakmi? Tizimda ta'til/safar modeli UMUMAN YO'Q (24 ta `Hr*` modeli tekshirildi) — kerak bo'lsa bu alohida faza.
+
+**Prompt:**
+```
+D:\sherset-v2\docs\plans\2026-09-03-xodim-profili-x-reja.md rejasini TO'LIQ o'qi.
+Sen X9-faza agentisan. 0-bo'limdagi o'zgarmas qoidalarga so'zsiz amal qil.
+X8 tugaganini tekshir — tugamagan bo'lsa TO'XTA va shuni ayt.
+FAQAT X9 ni bajar: HrAttendanceRemoteRequest modeli (migratsiya yoziladi,
+jonliga QO'LLANMAYDI), xodim so'rovi + menejer tasdig'i endpointlari,
+tasdiqlanganda checkInTime = SO'ROV vaqti, muddat kroni, ilovada so'rov
+oqimi va tarixda alohida ko'rinish. Manfiy own-only testlar majburiy.
+Testlar+typecheck+assembleDebug yashil bo'lgach bitta commit (push YO'Q),
+reja pastiga X9 hisobotini yoz va TO'XTA.
 ```
 
 ---
