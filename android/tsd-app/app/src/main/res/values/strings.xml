@@ -186,6 +186,17 @@
     <string name="cut_piece_not_in_line">Bu bo\'lak shu qatorga mos emas</string>
     <string name="cut_offline">Aloqa yo\'q — kesim saqlanmadi (yorliq raqamini server beradi), qayta urinib ko\'ring</string>
 
+    <!-- T5 — miqdor ifodasi (kalkulyator). Sabab matnlari SHU YERDA, chunki
+         `QtyExpression` sof modul va `R` ni ko'rmaydi (JVM testidan chaqiriladi). -->
+    <string name="qty_result">= %1$s</string>
+    <string name="qty_bad_syntax">Ifoda tugallanmagan — saqlab bo\'lmaydi</string>
+    <string name="qty_bad_division">Bo\'lish qo\'llab-quvvatlanmaydi — sonni o\'zingiz hisoblang</string>
+    <string name="qty_bad_negative">Natija manfiy — miqdor manfiy bo\'lmaydi</string>
+    <string name="qty_bad_long">Ifoda juda uzun</string>
+    <string name="qty_bad_big">Son juda katta</string>
+    <string name="qty_bad_precise">Kasr qismi 6 xonadan uzun</string>
+    <string name="qty_invalid">Miqdor noto\'g\'ri — saqlanmadi</string>
+
     <!-- Navbatdagi amallarning nomlari (rad etilganlar ro'yxatida ko'rinadi) -->
     <string name="op_confirm_line">Qator tasdig\'i</string>
     <string name="op_confirm_scan">Skan tasdig\'i</string>

@@ -62,4 +62,10 @@ dependencies {
     // xotirada saqlardi); TSD esa kalitni doimiy saqlaydi — oddiy
     // SharedPreferences root'langan terminalda ochiq matn bo'lardi.
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // T5 — `QtyExpression` ATAYLAB sof modul (Android API'siz), ya'ni uni
+    // oddiy JVM testi qamrab oladi. Ilovada boshqa test infratuzilmasi hamon
+    // YO'Q (U-reja «Ochiq qolganlar») — bu bog'liqlik FAQAT `src/test` uchun
+    // va APK'ga tushmaydi (`testImplementation`).
+    testImplementation("junit:junit:4.13.2")
 }

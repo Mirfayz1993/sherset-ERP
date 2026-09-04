@@ -144,15 +144,21 @@ class CountScreen(private val shell: Shell) : Screen {
                     value = it.optString("qty"),
                 )
                 Spacer(Modifier.height(10.dp))
+                val typed = counts[assortmentId] ?: it.optString("qty")
                 NumberField(
-                    value = counts[assortmentId] ?: it.optString("qty"),
+                    value = typed,
                     onChange = { v -> counts[assortmentId] = v },
                     label = stringResource(R.string.count_qty_hint),
+                    expression = true,
                 )
                 Spacer(Modifier.height(10.dp))
-                PrimaryButton(text = stringResource(R.string.count_save)) {
-                    save(c, assortmentId, (counts[assortmentId] ?: it.optString("qty")).trim())
-                }
+                // T5 — ifoda noto'g'ri bo'lsa tugma O'CHADI (sabab maydon
+                // ostida turadi). Ilgari bu tugma har doim yoniq edi va bo'sh
+                // maydonda bosilsa faqat xato chiqardi.
+                PrimaryButton(
+                    text = stringResource(R.string.count_save),
+                    enabled = QtyExpression.qty(typed) != null,
+                ) { save(c, assortmentId, typed) }
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -246,13 +252,16 @@ class CountScreen(private val shell: Shell) : Screen {
                 value = pickedQty,
                 onChange = { pickedQty = it },
                 label = stringResource(R.string.count_qty_hint),
+                expression = true,
             )
             Spacer(Modifier.height(10.dp))
             PrimaryButton(
                 text = stringResource(R.string.count_save),
                 color = if (inCell == null) Palette.Warning else Palette.Success,
-                enabled = pickedQty.trim().isNotEmpty(),
-            ) { save(c, assortmentId, pickedQty.trim()) }
+                // T5 — «bo'sh emas» o'rniga «hisoblanadi»: `12*` yozilgan
+                // holatda ham tugma o'chadi va sabab maydon ostida ko'rinadi.
+                enabled = QtyExpression.qty(pickedQty) != null,
+            ) { save(c, assortmentId, pickedQty) }
             Spacer(Modifier.height(8.dp))
             SecondaryButton(
                 text = stringResource(R.string.count_cancel),
@@ -388,9 +397,13 @@ class CountScreen(private val shell: Shell) : Screen {
         }
     }
 
-    private fun save(c: JSONObject, assortmentId: String, qty: String) {
-        if (qty.isEmpty()) {
-            shell.error(R.string.count_qty_hint)
+    private fun save(c: JSONObject, assortmentId: String, input: String) {
+        // 🔴 T5 — ifoda SHU YERDA songa aylanadi va serverga aynan shu son
+        // ketadi (`12*24` emas, `288`). Tugma allaqachon o'chirilgan bo'lsa ham
+        // ikkinchi qavat: jim 0 yoki ifoda MATNI hech qachon yuborilmasin.
+        val qty = QtyExpression.qty(input)
+        if (qty == null) {
+            shell.error(if (input.isBlank()) R.string.count_qty_hint else R.string.qty_invalid)
             return
         }
         shell.io {

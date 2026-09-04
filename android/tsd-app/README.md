@@ -167,6 +167,38 @@ natijaning O'ZI ekranda ko'rinadi.
   sozlamada emas): sanash o'rtasida ekran so'nsa sessiya yopilib PIN qayta
   so'ralardi. Ilova fonga ketganda bayroq o'z-o'zidan kuchdan qoladi.
 
+## Miqdor kiritish — kalkulyator (T5)
+
+Omborchi «12 quti × 24 dona» ni boshida hisoblamaydi: miqdor maydoniga
+`12*24` yozadi, maydon ostida **«= 288»** ko'radi va serverga **288** ketadi
+(ifoda MATNI hech qachon yuborilmaydi — `CountScreen.save`, `PlaceScreen.submit`,
+`CutScreen.send` uchalasi ham `QtyExpression.qty()` dan o'tadi).
+
+| Yozildi | Natija | Izoh |
+|---|---|---|
+| `12*24`, `12×24`, `12 * 24`, `12x24` | `288` | `*` tugmasi Decimal klaviaturada YO'Q — shuning uchun maydon ostida `+ − × ( )` tugmalari bor |
+| `3*24+6` | `78` | ko'paytirish qo'shishdan ustun |
+| `(2+3)*4` | `20` | qavslar ishlaydi |
+| `14,5` va `14.5` | `14.5` | vergul ham, nuqta ham (kabel/shlang metrlari) |
+| `12.000000` | `12` | serverdan kelgan sukut qiymati qisqaradi |
+| `12*` | ✘ «Ifoda tugallanmagan» | **Saqlash tugmasi o'chadi** |
+| `12 24` | ✘ xato | probel token ajratadi — jimgina `1224` BO'LMAYDI |
+| `10-25`, `-5` | ✘ «Natija manfiy» | |
+| `12/2` | ✘ «Bo'lish qo'llab-quvvatlanmaydi» | 🔴 ATAYLAB: bo'lish yaxlitlash siyosatini ochib yuborardi |
+| `0.0000001` | ✘ «Kasr qismi 6 xonadan uzun» | server regexi: `^\d+(\.\d{1,6})?$` |
+
+Mantiq `QtyExpression.kt` da (SOF modul — Android/Compose/`R` ko'rinmaydi), shuning
+uchun uni oddiy JVM testi qamrab oladi:
+
+```sh
+cd android/tsd-app && JAVA_HOME=D:/dev/java/jdk-17 ANDROID_HOME=D:/dev/android-sdk \
+  /d/dev/_downloads/g87/gradle-8.7/bin/gradle --no-daemon testDebugUnitTest
+```
+
+Ifoda rejimi **Sanash**, **Joylashtirish** va **Kesish** maydonlarida yoqilgan
+(`NumberField(expression = true)`); «Topolmadim» (`ShortageScreen`) da hozircha
+YO'Q — T-rejaning T5 vazifasi uni sanamagan.
+
 ## Yangilanish (qurilmadan) — 0.3.0
 
 Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
@@ -310,7 +342,22 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
       ovoz yo'qolsin, **tebranish qolsin**.
     - Sozlamalar → Ilovalar → Sherset TSD → Ruxsatlar: ro'yxatda **kamera,
       lokatsiya, mikrofon YO'Q**.
-12. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+12. **Miqdor kalkulyatori (T5):** Sanashda yacheyka ochib tovarni tanlang.
+    - Miqdor maydoni ostida **`+ − × ( )`** tugmalari ko'rinsin. `12` yozing →
+      **×** → `24` → maydon ostida **«= 288»** chiqsin → **Saqlang** →
+      qayta o'qilgan tarkibda **288** tursin, `12*24` MATNI emas.
+    - `12` yozib **×** ni bosing va shu holda qoldiring → «Ifoda tugallanmagan»
+      chiqsin va **Saqlash tugmasi o'chsin** (bosib bo'lmasin).
+    - `14,5` yozing (vergul) → «= 14.5» chiqsin va saqlangach **14.5** tursin.
+    - `10` → **−** → `25` → «Natija manfiy» chiqsin, tugma o'chiq bo'lsin.
+    - `12 24` (orasida probel) yozing → **XATO** bo'lsin; `1224` bo'lib
+      ketmasligi SHART.
+    - Imkoni bo'lsa fizik klaviaturada `12/2` yozing → «Bo'lish
+      qo'llab-quvvatlanmaydi» chiqsin. Bo'lish tugmasi **YO'Q** — shunday
+      bo'lishi kerak.
+    - O'sha tekshiruvni **Joylashtirish** miqdorida va **✂ Kesish**
+      uzunligida takrorlang.
+13. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
     Terminal tokeni bilan `GET /api/v1/products?search=…` → **403**;
     `GET /api/v1/tsd/search?q=…` → **200** va javobda narx maydoni **yo'q**.
 
@@ -388,10 +435,11 @@ app/src/main/java/uz/sherset/tsd/
    QueueSender.kt                          — navbatni bo'shatish
    ScannerBridge.kt                        — broadcast skaner ko'prigi (ko'p vendor)
    Feedback.kt                             — T4: ovoz (ToneGenerator) + tebranish (Vibrator)
+   QtyExpression.kt                        — T5: miqdor ifodasi (SOF modul, `12*24` → `288`)
    Updater.kt                              — qurilmadan yangilash (manifest+sha256+o'rnatish)
    — dizayn qatlami (0.2.0, Compose) —
    Theme.kt                                — ranglar, tipografika, shakllar
-   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar, xato banneri
+   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar (T5 kalkulyator rejimi), xato banneri
    Shell.kt                                — `Shell`/`Screen` shartnomasi
    ScanBar.kt                              — doim fokusdagi klaviatura-wedge maydoni
    AuthScreens.kt                          — juftlash + PIN (raqamlagich)
@@ -403,5 +451,7 @@ app/src/main/java/uz/sherset/tsd/
    SearchScreen.kt                         — T3: nom/artikul qidiruvi (narxsiz)
    QueueScreen.kt                          — oflayn navbat + rad etilganlar
    CutScreen.kt                            — K4: bo'linadigan tovar kesimi
+app/src/test/java/uz/sherset/tsd/
+   QtyExpressionTest.kt                    — T5: JVM unit-test (17 ta) — `gradle testDebugUnitTest`
 app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose)
 ```

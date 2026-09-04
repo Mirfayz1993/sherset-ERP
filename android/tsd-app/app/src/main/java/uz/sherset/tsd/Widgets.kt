@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -225,6 +226,20 @@ fun EmptyState(text: String, modifier: Modifier = Modifier) {
  *
  * `KeyboardType.Decimal`: miqdor kasrli bo'lishi mumkin (kabel metri, kilogramm).
  * Terminalning fizik raqam klaviaturasi ham shu maydonga yozadi.
+ *
+ * 🔴 T5 — [expression] = `true` bo'lganda IFODA REJIMI yoqiladi:
+ *  - maydon ostida **tez tugmalar** qatori (`+ − × ( )`). Ular ZARUR, qulaylik
+ *    emas: `KeyboardType.Decimal` klaviaturasida `*` tugmasi UMUMAN yo'q, ya'ni
+ *    tugmalarsiz omborchi `12*24` ni yoza olmasdi;
+ *  - tugmalar ostida natija qatori — «= 288» (yashil) yoki xato SABABI (qizil).
+ *
+ * Tartib ataylab shunday: maydon → tugmalar → natija. Natija tugmalar USTIGA
+ * qo'yilsa, birinchi `×` bosilganda qator paydo bo'lib tugmalarni pastga
+ * surardi va keyingi bosish adashardi. Natija esa Saqlash tugmasining ustida
+ * turadi — ko'z aynan shu yo'ldan o'tadi.
+ *
+ * Ifodani hisoblash va tekshirish `QtyExpression` da (sof modul, testlari bor);
+ * bu vidjet faqat CHIZADI — serverga son yuborish qarori ekranlarda.
  */
 @Composable
 fun NumberField(
@@ -232,21 +247,110 @@ fun NumberField(
     onChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    expression: Boolean = false,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
-        singleLine = true,
-        label = { Text(label) },
-        textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = Palette.Border,
-        ),
-    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+            singleLine = true,
+            label = { Text(label) },
+            textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = Palette.Border,
+            ),
+        )
+        if (expression) {
+            Spacer(Modifier.height(6.dp))
+            QtyOperatorRow(value, onChange)
+            QtyHint(value)
+        }
+    }
+}
+
+/**
+ * Tez tugmalar: yorlig'i `×`, maydonga esa `*` yoziladi (omborchi matematika
+ * belgisini ko'radi, `QtyExpression` esa ikkalasini ham tushunadi).
+ *
+ * Belgi matnning OXIRIGA qo'shiladi — kursor joyiga emas. Sabab: maydon
+ * `String` ustida ishlaydi (`TextFieldValue` emas) va kursor holatini
+ * bilmaydi; kalkulyator oqimi esa baribir chapdan o'ngga («12» → `×` → «24»).
+ */
+@Composable
+private fun QtyOperatorRow(value: String, onChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        for ((glyph, insert) in QTY_OPS) {
+            OutlinedButton(
+                onClick = { onChange(value + insert) },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp),
+                // Sukut ichki chekkasi 24dp — 4" ekranda beshta tugma sig'masdi.
+                contentPadding = PaddingValues(0.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Text),
+            ) {
+                Text(glyph, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/** Yorliq → maydonga yoziladigan belgi. */
+private val QTY_OPS = listOf(
+    "+" to "+",
+    "−" to "-",
+    "×" to "*",
+    "(" to "(",
+    ")" to ")",
+)
+
+/**
+ * Natija yoki xato sababi.
+ *
+ * Bo'sh maydonda hech nima chizilmaydi — bu xato emas (omborchi hali yozmagan),
+ * saqlash tugmasi esa ilgarigidek o'chiq turadi. Sof raqamda ham qator yo'q:
+ * «= 12» ni takrorlash 4" ekranda joy yeyishdan boshqa hech nima bermaydi.
+ */
+@Composable
+private fun QtyHint(value: String) {
+    when (val r = QtyExpression.parse(value)) {
+        is QtyExpression.Result.Empty -> {}
+        is QtyExpression.Result.Ok ->
+            if (QtyExpression.isExpression(value)) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.qty_result, r.text),
+                    color = Palette.Success,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        is QtyExpression.Result.Bad -> {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "⛔ " + stringResource(qtyProblemRes(r.problem)),
+                color = Palette.Danger,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/** Sabab → matn. `QtyExpression` `R` ni ko'rmaydi (u JVM testidan chaqiriladi). */
+private fun qtyProblemRes(p: QtyExpression.Problem): Int = when (p) {
+    QtyExpression.Problem.SYNTAX -> R.string.qty_bad_syntax
+    QtyExpression.Problem.DIVISION -> R.string.qty_bad_division
+    QtyExpression.Problem.NEGATIVE -> R.string.qty_bad_negative
+    QtyExpression.Problem.TOO_LONG -> R.string.qty_bad_long
+    QtyExpression.Problem.TOO_BIG -> R.string.qty_bad_big
+    QtyExpression.Problem.TOO_PRECISE -> R.string.qty_bad_precise
 }
 
 /** Oddiy matn maydoni (izoh). */

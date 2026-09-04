@@ -174,13 +174,15 @@ class PlaceScreen(private val shell: Shell) : Screen {
                 value = qty,
                 onChange = { qty = it },
                 label = stringResource(R.string.place_qty_hint),
+                expression = true,
             )
             Spacer(Modifier.height(12.dp))
             PrimaryButton(
                 text = stringResource(R.string.place_save),
                 color = Palette.Success,
-                enabled = qty.trim().isNotEmpty(),
-            ) { submit(qty.trim()) }
+                // T5 — «bo'sh emas» o'rniga «hisoblanadi» (sabab maydon ostida).
+                enabled = QtyExpression.qty(qty) != null,
+            ) { submit(qty) }
         }
         Spacer(Modifier.height(10.dp))
         SecondaryButton(text = stringResource(R.string.restart), color = Palette.TextMuted) {
@@ -252,11 +254,15 @@ class PlaceScreen(private val shell: Shell) : Screen {
         return true
     }
 
-    private fun submit(qty: String) {
+    private fun submit(input: String) {
         val p = product ?: return
         val target = toCell ?: return
-        if (qty.isEmpty()) {
-            shell.error(R.string.place_qty_hint)
+        // 🔴 T5 — ifoda SHU YERDA songa aylanadi: `payload` ga ham, oflayn
+        // navbatning YORLIG'IGA ham aynan shu son tushadi (ifoda matni EMAS —
+        // aks holda navbatdagi amal server regexidan o'tmasdi).
+        val qty = QtyExpression.qty(input)
+        if (qty == null) {
+            shell.error(if (input.isBlank()) R.string.place_qty_hint else R.string.qty_invalid)
             return
         }
         val productId = p.optString("id")

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.util.UUID
 
 /**
@@ -109,12 +110,18 @@ class CutScreen(
                 value = cutLength,
                 onChange = { cutLength = it },
                 label = stringResource(R.string.cut_length_hint),
+                expression = true,
             )
             Spacer(Modifier.height(10.dp))
+            // «Qolgan uzunlik» ham SHU rejimda: ikki qo'shni maydondan biri
+            // ifodani tushunib, ikkinchisi tushunmasa omborchi qaysi biriga
+            // nima yozishni bilmasdi — va `14,5` bu yerda jimgina serverga
+            // ketib, 400 bo'lardi.
             NumberField(
                 value = remaining,
                 onChange = { remaining = it },
                 label = stringResource(R.string.cut_remaining_hint),
+                expression = true,
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -126,8 +133,11 @@ class CutScreen(
             PrimaryButton(
                 text = stringResource(R.string.cut_submit),
                 color = Palette.CellText,
-                enabled = cutLength.trim().isNotEmpty(),
-            ) { send(cutLength.trim(), remaining.trim()) }
+                // «Qolgan uzunlik» IXTIYORIY (bo'sh = server o'zi hisoblaydi),
+                // lekin YOZILGAN bo'lsa u ham to'g'ri bo'lishi shart.
+                enabled = QtyExpression.qty(cutLength) != null &&
+                    (remaining.isBlank() || QtyExpression.qty(remaining) != null),
+            ) { send(cutLength, remaining) }
         }
         Spacer(Modifier.height(10.dp))
         SecondaryButton(text = stringResource(R.string.cut_change_source)) { source = null }
@@ -188,25 +198,45 @@ class CutScreen(
         cutLength = needText()
     }
 
-    /** Hali qoplanmagan miqdor: qator miqdori − kesilgan bo'laklar. */
+    /**
+     * Hali qoplanmagan miqdor: qator miqdori − kesilgan bo'laklar.
+     *
+     * 🔴 T5 — hisob `Double` da EMAS, `BigDecimal` da. Sabab aniq: `250 − 237.3`
+     * `Double` da `12.700000000000017` beradi va bu son maydonga SUKUT bo'lib
+     * tushardi. T5 dan keyin maydon serverning «kasr ≤ 6 xona» qoidasini
+     * tekshiradi, ya'ni omborchi hech nima yozmasdan turib «Kesimni yozish»
+     * tugmasi O'CHIQ holatga tushib qolardi — oqim boshi berk ko'chaga kirardi.
+     */
     private fun needText(): String {
-        val quantity = line.optString("quantity").toDoubleOrNull() ?: 0.0
+        val quantity = decimal(line.optString("quantity"))
         val cutPieces = line.optJSONArray("cutPieces") ?: JSONArray()
-        var done = 0.0
+        var done = BigDecimal.ZERO
         for (i in 0 until cutPieces.length()) {
-            done += cutPieces.optJSONObject(i)?.optString("length")?.toDoubleOrNull() ?: 0.0
+            done = done.add(decimal(cutPieces.optJSONObject(i)?.optString("length") ?: ""))
         }
-        val need = quantity - done
-        return if (need <= 0) "0" else trim(need)
+        val need = quantity.subtract(done)
+        if (need.signum() <= 0) return "0"
+        val stripped = need.stripTrailingZeros()
+        return stripped.toPlainString()
     }
 
-    private fun trim(v: Double): String =
-        if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+    private fun decimal(v: String): BigDecimal =
+        runCatching { BigDecimal(v.trim()) }.getOrDefault(BigDecimal.ZERO)
 
-    private fun send(cut: String, remainingInput: String) {
+    private fun send(cutInput: String, remainingInput: String) {
         val src = source ?: return
-        if (cut.isEmpty()) {
-            shell.error(R.string.cut_length_hint)
+        // 🔴 T5 — ifoda SHU YERDA songa aylanadi; serverga yorliq raqamini
+        // beradigan so'rov ketadi, ya'ni bu yerda «taxminiy» son bo'lishi
+        // mumkin emas.
+        val cut = QtyExpression.qty(cutInput)
+        if (cut == null) {
+            shell.error(if (cutInput.isBlank()) R.string.cut_length_hint else R.string.qty_invalid)
+            return
+        }
+        val remainingText = remainingInput.trim()
+        val remaining = if (remainingText.isEmpty()) null else QtyExpression.qty(remainingText)
+        if (remainingText.isNotEmpty() && remaining == null) {
+            shell.error(R.string.qty_invalid)
             return
         }
         val opId = UUID.randomUUID().toString()
@@ -218,7 +248,7 @@ class CutScreen(
                     src.optString("id"),
                     null,
                     cut,
-                    remainingInput.ifEmpty { null },
+                    remaining,
                     opId,
                 )
                 val labels = resp.optJSONArray("labels") ?: JSONArray()
