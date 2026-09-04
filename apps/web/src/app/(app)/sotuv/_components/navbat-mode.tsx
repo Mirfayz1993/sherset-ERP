@@ -18,10 +18,10 @@
  * ildiz font 12px, rem-asosli klasslar 0.75× kichik chiqadi).
  */
 
+import { useServerClock } from '@/hooks/use-server-clock';
 import { formatMoney } from '@moysklad/ui';
 import { CheckCircle, Clock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect, useState } from 'react';
 import type { SaleRow } from './pos-types';
 
 interface NavbatModeProps {
@@ -36,18 +36,18 @@ interface NavbatModeProps {
 }
 
 /**
- * Kartalardagi «o'tgan vaqt» uchun umumiy 30s puls — har karta o'z
- * intervalini ochmasin (navbatda o'nlab karta bo'lishi mumkin).
+ * 🔴 Kartalardagi «o'tgan vaqt» — SERVER soatida (S-reja S3).
+ *
+ * Ilgari bu yerda o'z 30s pulsi turardi (`useNowTick`, `Date.now()`). Xato
+ * eng qattiq aynan shu joyda chiqardi: `sale.moment` SERVERniki, `now` esa
+ * QURILMANIKI — ikkisining ayirmasi kassa soati adashgan qadar xato bo'lardi
+ * («3 daqiqa oldin» yig'ilgan chek «3 soat 5 daqiqa» bo'lib turardi).
+ * Endi puls `useServerClock` da (S1), ya'ni ikkala uchi ham server vaqti.
+ *
+ * `useServerClock` mount'gacha `null` qaytaradi (gidratatsiya qarori).
+ * Kartada u paytda vaqt YOZILMAYDI — soxta «hozir» chiqarish kassirga
+ * yolg'on ma'lumot berardi; bo'sh joy esa bir kadrdan keyin to'ladi.
  */
-function useNowTick(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
-
 function formatElapsed(
   t: ReturnType<typeof useTranslations<'pages.sotuv'>>,
   moment: string,
@@ -71,10 +71,12 @@ function NavbatCard({
 }: {
   sale: SaleRow;
   tone: 'picking' | 'ready';
-  now: number;
+  /** `null` — soat hali o'lchanmagan (mount'gacha): vaqt umuman chizilmaydi. */
+  now: number | null;
 } & Pick<NavbatModeProps, 'cancelSale' | 'markReady' | 'loadReadyToCart'>) {
   const t = useTranslations('pages.sotuv');
   const border = tone === 'picking' ? 'border-amber-300' : 'border-emerald-300';
+  const elapsed = now == null ? null : formatElapsed(t, sale.moment, now);
   return (
     <div
       data-test-id="navbat-card"
@@ -89,12 +91,14 @@ function NavbatCard({
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[14px] text-[var(--ms-text-muted)]">
+        {/* Ajratuvchi nuqta o'zidan OLDINGI bo'lak chizilgandagina qo'yiladi —
+            vaqt hali o'lchanmagan bir kadrda osilib qolgan «·» chiqmasin. */}
         {sale.agent && <span className="truncate">{sale.agent.name}</span>}
-        {sale.agent && <span>·</span>}
-        <span className="tabular-nums">{formatElapsed(t, sale.moment, now)}</span>
+        {sale.agent && elapsed != null && <span>·</span>}
+        {elapsed != null && <span className="tabular-nums">{elapsed}</span>}
         {sale._count?.positions != null && (
           <>
-            <span>·</span>
+            {(sale.agent != null || elapsed != null) && <span>·</span>}
             <span>{t('positions_count', { n: sale._count.positions })}</span>
           </>
         )}
@@ -138,7 +142,9 @@ export function NavbatMode({
   loadReadyToCart,
 }: NavbatModeProps) {
   const t = useTranslations('pages.sotuv');
-  const now = useNowTick();
+  // Umumiy 30s puls — har karta o'z intervalini ochmasin (navbatda o'nlab
+  // karta bo'lishi mumkin). Manba SERVER soati (S1 `useServerClock`).
+  const now = useServerClock(30_000)?.getTime() ?? null;
   const actions = { cancelSale, markReady, loadReadyToCart };
 
   return (

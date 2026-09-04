@@ -78,6 +78,24 @@ describe('POS qarz to`lovi — ulanish', () => {
   });
 
   /**
+   * S-reja S3 — «kechikish kunlari» ikki nuqson bilan sanalardi: qurilma
+   * soatidan va 24 soatlik bo'laklarda (kecha 23:50 dagi qarz bugun ertalab
+   * hamon «0 kun»). Ikkalasi ham ulanish-darajasidagi xato: `posDaysSince`
+   * ning o'z testlari yashil bo'lsa ham dialog eski formulaga qaytib qolsa
+   * hech bir gate shikoyat qilmasdi.
+   */
+  it('«necha kun» server soatidan va KALENDAR kuni bo`yicha sanaladi (S3)', () => {
+    // Faqat funksiya TANASI (izohlar emas — ular eski formulani tushuntiradi).
+    const fn = DIALOG.slice(DIALOG.indexOf('function daysSince('));
+    const body = fn.slice(0, fn.indexOf('\n}\n'));
+
+    expect(body).toMatch(/posDaysSince\(iso, serverNow\(\)\)/);
+    // Eski formulaning ikkala bo'lagi ham qaytib kelmasin.
+    expect(body).not.toMatch(/Date\.now\(\)/);
+    expect(body).not.toMatch(/86_?400_?000/);
+  });
+
+  /**
    * F6 — dollar qarz to'lovining ulanish qulflari. Bularning har biri
    * typecheck'dan JIM o'tadi va faqat PULDA ko'rinadi:
    *  · kurs FE'da qo'lda kiritilsa yoki qayta hisoblansa — chek serverdagi

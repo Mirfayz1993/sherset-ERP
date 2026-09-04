@@ -16,9 +16,10 @@
  */
 
 import { api } from '@/lib/api-client';
+import { noteServerDate } from '@/lib/clock';
 import { scanFeedback } from '@/lib/pos/scan-feedback';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '@/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SotuvPage from '../page';
 import { PRODUCT, PRODUCTS, at, norm, router, salesRoutes } from './harness';
 
@@ -892,5 +893,51 @@ describe('SalesScreen — qoralama (hold order)', () => {
     await user.click(screen.getByTestId('sotuv-cart-draft'));
     // Tiklangan savatda chegirma qaytdi.
     expect(norm(screen.getByText(/−10% chegirma/).textContent)).toContain('−10%');
+  });
+});
+
+/**
+ * S3 (kassa vaqti) — QORALAMA CHIPIDAGI VAQT.
+ *
+ * Chip vaqti kassirga «qaysi savat qachon qo'yilgan» ni aytadi: navbatda uch
+ * qoralama turganda u yagona ajratuvchi belgi. Ilgari u ikki marta qurilmaga
+ * bog'langan edi — soati (`Date.now()`) ham, mintaqasi ham. Bu test to'rt
+ * kombinatsiyadan FAQAT bittasini o'tkazadi: server soati + Toshkent mintaqasi.
+ */
+describe('SalesScreen — qoralama vaqti server soatida (S3)', () => {
+  /** Qurilma: 23:50 (Toshkent) · 08:50 (Honolulu) — soati ham, mintaqasi ham xato. */
+  const DEVICE = new Date('2026-08-15T18:50:00.000Z');
+  /** Server: 20 daqiqa oldinda — Toshkentda allaqachon 00:10, ERTASI kun. */
+  const SERVER = new Date('2026-08-15T19:10:00.000Z');
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    // Skew modul darajasida yashaydi — keyingi testlarga oqib ketmasin.
+    noteServerDate({ headers: new Headers({ Date: new Date().toUTCString() }) } as Response);
+    window.localStorage.clear();
+  });
+
+  it('chip vaqti = server soati + `Asia/Tashkent` (qurilmaniki EMAS)', async () => {
+    // 🔴 FAQAT `Date` soxtalashtiriladi: `setTimeout`/`setInterval` HAQIQIY
+    // qoladi, aks holda testing-library'ning `waitFor`i va `userEvent` osilib
+    // qolardi (vitest soxta taymerlarini RTL tanimaydi).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(DEVICE);
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    noteServerDate({ headers: new Headers({ Date: SERVER.toUTCString() }) } as Response);
+
+    const user = userEvent.setup();
+    renderWithProviders(<SotuvPage />);
+    await addFirstProduct(user);
+    await user.click(screen.getByTestId('sotuv-cart-park'));
+
+    const chip = norm(screen.getByTestId('sotuv-cart-draft').textContent);
+    // Server soati + Toshkent — YAGONA to'g'ri javob.
+    expect(chip).toContain('00:10');
+    // Qolgan uch kombinatsiya — har biri o'z nuqsoni bilan:
+    expect(chip).not.toContain('09:10'); // server soati, lekin qurilma mintaqasi
+    expect(chip).not.toContain('23:50'); // Toshkent, lekin qurilma soati
+    expect(chip).not.toContain('08:50'); // qurilma soati + qurilma mintaqasi
   });
 });

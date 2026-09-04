@@ -18,8 +18,9 @@
  */
 
 import { api } from '@/lib/api-client';
+import { noteServerDate } from '@/lib/clock';
 import { renderWithProviders, screen, userEvent, waitFor, within } from '@/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SotuvPage from '../page';
 import { SALE_ROW, norm, router, salesRoutes } from './harness';
 
@@ -151,5 +152,63 @@ describe('NavbatMode — ikki ustunli kanban (F4)', () => {
     const ready = screen.getByTestId('navbat-col-ready');
     expect(await within(picking).findByText("Hozircha jarayonda savdo yo'q")).toBeInTheDocument();
     expect(await within(ready).findByText('CHEK-00001')).toBeInTheDocument();
+  });
+});
+
+/**
+ * S3 (kassa vaqti) — «O'TGAN VAQT» IKKI UCHI HAM SERVERNIKI.
+ *
+ * Bu kartadagi eng nozik hisob: `sale.moment` SERVERdan keladi, `now` esa
+ * ilgari QURILMAdan olinardi. Ikki manba ayirmasi kassa soati adashgan qadar
+ * xato berardi — «hozirgina» yig'ilgan chek «3 soat» bo'lib turardi va kassir
+ * mijozga shu raqamni aytardi. Skew qo'yilgach ikkala uch ham server vaqti.
+ */
+describe('NavbatMode — «o`tgan vaqt» server soatida (S3)', () => {
+  afterEach(() => {
+    // Skew modul darajasida yashaydi — keyingi testlarga oqib ketmasin.
+    noteServerDate({ headers: new Headers({ Date: new Date().toUTCString() }) } as Response);
+    window.localStorage.clear();
+  });
+
+  it('qurilma soati 3 soat OLDINDA bo`lsa ham «5 daq» chiqadi, «3 soat» EMAS', async () => {
+    // Server qurilmadan 3 soat orqada. `Date` sarlavhasi sekundgacha
+    // yaxlitlanadi, shuning uchun `moment` AYNAN o'sha yaxlitlangan qiymatdan
+    // sanaladi — aks holda test chegarada 4/5 daqiqa orasida tebranardi.
+    const header = new Date(Date.now() - 3 * 60 * 60 * 1_000).toUTCString();
+    const serverMs = Date.parse(header);
+    noteServerDate({ headers: new Headers({ Date: header }) } as Response);
+
+    vi.mocked(api.get).mockImplementation(
+      router(
+        salesRoutes([
+          { match: /^\/retail-sales\?.*state=ready/, value: { items: [] } },
+          {
+            match: /^\/retail-sales\?.*state=picking/,
+            value: {
+              items: [
+                SALE_ROW({
+                  id: 's-skew',
+                  name: 'CHEK-00009',
+                  state: 'picking',
+                  agent: null,
+                  // Server vaqtida 5 daqiqa oldin yig'ila boshlagan.
+                  moment: new Date(serverMs - 5 * 60_000).toISOString(),
+                }),
+              ],
+            },
+          },
+        ]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    const { picking } = await openNavbat(user);
+    const card = (await within(picking).findByText('CHEK-00009')).closest(
+      '[data-test-id="navbat-card"]',
+    ) as HTMLElement;
+
+    expect(norm(card.textContent)).toContain('5 daq');
+    // 🔴 Tuzatishdan OLDIN aynan shu chiqardi: «3 soat 5 daq».
+    expect(norm(card.textContent)).not.toContain('soat');
   });
 });

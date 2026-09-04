@@ -32,8 +32,8 @@ import { useFillViewport } from '@/hooks/use-fill-viewport';
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-store';
-// S2 — chekdagi sana qurilma soatidan EMAS, serverdan keladi (S-reja §5).
-import { serverNow } from '@/lib/clock';
+// S2/S3 — chek sanasi va qoralama vaqti qurilma soatidan EMAS, serverdan.
+import { POS_TZ, serverNow } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import {
@@ -903,7 +903,7 @@ function SalesScreen({
     if (cart.length === 0 || cartLocked || payingSale != null) return;
     setCartDrafts((prev) => [
       ...prev,
-      { id: newDraftId(), createdAt: Date.now(), discountPct, lines: cart },
+      { id: newDraftId(), createdAt: serverNow().getTime(), discountPct, lines: cart },
     ]);
     setCart([]);
     setDiscountPct(0);
@@ -927,7 +927,7 @@ function SalesScreen({
       if (cart.length > 0) {
         setCartDrafts((prev) => [
           ...prev,
-          { id: newDraftId(), createdAt: Date.now(), discountPct, lines: cart },
+          { id: newDraftId(), createdAt: serverNow().getTime(), discountPct, lines: cart },
         ]);
       }
       setCart(
@@ -1011,7 +1011,7 @@ function SalesScreen({
       if (!draft) return;
       const rest = cartDrafts.filter((d) => d.id !== draftId);
       if (cart.length > 0) {
-        rest.push({ id: newDraftId(), createdAt: Date.now(), discountPct, lines: cart });
+        rest.push({ id: newDraftId(), createdAt: serverNow().getTime(), discountPct, lines: cart });
       }
       setCartDrafts(rest);
       setCart(draft.lines);
@@ -1028,6 +1028,10 @@ function SalesScreen({
   // Chipda ko'rinadigan qiymatlar. Summa — SERVER formulasi bilan
   // (`discountedCartTotalMinor`, har qator alohida half-up): chipdagi raqam
   // tiklangandan keyin footerda chiqadigan raqam bilan AYNAN teng bo'lsin.
+  //
+  // Vaqt (S-reja S3): `createdAt` SERVER soatida yoziladi (`serverNow()`) va
+  // `Asia/Tashkent` da chiziladi. Lokal (`bcp47`) — kassirning tili, mintaqa
+  // esa QAT'IY: ikkisi boshqa-boshqa qaror.
   const draftChips = useMemo(
     () =>
       cartDrafts.map((d) => ({
@@ -1035,6 +1039,7 @@ function SalesScreen({
         timeLabel: new Date(d.createdAt).toLocaleTimeString(bcp47, {
           hour: '2-digit',
           minute: '2-digit',
+          timeZone: POS_TZ,
         }),
         count: d.lines.length,
         totalMinor: discountedCartTotalMinor(

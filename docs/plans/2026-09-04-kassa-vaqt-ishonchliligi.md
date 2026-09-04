@@ -1,6 +1,6 @@
 # Kassa vaqt ishonchliligi — qurilma soatidan qutulish (S-reja)
 
-> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2 TUGADI (2026-09-04)
+> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2, S3 TUGADI (2026-09-04)
 > **Boshlang'ich nuqta:** `yacheyka-inventarizatsiya` branch, HEAD `8e698b11`. Jonli: `erp.sherset.uz`.
 > **Sabab (egasining xabari, 2026-09-04):** «kassada vaqt qurilma vaqti bilan ishlayapti va qurilmada vaqt
 > xato bo'lsa xato ko'rsatmoqda».
@@ -134,7 +134,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 |---|---|---|---|---|
 | **S1** | Poydevor: `serverNow()` + skew (`Date` sarlavhasi) + `POS_TZ`; iste'molchi — 2 ta soat | yo'q | 🔴 blok | **TUGADI** |
 | **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | **TUGADI** |
-| **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | REJA |
+| **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | **TUGADI** |
 | **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | REJA |
 | **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | REJA |
 
@@ -598,3 +598,117 @@ OLDIN turgan commit qilinmagan ishi, ularga TEGILMADI va commitga QO'SHILMADI):
   S4 ning yangi `pos-clock-discipline` guard'i doirani kengaytirishda buni ham hisobga olsin.
 - **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda, egasi «chiqar» desa
   chiqariladi.
+
+---
+
+### S3 — «O'tgan vaqt» hisoblari · **TUGADI** · 2026-09-04
+
+> **Ijro eslatmasi:** §2 qoida 1 «bitta sessiya = bitta faza» edi; S3 egasining shu sessiyadagi
+> «davom et» ko'rsatmasi bilan S2 dan keyin AYNI sessiyada bajarildi. Qoidaning o'zi
+> o'zgarmadi — S4/S5 yana alohida sessiyada.
+
+**Nima qilindi** (faqat `apps/web` — 6 fayl, `apps/api` ga TEGILMADI)
+
+| Fayl | O'zgarish |
+|---|---|
+| `apps/web/src/lib/pos/pos-calendar.ts` | **YANGI** — `posDayKey`, `posDaysBetween`, `posDaysSince`. Sof modul: vaqt manbasi EMAS, `now` PARAMETR bo'lib kiradi. |
+| `apps/web/src/components/pos/debt-payment-dialog.tsx` | `daysSince` endi `posDaysSince(iso, serverNow())`. Ikki nuqson birdan yopildi: qurilma soati va 24-soatlik bo'lak. |
+| `apps/web/src/app/(app)/sotuv/_components/navbat-mode.tsx` | `useNowTick` (`Date.now()` + o'z 30s intervali) OLIB TASHLANDI → `useServerClock(30_000)`. `formatElapsed` sof qoldi. |
+| `apps/web/src/app/(app)/sotuv/page.tsx` | Qoralama `createdAt` (3 joy) → `serverNow().getTime()`; chip `timeLabel` ga `timeZone: POS_TZ`. |
+| `apps/web/src/lib/pos/pos-calendar.test.ts` | **YANGI** — 10 test. |
+| `apps/web/src/app/(app)/sotuv/__tests__/navbat-mode.test.tsx` · `…/sales-screen-cart.test.tsx` · `src/__tests__/pos-debt-payment-wiring.test.ts` | +1 test har biriga. |
+
+**🔴 Muhandislik qarori — nega `Intl` EMAS, qat'iy +5 siljish.** «Kechikish kunlari» SERVERdagi qarz
+reyestri bilan bir xil chiqishi shart: kassir ekranida «5 kun», menejerning undirish ro'yxatida
+«4 kun» bo'lsa bitta qarz ikki yoshda ko'rinardi. Shuning uchun `posDayKey` serverning
+`apps/api/src/modules/debt/sale-debt-registry.ts:143` (`tashkentDayKey`) formulasini AYNAN takrorlaydi
+(`TASHKENT_OFFSET_MS = 5 soat`; O'zbekistonda 1996 dan beri DST yo'q, ya'ni `Asia/Tashkent` yil bo'yi
+UTC+5 — natija `Intl` bilan bir xil). Qo'shimcha foyda: qattiq BCP-47 teg kerak bo'lmadi, ya'ni S4
+guard doirasini `lib/pos` ga kengaytirganda bu modul to'siq bo'lmaydi. Testda serverning o'z
+chegara-namunalari (`debt-collection.test.ts:53`, `sale-debt-registry.test.ts`) qayta o'lchandi.
+
+**Ko'rinish qarori — `useServerClock` `null` qaytarganda.** Mount'gacha soat o'lchanmagan. Kartada
+soxta «hozirgina» chizish kassirga YOLG'ON ma'lumot berardi, shuning uchun vaqt bo'lagi o'sha bitta
+kadrda umuman chizilmaydi; ajratuvchi «·» ham o'zidan oldingi bo'lak bor bo'lgandagina qo'yiladi
+(osilib qolgan nuqta chiqmasin).
+
+**Yangi testlar soni:** **13** (10 + 3).
+
+**Test natijalari (raqam bilan)**
+
+- `src/lib/pos/pos-calendar.test.ts` — **10/10** ✔
+- `…/sotuv/__tests__/navbat-mode.test.tsx` — **6/6** ✔ (ilgari 5 edi)
+- `…/sotuv/__tests__/sales-screen-cart.test.tsx` — **47/47** ✔ (ilgari 46 edi)
+- `src/__tests__/pos-debt-payment-wiring.test.ts` — **15/15** ✔ (ilgari 14 edi)
+- To'liq S3 doirasi (`src/app/(app)/sotuv` · `src/components/pos` · `src/lib/pos` · `src/__tests__`) —
+  **152 fayl · 2281 o'tdi · 25 o'tkazib yuborildi · 0 yiqildi** ✔
+- `pnpm --filter @moysklad/web typecheck` — **0 xato** ✔
+- `npx biome check` (o'zgargan 8 fayl) — **0 xato**, 40 ogohlantirish; hammasi
+  `useSortedClasses`/`noNonNullAssertion` va **MENDAN OLDIN bor edi** — `git diff -U0` bilan
+  o'zgargan qator oraliqlari chiqarilib solishtirildi, ogohlantirishlarning BIRORTASI ham
+  o'zgargan qatorlarga tushmadi.
+- `pnpm i18n:gate` — **20/20** ✔ (yangi matn qo'shilmadi — `navbat_elapsed_*` kalitlari o'sha-o'sha)
+
+**Anti-vakuum (uchala tuzatish ham o'lchandi)**
+
+| Vaqtincha qaytarildi | Test natijasi |
+|---|---|
+| `useServerClock` → `Date.now()` (navbat) | ✘ qizardi: `'…3 soat 5 daq·2 ta pozitsiya…' not to contain 'soat'` |
+| `serverNow().getTime()` → `Date.now()` (qoralama) | ✘ qizardi: chip `23:50` chiqardi, `00:10` kutilgan |
+| `timeZone: POS_TZ` olib tashlandi (chip) | ✘ qizardi: chip `09:10` chiqardi, `00:10` kutilgan |
+
+Qoralama testi to'rt kombinatsiyani bir vaqtda ajratadi (qurilma soati 23:50 Toshkent / 08:50
+Honolulu, server 00:10): faqat **server soati + Toshkent mintaqasi** o'tadi.
+
+**🔴 §2 qoida 3 — YOZMA ISBOT: serverga yangi maydon YUBORILMADI**
+
+```
+ apps/web/src/__tests__/pos-debt-payment-wiring.test.ts   | 18 +++++
+ apps/web/src/app/(app)/sotuv/__tests__/navbat-mode.test.tsx | 61 ++++++++++-
+ apps/web/src/app/(app)/sotuv/__tests__/sales-screen-cart.test.tsx | 49 +++++++-
+ apps/web/src/app/(app)/sotuv/_components/navbat-mode.tsx | 40 ++++++------
+ apps/web/src/app/(app)/sotuv/page.tsx                    | 15 ++++--
+ apps/web/src/components/pos/debt-payment-dialog.tsx      | 18 ++++--
+ apps/web/src/lib/pos/pos-calendar.ts (YANGI) · pos-calendar.test.ts (YANGI)
+```
+
+Diffda `apps/api` YO'Q. Uch o'zgarish ham FAQAT ko'rsatish qatlamida: navbat kartasining matni,
+qarz oynasidagi kun soni va qoralama chipining yorlig'i. Hech biri so'rov tanasiga tegmaydi —
+qoralama umuman serverga chiqmaydi (`localStorage`), qarz to'lovi payload'i o'zgarmadi
+(`pos-debt-payment-wiring.test.ts` uni qulflab turadi va yashil).
+
+**Qabul mezoni**
+
+- ✔ **Skew +3 soat bo'lganda navbat «o'tgan vaqt»i o'zgarmaydi** — test bilan: qurilma 3 soat
+  oldinda, karta baribir «5 daq» ko'rsatadi (tuzatishdan oldin «3 soat 5 daq» edi).
+- ✔ **Qoralama vaqti server soatida yoziladi va ko'rsatiladi** — test bilan (`00:10`, `23:50` EMAS),
+  ustiga mintaqa ham qotirildi.
+- ✔ **`newDraftId()` (`cart-drafts.ts:97`) TEGILMAGAN** — `git diff` da `cart-drafts.ts` umuman yo'q.
+- ✔ **Qarz kunlari `Asia/Tashkent` kalendar kuni bo'yicha** — chegara testlari: 23:50 → ertasi 00:10
+  = **1 kun** (ilgari 0); 00:10 → o'sha kunning 23:00 = **0 kun**.
+
+**«Bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»**
+
+1. **Qarz «kechikish kunlari» raqami O'ZGARADI** — bu tuzatishning maqsadi, lekin kassir ertaga
+   boshqa raqam ko'radi: kecha yozilgan qarz endi «0» emas, «1 kun». Bu server bilan mos, ya'ni
+   ilgari mos KELMAGANI nuqson edi. Pulga, payload'ga, FIFO taqsimotga ta'siri YO'Q — faqat matn.
+2. **`localStorage` dagi ESKI qoralamalar** qurilma vaqtida yozilgan `createdAt` bilan turibdi.
+   Tip (`number`) va `parseCartDrafts` shartnomasi tegilmagani uchun ular YO'QOLMAYDI (savat
+   saqlanadi); faqat chipdagi vaqtlari bir marta skew qadar siljib ko'rinadi. Qoralama umri
+   soatlar bilan o'lchanadi — keyingi park'dan boshlab hammasi server vaqtida.
+3. **Navbat kartasida vaqt bir kadr kechroq paydo bo'ladi** (`useServerClock` mount'gacha `null`).
+   Ataylab: soxta qiymat chizishdan ko'ra bo'sh joy afzal. Mavjud test (`5 daq` ni kutadigan)
+   yashil qoldi — effekt birinchi bo'yashdan keyin darhol ishlaydi.
+4. **Har karta o'z intervalini ochmaydi** — puls avvalgidek BITTA (endi `useServerClock` ichida),
+   ya'ni o'nlab kartali navbatda ham taymer soni o'zgarmadi.
+5. **`daysSince` endi `null` ni ko'proq holatda qaytaradi** (buzuq ISO ham `null`, ilgari `NaN` →
+   `0` bo'lardi). Chaqiruvchi allaqachon `null` ni O'LCHANMAGAN deb chizmaydi, ya'ni buzuq sana
+   endi «0 kun» degan yolg'on o'rniga umuman ko'rsatilmaydi.
+
+**Ochiq qolganlar**
+
+- `debt-payment-dialog.tsx:154` dagi `fmtDate` (qarz sanalari ro'yxati) hamon mintaqasiz — **S4**
+  (§1.3 ro'yxatida shunday belgilangan; S3 ataylab tegmadi).
+- §1.3 dagi qolgan formatlash nuqtalari va zaxira `CHEK-HHMMSS` soati — **S4**.
+- Ogohlantirish chipi + qurilmada NTP + jonli smoke — **S5**.
+- **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti.

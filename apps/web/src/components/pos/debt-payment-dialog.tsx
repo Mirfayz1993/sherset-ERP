@@ -1,8 +1,11 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+// S3 — «necha kun» qurilma soatidan EMAS, serverdan; hisob Toshkent kunida.
+import { serverNow } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { formatAmountInput, parseAmountToMinor } from '@/lib/pos/parse-amount';
+import { posDaysSince } from '@/lib/pos/pos-calendar';
 import { formatForeignMajor } from '@/lib/pos/receipt-payments';
 import { RATE_SCALE, convertByRateE8 } from '@moysklad/money';
 import type { CurrencyCode } from '@moysklad/money/currencies';
@@ -148,11 +151,18 @@ function fmtDate(iso: string | null, bcp47: string): string {
   });
 }
 
-/** Eng eski qarzdan bugungacha necha kun — kassir «qancha eski» ekanini ko'rsin. */
+/**
+ * Eng eski qarzdan bugungacha necha kun — kassir «qancha eski» ekanini ko'rsin.
+ *
+ * 🔴 S-reja S3: ilgari bu yerda `Date.now() − iso` 86 400 000 ga bo'linardi —
+ * ikki nuqson bilan. (1) Qurilma soati adashsa kun soni ham adashardi.
+ * (2) Bu KALENDAR kun emas, 24 soatlik bo'lak edi: kecha 23:50 da yozilgan
+ * qarz bugun ertalab hamon «0 kun» bo'lib turardi. Endi ikkalasi ham yopiq —
+ * vaqt `serverNow()` dan, hisob esa Toshkent kalendar kunlari bo'yicha
+ * (`posDaysSince`, serverning qarz reyestri bilan AYNI formula).
+ */
 function daysSince(iso: string | null): number | null {
-  if (!iso) return null;
-  const ms = Date.now() - new Date(iso).getTime();
-  return ms > 0 ? Math.floor(ms / 86_400_000) : 0;
+  return posDaysSince(iso, serverNow());
 }
 
 /**
