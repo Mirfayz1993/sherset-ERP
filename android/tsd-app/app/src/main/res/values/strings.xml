@@ -112,9 +112,9 @@
     <string name="count_save">Saqlash</string>
     <string name="count_saved">Sanoq saqlandi</string>
     <string name="count_offline">Aloqa yo\'q — sanoq saqlanmadi, qayta urinib ko\'ring</string>
-    <!-- T1 - yacheykaga biriktirilgan tovarlar (qoldiqdan mustaqil ro'yxat) -->
-    <string name="count_summary">Qoldiqda %1$d · biriktirilgan %2$d</string>
-    <string name="count_bound_zero">biriktirilgan · qoldiq 0</string>
+    <!-- T12 - yacheykadagi qatorlar soni. `count_bound_zero` T1 bilan birga
+         olib tashlandi; `count_archived` esa qidiruv kartasida ishlatiladi. -->
+    <string name="count_summary">Qoldiqda %1$d</string>
     <string name="count_archived">⚠ arxivlangan</string>
 
     <!-- T6 - sanash progressi va «qolganini 0 qilib yopish».

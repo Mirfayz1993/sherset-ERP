@@ -39,8 +39,9 @@ object CacheShape {
      */
     val STOCK_FIELDS = setOf("assortmentKind", "assortmentId", "name", "code", "barcode", "qty")
 
-    /** `cellByBarcode` → `products[]` (`getCellProducts`) — biriktirilgan tovarlar. */
-    val BOUND_FIELDS = setOf("id", "name", "code", "barcode", "archived")
+    // T12 — `BOUND_FIELDS` (`cellByBarcode` → `products[]`) olib tashlandi:
+    // ekran u maydonni endi umuman o'qimaydi, ya'ni uni keshlash bo'sh joy
+    // egallardi. Sabab — `CountScreen` boshidagi izoh.
 
     /** `/tsd/search` → `products[]` (`TsdProductHit`, `tsd.service.ts`). */
     val HIT_FIELDS = setOf(
@@ -232,11 +233,14 @@ object CacheShape {
 
     // ── Keshlanadigan javoblar ──────────────────────────────────────────────
 
-    /** `cellByBarcode` javobi — `{ cells, stock, products }`. */
+    /**
+     * `cellByBarcode` javobi. Serverdan `{ cells, stock, products }` keladi,
+     * keshga esa T12 dan beri FAQAT `cells` + `stock` tushadi — `products`
+     * ni ekran o'qimaydi (`CountScreen` boshidagi izoh).
+     */
     fun cell(resp: JSONObject): JSONObject = JSONObject()
         .put("cells", pickAll(resp.optJSONArray("cells"), CELL_FIELDS, limit = 5))
         .put("stock", pickAll(resp.optJSONArray("stock"), STOCK_FIELDS, limit = ROW_CAP))
-        .put("products", pickAll(resp.optJSONArray("products"), BOUND_FIELDS, limit = ROW_CAP))
 
     /** `/tsd/search` javobi. `truncated` ham saqlanadi — u OGOHLANTIRISH. */
     fun search(resp: JSONObject): JSONObject = JSONObject()

@@ -56,13 +56,23 @@ import org.json.JSONObject
  * Оприходование yoziladi — aynan shuning uchun ekran buni OCHIQ ogohlantirish
  * bilan ko'rsatadi («kirim bo'lib yoziladi»), jimgina qo'shib qo'ymaydi.
  *
- * 🔵 **BIRIKTIRILGAN TOVARLAR (T1, egasi 2026-09-03).** Jonli sinovda
- * omborchi bo'sh yacheykada tiqilib qoldi: ekran «ro'yxatdan tanlang»
- * derdi, ro'yxat esa bo'sh edi. Sabab — `cellByBarcode` javobining
- * `products` maydoni (yacheykaga biriktirilgan tovarlar, `__yacheyka` +
- * `ProductCellLink`) O'QILMASDAN tashlab yuborilardi. Endi ekran ikki
- * guruh chizadi: qoldig'i bor qatorlar va biriktirilgan-lekin-qoldiqsiz
- * qatorlar. Qo'shimcha tarmoq so'rovi YO'Q — ma'lumot o'sha javobda.
+ * 🔴 **T1 «BIRIKTIRILGAN TOVARLAR» GURUHI OLIB TASHLANDI (T12, egasi
+ * 2026-09-04).** T1 (2026-09-03) `cellByBarcode` javobining `products`
+ * maydonini o'qib «biriktirilgan · qoldiq 0» degan IKKINCHI guruh
+ * chizardi. 2026-09-04 tekshiruvi uning premissasi noto'g'ri ekanini
+ * koddan isbotladi:
+ *   1. `getCellStock` 2026-08-06 dan beri (`49445838`) biriktirilgan
+ *      tovarni `qty: 0` qator qilib `stock` ga O'ZI qo'shadi va u yerda
+ *      `deletedAt: null` filtri BOR;
+ *   2. bu ekran `stock` ning hamma qatorini filtrsiz chizadi;
+ *   3. ⇒ biriktirilgan tovarlar T1 gacha ham ro'yxatda BOR edi, ikkinchi
+ *      guruh esa `products \ stock` ayirmasi — u amalda FAQAT yumshoq
+ *      o'chirilgan tovarni beradi (`getCellProducts` da `deletedAt`
+ *      filtri yo'q) va o'sha qator sanalganda server 404 qaytaradi.
+ * Ya'ni guruh eng yaxshi holatda bo'sh, eng yomon holatda serverda
+ * 2026-07-26 da yopilgan «dead id → 404» nuqsonini qaytarardi. Endi
+ * ekran FAQAT `stock` ni chizadi va `products` ni umuman o'qimaydi.
+ * Batafsil: T-reja §5, T1 hisoboti boshidagi qizil blok.
  *
  * 🔵 **PROGRESS VA «QOLGANINI 0 QILIB YOPISH» (T6, 2026-09-04).** Ilgari
  * yacheyka sanog'i hech qachon TO'LIQ yopilmasdi: nechta qator sanalgani
@@ -103,14 +113,6 @@ class CountScreen(private val shell: Shell) : Screen {
 
     private var cell by mutableStateOf<JSONObject?>(null)
     private var items by mutableStateOf(JSONArray())
-
-    /**
-     * T1 — yacheykaga BIRIKTIRILGAN tovarlar (`products`). Qoldiqdan MUSTAQIL:
-     * bu joylashuv yorlig'i (`__yacheyka` + `ProductCellLink`), son emas.
-     * Server uni `cellByBarcode` javobida ALLAQACHON yuborardi, ekran esa
-     * tashlab yuborardi — shuning uchun bo'sh yacheyka boshi berk ko'cha edi.
-     */
-    private var bound by mutableStateOf(JSONArray())
 
     /** Skanerlangan (yoki ro'yxatdan bosilgan) tovar — yuqoridagi karta. */
     private var picked by mutableStateOf<JSONObject?>(null)
@@ -240,17 +242,16 @@ class CountScreen(private val shell: Shell) : Screen {
             return
         }
 
-        val extras = boundOnly()
-
         SectionCard(tint = Palette.PrimaryContainer, border = MaterialTheme.colorScheme.primary) {
             CellBadge(c.optString("name"))
             Spacer(Modifier.height(6.dp))
             Text(c.optString("storeName"), color = Palette.TextMuted)
             Spacer(Modifier.height(4.dp))
-            // «Qoldiqda N · biriktirilgan M» — N + M aynan quyida chiziladigan
-            // qatorlar soni, ya'ni omborchi ro'yxat tugaganini ko'radi.
+            // «Qoldiqda N» — aynan quyida chiziladigan qatorlar soni, ya'ni
+            // omborchi ro'yxat tugaganini ko'radi. T12 dan keyin guruh BITTA:
+            // `stock` da biriktirilgan-lekin-qoldiqsiz tovarlar ham bor.
             Text(
-                stringResource(R.string.count_summary, items.length(), extras.size),
+                stringResource(R.string.count_summary, items.length()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Palette.TextMuted,
             )
@@ -303,9 +304,10 @@ class CountScreen(private val shell: Shell) : Screen {
             Spacer(Modifier.height(10.dp))
         }
 
-        // «Yacheyka bo'sh» faqat IKKALA guruh ham bo'sh bo'lganda — aks holda
-        // ekran o'zi ko'rsatib turgan ro'yxatni «yo'q» deb aytardi (T1).
-        if (items.length() == 0 && extras.isEmpty()) {
+        // «Yacheyka bo'sh» — `stock` bo'sh bo'lganda. Diqqat: `stock` da
+        // biriktirilgan-lekin-qoldiqsiz tovarlar ham bor (server `qty: 0`
+        // qator qilib qo'shadi), ya'ni bu shart ular bilan ham to'g'ri.
+        if (items.length() == 0) {
             EmptyState(stringResource(R.string.count_empty))
         }
         for (i in 0 until items.length()) {
@@ -364,46 +366,9 @@ class CountScreen(private val shell: Shell) : Screen {
             Spacer(Modifier.height(10.dp))
         }
 
-        // Ikkinchi guruh: biriktirilgan, lekin qoldig'i 0 tovarlar. Sanoq
-        // maydoni bu yerda YO'Q — bosilganda yuqoridagi «sanalayotgan tovar»
-        // kartasi ochiladi va sariq ogohlantirish (kirim bo'lib yoziladi)
-        // o'sha yerda ko'rinadi.
-        for (b in extras) {
-            val boundId = b.optString("id")
-            if (boundId == p?.optString("id")) continue
-            val boundMark = marks[boundId]
-            SectionCard(
-                modifier = Modifier.clickable { pick(b.optString("name"), boundId) },
-                tint = Palette.SurfaceMuted,
-                border = markBorder(boundMark),
-            ) {
-                // NARX YO'Q: `getCellProducts` select'i — id, name, code,
-                // barcode, archived. Narx maydoni javobda umuman yo'q.
-                MarkedTitle(b.optString("name"), boundMark)
-                if (boundMark == Mark.FAILED) {
-                    Text(
-                        stringResource(R.string.count_row_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Palette.Danger,
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(R.string.count_bound_zero),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Palette.TextMuted,
-                )
-                if (b.optBoolean("archived")) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        stringResource(R.string.count_archived),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Palette.Warning,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
+        // T12 — «biriktirilgan · qoldiq 0» ikkinchi guruhi shu yerda edi.
+        // Olib tashlandi: u `products \ stock` ayirmasi bo'lgani uchun amalda
+        // faqat yumshoq o'chirilgan tovarni ko'rsatardi (fayl boshidagi izoh).
 
         // T6 — «qolganini 0 qilib yopish». Ro'yxatlardan KEYIN turadi:
         // omborchi avval qatorlarni ko'radi, keyin «qolgani yo'q» deydi.
@@ -689,28 +654,6 @@ class CountScreen(private val shell: Shell) : Screen {
         Spacer(Modifier.height(10.dp))
     }
 
-    /**
-     * Biriktirilgan, lekin `stock` da BO'LMAGAN tovarlar. Qoldig'i bor tovar
-     * ikki marta chizilmaydi (ikki maydon bir tovarga ikki xil son berardi),
-     * arxivlanganlari esa oxiriga suriladi — `sortedBy` barqaror, ya'ni
-     * serverning `name` tartibi guruh ichida saqlanadi.
-     */
-    private fun boundOnly(): List<JSONObject> {
-        if (bound.length() == 0) return emptyList()
-        val inStock = HashSet<String>()
-        for (i in 0 until items.length()) {
-            val it = items.optJSONObject(i) ?: continue
-            inStock.add(it.optString("assortmentId"))
-        }
-        val out = ArrayList<JSONObject>()
-        for (i in 0 until bound.length()) {
-            val b = bound.optJSONObject(i) ?: continue
-            if (inStock.contains(b.optString("id"))) continue
-            out.add(b)
-        }
-        return out.sortedBy { if (it.optBoolean("archived")) 1 else 0 }
-    }
-
     /** Shu yacheykadagi tizim qoldig'i, tovar ro'yxatda bo'lmasa `null`. */
     private fun systemQty(assortmentId: String): String? {
         for (i in 0 until items.length()) {
@@ -737,18 +680,13 @@ class CountScreen(private val shell: Shell) : Screen {
             val it = items.optJSONObject(i) ?: continue
             roster[it.optString("assortmentId")] = it.optString("name")
         }
-        for (i in 0 until bound.length()) {
-            val b = bound.optJSONObject(i) ?: continue
-            roster[b.optString("id")] = b.optString("name")
-        }
     }
 
     /**
      * T6 — 0 ga tushiriladigan qatorlar: EKRANDA turgan va shu sessiyada
-     * SANALMAGAN hammasi, aynan ko'rinish tartibida (avval qoldiqlilar,
-     * keyin biriktirilganlar).
+     * SANALMAGAN hammasi, aynan ko'rinish tartibida.
      *
-     * `roster` dan emas, ekrandagi ikki ro'yxatdan yig'iladi va buning
+     * `roster` dan emas, ekrandagi ro'yxatdan yig'iladi va buning
      * sababi bor: `roster` — hash-jadval, tartibi ixtiyoriy bo'lardi, va
      * u ALLAQACHON 0 ga tushirilgan (ya'ni yo'qolgan) qatorlarni ham
      * saqlaydi — ular qayta yuborilishi kerak emas.
@@ -763,14 +701,6 @@ class CountScreen(private val shell: Shell) : Screen {
             val id = it.optString("assortmentId")
             if (marks[id] == Mark.COUNTED) continue
             out.add(Pending(id, it.optString("name"), it.optString("qty")))
-        }
-        for (b in boundOnly()) {
-            val id = b.optString("id")
-            if (marks[id] == Mark.COUNTED) continue
-            // Biriktirilgan qatorning qoldig'i ta'rifiga ko'ra 0 — bunda
-            // delta ham 0 bo'ladi va server hujjat YOZMAYDI, faqat qator
-            // «sanaldi» belgisini oladi.
-            out.add(Pending(id, b.optString("name"), "0"))
         }
         return out
     }
@@ -981,7 +911,6 @@ class CountScreen(private val shell: Shell) : Screen {
         cell = null
         cellCode = ""
         items = JSONArray()
-        bound = JSONArray()
         counts.clear()
         picked = null
         pickedQty = ""
@@ -1129,9 +1058,11 @@ class CountScreen(private val shell: Shell) : Screen {
         }
         cell = c
         cellCode = code
+        // T12 — javobning `products` maydoni ATAYLAB o'qilmaydi: u
+        // `stock` ning ustiga faqat yumshoq o'chirilgan tovar qo'shardi
+        // (fayl boshidagi izoh). `stock` da biriktirilgan-lekin-qoldiqsiz
+        // tovarlar server tomonidan `qty: 0` qator sifatida allaqachon bor.
         items = resp.optJSONArray("stock") ?: JSONArray()
-        // Qo'shimcha SO'ROV YO'Q — `products` shu javobning ichida.
-        bound = resp.optJSONArray("products") ?: JSONArray()
         cachedAt = at
         rosterSync()
     }

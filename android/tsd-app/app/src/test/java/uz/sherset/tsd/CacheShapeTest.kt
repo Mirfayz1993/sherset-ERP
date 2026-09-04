@@ -258,7 +258,7 @@ class CacheShapeTest {
             setOf("assortmentKind", "assortmentId", "name", "code", "barcode", "qty"),
             CacheShape.STOCK_FIELDS,
         )
-        assertEquals(setOf("id", "name", "code", "barcode", "archived"), CacheShape.BOUND_FIELDS)
+        // T12 — `BOUND_FIELDS` olib tashlandi (ekran `products` ni o'qimaydi).
         assertEquals(
             setOf(
                 "id", "name", "code", "article", "barcodes", "uom", "archived",
@@ -287,6 +287,8 @@ class CacheShapeTest {
         val out = CacheShape.cell(JSONObject())
         assertEquals(0, out.optJSONArray("cells")!!.length())
         assertEquals(0, out.optJSONArray("stock")!!.length())
+        // T12 — `products` KESHLANMAYDI: ekran uni o'qimaydi.
+        assertNull(out.optJSONArray("products"))
         // Massiv o'rniga matn kelgan holat.
         val weird = JSONObject().put("stock", "yo'q").put("cells", 7)
         assertEquals(0, CacheShape.cell(weird).optJSONArray("stock")!!.length())

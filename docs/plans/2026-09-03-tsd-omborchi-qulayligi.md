@@ -130,6 +130,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | **QISMAN** |
 | **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | **TUGADI** |
 | **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | **QISMAN — N-rejaga ajratildi** |
+| **T12** | T1 «biriktirilgan tovarlar» guruhini olib tashlash | yo'q | 🔴 tuzatish | **TUGADI** |
 
 **Tartib sababi:** T1 eng arzon va rasmdagi holatni darhol yaxshilaydi; T2 matn kiritishning poydevori
 (usiz T3 dagi qidiruv maydoniga qo'lda yozish ham xavf ostida); T3 eng katta va eng muhim funksiya.
@@ -2512,3 +2513,89 @@ omborchini ogohlantiradi); miqdor maydonida belgi kursor joyiga emas matn oxirig
 (`TextFieldValue` ga o'tish kerak); `PlaceScreen` da `0` server 400 si bilan rad etiladi;
 xato banneri `back()` da tozalanmaydi; ommaviy «qolganini 0 qilib yopish» ning qaytarishi yo'q
 (7 ta Списание — N-reja doirasi).
+
+---
+
+### T12 — T1 «biriktirilgan tovarlar» guruhini olib tashlash · **TUGADI** · 2026-09-04
+
+**Nega bu faza bor.** Yuqoridagi tekshiruv T1 ning premissasi noto'g'ri ekanini isbotladi
+(T1 hisoboti boshidagi qizil blok). Egasi 2026-09-04 da qaror qildi: **«butunlay olib tashla»**.
+Bu T1–T11 dan birortasining doirasiga kirmagani uchun (§2 qoida 2) alohida faza qilindi.
+
+**Nima qilindi.**
+
+1. **`CountScreen.kt`** — T1 ning butun qatlami yo'q qilindi: `bound` state, `boundOnly()`
+   funksiyasi, «biriktirilgan · qoldiq 0» kartalarini chizadigan `for (b in extras)` bloki,
+   `openCell` dagi `bound = resp.optJSONArray("products")` o'qishi va `reset()` dagi tozalash.
+   `rosterSync()` va `pendingRows()` dan biriktirilgan qatorlar sikllari olib tashlandi —
+   ular endi FAQAT `stock` ustida ishlaydi.
+   - `count_empty` sharti `items.length() == 0 && extras.isEmpty()` → **`items.length() == 0`**.
+     Bu to'g'ri qoladi, chunki server biriktirilgan-lekin-qoldiqsiz tovarni `stock` ga
+     `qty: 0` qator qilib O'ZI qo'shadi (`getCellStock`).
+   - Fayl boshidagi KDoc'ga olib tashlashning **uch bandli dalil zanjiri** yozildi, aks holda
+     keyingi agent «bu maydon nega o'qilmayapti?» deb T1 ni qaytadan yozib qo'yardi.
+2. **`strings.xml`** — `count_bound_zero` o'chirildi; `count_summary` ikki argumentlidan
+   («Qoldiqda %1$d · biriktirilgan %2$d») **bir argumentliga** («Qoldiqda %1$d») o'tdi.
+   `count_archived` QOLDIRILDI — u qidiruv kartasida (`Widgets.kt`) ishlatiladi.
+3. **`CacheShape.kt`** (T10 keshi) — `BOUND_FIELDS` va `cell()` dagi `products` qatori
+   olib tashlandi: ekran o'qimaydigan maydonni keshlash bo'sh joy egallardi.
+4. **`CacheShapeTest.kt`** — `BOUND_FIELDS` qulfi olib tashlandi va yangi qulf qo'shildi:
+   `assertNull(out.optJSONArray("products"))` — kesh `products` ni saqlamasligi endi test bilan
+   qotirilgan.
+
+**Serverga TEGILMADI.** `lookupCellByBarcode` javobida `products` maydoni **qoladi** — uni
+web'ning «Ko'rish» ekrani va `/admin/stores/:id/cells/:cellId/products` yo'li ishlatadi.
+Ilova uni endi shunchaki o'qimaydi. `getCellProducts` dagi `deletedAt: null` qarzi ham
+o'z joyida qoladi — u **N-reja N2** ning 5-vazifasi (web'ga tegadi, alohida qaror).
+
+**O'lchandi.** `gradle testDebugUnitTest assembleDebug` → **BUILD SUCCESSFUL** (57 s, 41 task),
+JVM testlar **40/40** (`QtyExpression` 17 · `CacheShape` 15 · `CountUndo` 8, 0 failure / 0 error);
+`compileDebugKotlin --rerun-tasks` da **`w:` ogohlantirish 0 ta**. Diff: 4 fayl,
+**+48 / −111 qator** (ya'ni faza kod QO'SHMADI, olib tashladi).
+
+⚠️ **Muhit to'sig'i va uni chetlab o'tish.** Birinchi build `C:` diskida **0 bayt bo'sh joy**
+qolgani uchun yiqildi (`Unable to create daemon log file … There is not enough space on the disk`).
+Hech narsa O'CHIRILMADI — `~/.gradle` `D:\dev\gradle-home` ga nusxalanib, build
+`GRADLE_USER_HOME=D:/dev/gradle-home` bilan yuritildi (`D:` da 331 GB bo'sh). C: ning eng
+katta iste'molchilari o'lchandi va egasiga aytildi: `AppData\Roaming\Claude\vm_bundles\claudevm.bundle`
+**12,96 GB**, `AppData\Local\Google` **9,3 GB**, `AppData\Local\Programs` **4,75 GB**.
+Bu **ochiq band** — keyingi fazalar ham shu to'siqqa uriladi.
+
+**Qabul mezoni.**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| T1 guruhi butunlay olib tashlangan | ✔ | `grep -rn "boundOnly\|BOUND_FIELDS\|count_bound_zero" app/src/` — faqat izohlardagi T12 eslatmalari qoldi, bitta ham kod izi yo'q |
+| `assembleDebug` ogohlantirishsiz | ✔ | BUILD SUCCESSFUL, `w:` 0 ta |
+| Testlar yashil | ✔ | 40/40, 0 failure |
+| Serverga tegilmagan | ✔ | diff: faqat `android/tsd-app` ning 4 fayli |
+| Kesh xulqi test bilan qulflangan | ✔ | `assertNull(out.optJSONArray("products"))` |
+
+**Qaysi oqimni buzishi mumkin?**
+
+- **Sanash ro'yxati — o'zgarmaydi.** Biriktirilgan tovarlar `stock` orqali kelishda davom
+  etadi (`getCellStock` ularni `qty: 0` qator qilib qo'shadi) ⇒ omborchi ekranda AYNAN o'sha
+  qatorlarni ko'radi. Yagona farq: endi ular **kulrang «biriktirilgan» kartochkasi** emas,
+  oddiy qator sifatida chiziladi va **sanoq maydoni bilan** keladi — ya'ni ergonomika
+  yaxshilanadi, yomonlashmaydi.
+- **Yo'qoladigan yagona narsa** — yumshoq o'chirilgan tovarlar. Ular ko'rinmay qoladi, va bu
+  MAQSAD: ularni sanash 404 berardi.
+- **Sanash semantikasi** (`mode: 'set'`, mutlaq son), **oflayn navbat**, **multi-hit** va
+  **narx** qoidalari — hech biriga tegilmadi; `ApiClient` diffda umuman yo'q.
+- **T6 progressi** (`5/12`) endi faqat `stock` qatorlarini sanaydi. Maxraj kichrayishi mumkin
+  edi — lekin faqat o'chirilgan tovarlar hisobiga, ya'ni **noto'g'ri maxraj tuzatildi**.
+- **T7 undo** — tegilmadi (`CountUndo` 8/8 test yashil).
+- **T10 keshi** — shakl kichrayadi (`products` yo'q). Eski keshdagi yozuvlarda u maydon
+  bo'lishi mumkin, lekin uni endi hech kim o'qimaydi ⇒ zararsiz.
+
+**Ochiq qolganlar:**
+
+1. 🔴 **C: diski to'la (0 bayt)** — build faqat `GRADLE_USER_HOME=D:/dev/gradle-home` bilan
+   yuradi. Bu hujjatlashtirildi, lekin **hal qilinmadi** (o'chirish — egasining qarori).
+2. **`getCellProducts` da `deletedAt: null`** — hamon ochiq, **N-reja N2** da.
+3. **`ShortageScreen` ifoda rejimi** va **qidiruvda `uom`** — egasining qarori kutilmoqda
+   (yuqoridagi tekshiruv jadvali).
+4. **APK chiqarilmadi** (§2 qoida 9): versiya `0.6.0`/`6` da qoldi, `publish.sh` chaqirilmadi.
+   T8 jonli smoke'ida bu o'zgarish ham sinalsin: **bo'sh yacheyka ochilganda biriktirilgan
+   tovarlar hamon ro'yxatda chiqishi** — T12 dan keyingi asosiy tekshiruv nuqtasi.
+5. **Ish daraxti hamon iflos** (boshqa sessiyalar) — T12 commiti yo'l-cheklovi bilan qilindi.
