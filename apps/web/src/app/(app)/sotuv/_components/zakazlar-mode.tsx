@@ -13,6 +13,7 @@
 
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
 import { Button, formatMoney, useToast } from '@moysklad/ui';
@@ -284,6 +285,10 @@ export function ZakazlarMode({
                     {new Date(o.moment).toLocaleDateString(bcp47, {
                       day: '2-digit',
                       month: '2-digit',
+                      // Faqat kun/oy chiziladi — mintaqasiz bu eng sezgir
+                      // ko'rinish: yarim tunga yaqin buyurtma butun bir KUN
+                      // adashib ko'rinardi (S4).
+                      timeZone: POS_TZ,
                     })}
                   </div>
                 </div>

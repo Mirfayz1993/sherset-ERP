@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ruMessages from '../../../messages/ru.json' with { type: 'json' };
 import uzMessages from '../../../messages/uz.json' with { type: 'json' };
 import { renderWithProviders as render } from '../../../test-utils';
@@ -79,7 +79,16 @@ describe('QueuePanel — «otlojit» (qoralama) kartalari', () => {
   // 2026-09-01: egasi «otlojit qildim, ekranda chiqmadi» dedi — qoralama
   // serverga bormaydi (localStorage'da), navbat so'rovlari uni ko'rmasdi.
   // Endi parked prop orqali keladi. Bu testlar o'sha xulqni QULFLAYDI.
-  const AT = new Date(2026, 8, 1, 5, 1).getTime(); // 05:01
+  /**
+   * 🔴 ANIQ INSTANT, mashina mintaqasi EMAS (S-reja S4).
+   *
+   * Ilgari bu yerda `new Date(2026, 8, 1, 5, 1)` turardi — u fikstura vaqtini
+   * SINOV MASHINASINING mintaqasida yasaydi. Bu mashina Toshkentda bo'lgani
+   * uchun test tasodifan yashil edi; boshqa mintaqadagi mashinada (yoki CI'da)
+   * u `05:01` ni umuman ko'rmasdi. Endi instant qat'iy: `00:01 UTC` =
+   * Toshkentda `05:01`, ya'ni kutilgan natija mashinaga bog'liq emas.
+   */
+  const AT = Date.parse('2026-09-01T00:01:00.000Z'); // = 05:01 Toshkentda
 
   it('qoralama kartasi park VAQTI bilan chiqadi', () => {
     render(<QueuePanel picking={[]} ready={[]} parked={[AT]} />);
@@ -100,6 +109,30 @@ describe('QueuePanel — «otlojit» (qoralama) kartalari', () => {
     const text = screen.getAllByTestId('cfd-queue-card')[0]?.textContent ?? '';
     expect(text).not.toMatch(/so'm|сум|UZS/i);
     expect(text).not.toMatch(/\d[\s ]\d{3}/);
+  });
+
+  /**
+   * 🔴 S-reja S4 — QURILMA MINTAQASI so'ralmaydi.
+   *
+   * Kassa mashinasining soati to'g'ri bo'lib MINTAQASI adashgan bo'lsa (yoki
+   * yangi mashina sozlanmagan bo'lsa), park vaqti butunlay boshqa soatda
+   * chizilardi — mijoz zalda o'z buyurtmasini tanimasdi.
+   *
+   * Sinov mashinasining o'z TZ'i `Asia/Tashkent`, ya'ni `timeZone` qo'shilgani
+   * oddiy testda KO'RINMAYDI. Shuning uchun mintaqa ataylab siljitiladi
+   * (S2/S3 hisobotlaridagi naqsh) — `timeZone: POS_TZ` olib tashlansa bu test
+   * darhol qizaradi, qolganlari esa yashil qolardi.
+   */
+  it('park vaqti QURILMA mintaqasida emas, do`kon mintaqasida chiziladi', () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu'); // UTC−10, Toshkentdan 15 soat orqada
+    try {
+      render(<QueuePanel picking={[]} ready={[]} parked={[AT]} />);
+      const text = screen.getAllByTestId('cfd-queue-card')[0]?.textContent ?? '';
+      expect(text).toContain('05:01'); // Toshkent
+      expect(text).not.toContain('14:01'); // Honolulu (oldingi kun)
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

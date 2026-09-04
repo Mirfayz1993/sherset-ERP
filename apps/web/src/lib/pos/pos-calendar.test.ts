@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { posDayKey, posDaysBetween, posDaysSince } from './pos-calendar';
+import { posDayKey, posDaysBetween, posDaysSince, posTimeDigits } from './pos-calendar';
 
 describe('posDayKey — Toshkent kalendar kuni', () => {
   it('UTC kuni bilan Toshkent kuni AJRALADI (19:00 UTC = ertasi kun)', () => {
@@ -81,5 +81,52 @@ describe('posDaysSince — qarz oynasi uchun', () => {
 
   it('kelajakdagi sana manfiy bermaydi — 0 ga qisiladi (mavjud xulq)', () => {
     expect(posDaysSince('2026-08-20T06:00:00.000Z', new Date('2026-08-16T06:00:00.000Z'))).toBe(0);
+  });
+});
+
+/**
+ * S4 — `CHEK-HHMMSS` zaxira raqamining raqamlari.
+ *
+ * 🔴 Bu FORMATLASH emas, IDENTIFIKATOR bo'lagi. Shuning uchun ikki narsa
+ * birga qulflanadi: MINTAQA (Toshkent, qurilma sozlamasi emas) va SHAKL
+ * (aynan 6 raqam) — shakl o'zgarsa chek raqami mijoz va kassir uchun boshqa
+ * ma'noga ega bo'lib qolardi.
+ */
+describe('posTimeDigits — zaxira chek raqamining HHMMSS bo`lagi', () => {
+  it('Toshkent devor-soatini beradi, UTC ni EMAS', () => {
+    // 20:15:30 UTC = ertasi kuni 01:15:30 Toshkentda.
+    expect(posTimeDigits(new Date('2026-08-16T20:15:30.000Z'))).toBe('011530');
+    expect(posTimeDigits(new Date('2026-08-16T06:00:00.000Z'))).toBe('110000');
+  });
+
+  it('AYNAN 6 raqam — shakl shartnomasi (nol bilan to`ldiriladi)', () => {
+    // 19:00:05 UTC = 00:00:05 Toshkentda — uchala bo'lak ham to'ldirishni sinaydi.
+    expect(posTimeDigits(new Date('2026-08-15T19:00:05.000Z'))).toBe('000005');
+    for (const iso of [
+      '2026-01-01T00:00:00.000Z',
+      '2026-06-30T23:59:59.000Z',
+      '2026-12-31T18:59:59.999Z',
+    ]) {
+      expect(posTimeDigits(new Date(iso))).toMatch(/^\d{6}$/);
+    }
+  });
+
+  it('QURILMA mintaqasidan MUSTAQIL (mashina TZ`i siljitilganda ham bir xil)', () => {
+    const at = new Date('2026-08-16T20:15:30.000Z');
+    const inTashkent = posTimeDigits(at);
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    try {
+      expect(posTimeDigits(at)).toBe(inTashkent);
+      expect(posTimeDigits(at)).toBe('011530');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('takrorlanmaslik: bir kun ichida har SEKUND boshqa raqam beradi', () => {
+    const base = Date.parse('2026-08-16T06:00:00.000Z');
+    const seen = new Set<string>();
+    for (let s = 0; s < 120; s += 1) seen.add(posTimeDigits(new Date(base + s * 1_000)));
+    expect(seen.size).toBe(120);
   });
 });

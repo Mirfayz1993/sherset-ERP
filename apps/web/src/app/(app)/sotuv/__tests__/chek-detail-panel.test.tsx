@@ -135,6 +135,57 @@ describe('Cheklar ro‘yxati', () => {
   });
 });
 
+/**
+ * S-reja S4 — cheklar RO'YXATI va DETAL sarlavhasidagi vaqt qurilma
+ * mintaqasida chizilmaydi (`cheklar-mode.tsx` ning ikkala nuqtasi).
+ *
+ * Nega muhim: kassir chekni «qachon bo'lgan edi» bo'yicha topadi, F6
+ * qaytarish esa aynan shu ro'yxatdan boshlanadi. Mintaqasi adashgan mashinada
+ * chek boshqa KUNda ko'rinardi — sotuvning o'zi bazada to'g'ri turgan holda.
+ *
+ * 🔴 Sinov mashinasining o'z TZ'i `Asia/Tashkent`, ya'ni tuzatish oddiy testda
+ * KO'RINMAYDI: `timeZone` bo'lmasa ham natija bir xil chiqardi. Mintaqa
+ * ataylab siljitiladi (S2/S3 hisobotlaridagi naqsh).
+ */
+describe('Cheklar — S4 vaqt do‘kon mintaqasida', () => {
+  // Fikstura `moment` = 2026-08-09T05:30:00Z.
+  //   Toshkent (UTC+5):  09.08, 10:30
+  //   Honolulu (UTC−10): 08.08, 19:30 — KUN ham boshqa.
+  it('ro‘yxat qatorining SOATI Toshkentda (qurilma mintaqasida emas)', async () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    try {
+      const user = userEvent.setup();
+      renderWithProviders(<SotuvPage />);
+
+      await user.click(await screen.findByRole('button', { name: /^Cheklar/ }));
+      const row = await screen.findByRole('button', { name: /Usta Vali/ });
+      expect(row.textContent).toContain('10:30');
+      expect(row.textContent).not.toContain('19:30');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('detal sarlavhasining SANA+SOATi Toshkentda', async () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    try {
+      const user = userEvent.setup();
+      renderWithProviders(<SotuvPage />);
+      const title = await openChekDetail(user);
+
+      // Sarlavha bloki: chek raqami + sana qatori bitta ota-elementda.
+      const text = title.parentElement?.textContent ?? '';
+      // Ajratgichga bog'lanmaydi (ICU nusxasining ishi) — KUN va SOAT qulflanadi.
+      expect(text).toMatch(/09\D08/); // Toshkent kuni
+      expect(text).toContain('10:30'); // Toshkent soati
+      expect(text).not.toMatch(/08\D08/); // Honolulu kuni
+      expect(text).not.toContain('19:30'); // Honolulu soati
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe('ChekDetailPanel — ko‘rinish', () => {
   it('chek raqami, holati, kassir, do‘kon va mijoz chiziladi', async () => {
     const user = userEvent.setup();

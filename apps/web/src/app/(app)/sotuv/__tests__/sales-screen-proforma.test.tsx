@@ -168,4 +168,59 @@ describe('Chek raqami — kassirning kunlik ketma-ketligi (2026-09-02)', () => {
     const input = vi.mocked(printProformaReceiptViaAgent).mock.calls[0]?.[0] as { name: string };
     expect(input.name).toMatch(/^CHEK-\d{6}$/);
   });
+
+  /**
+   * S-reja S4 — zaxira raqamning MINTAQASI.
+   *
+   * Vaqt MANBASI S2 da `serverNow()` bo'lgan, lekin raqam hamon
+   * `now.getHours()` bilan — ya'ni QURILMA mintaqasida — yasalardi. Endi
+   * do'kon (Toshkent) devor-soatida.
+   *
+   * 🔴 SHAKL QULFI birga turadi: `CHEK-` + AYNAN 6 raqam. Bu IDENTIFIKATOR,
+   * uning formati va takrorlanmaslik kafolati bu fazada O'ZGARMASLIGI kerak
+   * edi — shuning uchun mintaqa da'vosi bilan bir testda tekshiriladi.
+   */
+  it('zaxira raqam Toshkent soatida yasaladi (shakl O`ZGARMAYDI)', async () => {
+    // `vi.setSystemTime` bu yerda ISHLATILMAYDI: sahifa react-query polling'i
+    // bilan keladi va soxta taymer oqimni qotirib qo'yadi (o'lchandi — test
+    // 5 s da timeout bo'ldi). O'rniga chaqiruv REAL vaqt oynasi ichida ushlanadi
+    // va kutilgan qiymatlar shu oynadan MUSTAQIL formula bilan yasaladi.
+    const two = (n: number) => n.toString().padStart(2, '0');
+    /** Toshkent (UTC+5) devor-soati — `posTimeDigits` dan MUSTAQIL hisob. */
+    const tashkentDigits = (ms: number) => {
+      const d = new Date(ms + 5 * 60 * 60 * 1_000);
+      return `${two(d.getUTCHours())}${two(d.getUTCMinutes())}${two(d.getUTCSeconds())}`;
+    };
+    /** Qurilma mintaqasidagi ko'rinish — tuzatishdan OLDINGI xulq. */
+    const deviceDigits = (ms: number) => {
+      const d = new Date(ms);
+      return `${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
+    };
+    const windowOf = (from: number, to: number, f: (ms: number) => string) => {
+      const out = new Set<string>();
+      for (let t = from - 1_000; t <= to + 1_000; t += 250) out.add(f(t));
+      return out;
+    };
+
+    vi.stubEnv('TZ', 'Pacific/Honolulu'); // UTC−10, Toshkentdan 15 soat orqada
+    try {
+      vi.mocked(api.post).mockRejectedValue(new Error('network'));
+      const user = userEvent.setup();
+      renderWithProviders(<SotuvPage />);
+      await addFirstProduct(user);
+
+      const before = Date.now();
+      await user.click(screen.getByTestId('sotuv-proforma'));
+      await waitFor(() => expect(printProformaReceiptViaAgent).toHaveBeenCalledTimes(1));
+      const after = Date.now();
+
+      const input = vi.mocked(printProformaReceiptViaAgent).mock.calls[0]?.[0] as { name: string };
+      expect(input.name).toMatch(/^CHEK-\d{6}$/); // 🔴 SHAKL — o'sha-o'sha
+      const digits = input.name.slice('CHEK-'.length);
+      expect(windowOf(before, after, tashkentDigits), 'Toshkent soati emas').toContain(digits);
+      expect(windowOf(before, after, deviceDigits), 'qurilma soati chiqdi').not.toContain(digits);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

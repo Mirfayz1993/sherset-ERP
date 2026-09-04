@@ -33,6 +33,25 @@ export function posDayKey(d: Date): string {
 }
 
 /**
+ * Toshkent devor-soatining `HHMMSS` raqamlari (S-reja S4).
+ *
+ * 🔴 Bu FORMATLASH emas, IDENTIFIKATOR bo'lagi. Yagona iste'molchisi —
+ * tarmoq yiqilganda chek raqamining zaxira shoxi (`sotuv/page.tsx`,
+ * `CHEK-HHMMSS`). Shakl (aynan 6 raqam) va takrorlanmaslik kafolati (bir kun
+ * ichida sekund aniqligi) O'ZGARMAYDI; ilgari raqamlar `now.getHours()` bilan
+ * QURILMA mintaqasida olinardi, endi do'kon mintaqasida.
+ *
+ * Nega `toLocaleTimeString` EMAS: (1) u qattiq BCP-47 teg talab qilardi —
+ * `pos-bcp47-guard` uni rad etadi; (2) `hour12`/h24 chekkasi yarim tunni
+ * ba'zi ICU nusxalarida «24» qilib yozadi (S1 hisobotida o'lchangan), ya'ni
+ * identifikator ICU versiyasiga bog'lanib qolardi. Bu yerda esa `posDayKey`
+ * bilan AYNI qat'iy siljish ishlatiladi — ikkalasi bir mintaqa, bir formula.
+ */
+export function posTimeDigits(d: Date): string {
+  return new Date(d.getTime() + TASHKENT_OFFSET_MS).toISOString().slice(11, 19).replace(/:/g, '');
+}
+
+/**
  * Ikki sana orasidagi KALENDAR kunlar farqi (Toshkent bo'yicha).
  * Soatlar hisobga olinmaydi: 23:50 → ertasi 00:10 = **1 kun**.
  */

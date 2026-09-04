@@ -216,6 +216,42 @@ describe('CustomersPanel — uch amal-tugma', () => {
   });
 });
 
+/**
+ * S-reja S4 — chek ro'yxatidagi sana/soat QURILMA mintaqasida chizilmaydi.
+ *
+ * Bu panel kassirning «mijoz nima sotib olgan edi?» degan savoliga javob
+ * beradi va F6 qaytarish oqimi shu ro'yxatdan boshlanadi. Mintaqasi adashgan
+ * mashinada chek butunlay boshqa KUNda ko'rinardi — kassir mijozning chekini
+ * topa olmasdi.
+ *
+ * 🔴 Sinov mashinasining o'z TZ'i `Asia/Tashkent`, ya'ni tuzatish oddiy testda
+ * KO'RINMAYDI. Mintaqa ataylab siljitiladi (S2/S3 naqshi): `timeZone: POS_TZ`
+ * olib tashlansa bu test qizaradi, qolganlari yashil qolardi.
+ */
+describe('CustomersPanel — S4 sana/soat do‘kon mintaqasida', () => {
+  // Fixture `moment` = 2026-08-09T05:30:00Z.
+  //   Toshkent (UTC+5):  09.08.26, 10:30
+  //   Honolulu (UTC−10): 08.08.26, 19:30 — KUN ham boshqa.
+  it('chek qatorida Toshkent kuni va soati chiqadi, qurilma mintaqasi emas', async () => {
+    vi.stubEnv('TZ', 'Pacific/Honolulu');
+    try {
+      const user = userEvent.setup();
+      renderPanel();
+      await pickCustomer(user);
+      await user.click(screen.getByTestId('pos-customers-cheks'));
+
+      const text = (await screen.findByTestId('pos-customers-chek')).textContent ?? '';
+      // Ajratgichga bog'lanmaydi (ICU nusxasining ishi) — KUN va SOAT qulflanadi.
+      expect(text).toMatch(/09\D08\D26/); // Toshkent kuni
+      expect(text).toContain('10:30'); // Toshkent soati
+      expect(text).not.toMatch(/08\D08\D26/); // Honolulu kuni
+      expect(text).not.toContain('19:30'); // Honolulu soati
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe('CustomersPanel — G1 to‘lanmagan vozvratlar', () => {
   it('vozvrat yo‘q mijozda blok UMUMAN chiqmaydi', async () => {
     const user = userEvent.setup();

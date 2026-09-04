@@ -35,7 +35,7 @@ import { useServerClock } from '@/hooks/use-server-clock';
 import { LOCALE_COOKIE, isLocale } from '@/i18n/config';
 import { api } from '@/lib/api-client';
 import { getAccessToken, refresh } from '@/lib/auth-store';
-import { POS_TZ } from '@/lib/clock';
+import { POS_TZ, serverNow } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { CART_DRAFTS_STORAGE_KEY, parseCartDrafts } from '@/lib/pos/cart-drafts';
 import { normalizeQtyDecimal } from '@/lib/pos/cart-math';
@@ -341,7 +341,13 @@ function useParkedDrafts(demo: boolean): number[] {
   const [parked, setParked] = useState<number[]>([]);
   useEffect(() => {
     if (demo) {
-      setParked([Date.now() - DEMO_PARKED_AGO_MS]);
+      // 🔴 S4 QARORI — bu `Date.now()` OQ RO'YXATGA TUSHMADI, TUZATILDI.
+      // Qiymat «yosh» (nisbiy o'lchov) bo'lib ko'rinadi, lekin `HoldCard` uni
+      // ABSOLYUT soat sifatida chizadi (`toLocaleTimeString`). Qurilma soati
+      // adashsa ko'rgazma kartasi yonidagi sarlavha soatidan (S1 — server
+      // vaqti) aynan skew qadar farq qilardi. Haqiqiy qoralamalar ham
+      // `serverNow()` bilan yoziladi (S3), demak demo shu bilan bir manbada.
+      setParked([serverNow().getTime() - DEMO_PARKED_AGO_MS]);
       return;
     }
     const read = () => {
@@ -887,6 +893,10 @@ function HoldCard({ at, bcp47 }: { at: number; bcp47: string }) {
   const time = new Date(at).toLocaleTimeString(bcp47, {
     hour: '2-digit',
     minute: '2-digit',
+    // S4: `at` — POS `serverNow()` bilan yozgan park vaqti (S3), demak uni
+    // do'kon mintaqasida o'qish kerak. Aks holda CFD'ning O'Z sarlavha soati
+    // (S1 da server vaqtiga o'tgan) bilan yonma-yon nomuvofiq turardi.
+    timeZone: POS_TZ,
   });
   return (
     <div

@@ -2,7 +2,7 @@
 
 import { api } from '@/lib/api-client';
 // S3 — «necha kun» qurilma soatidan EMAS, serverdan; hisob Toshkent kunida.
-import { serverNow } from '@/lib/clock';
+import { POS_TZ, serverNow } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { formatAmountInput, parseAmountToMinor } from '@/lib/pos/parse-amount';
 import { posDaysSince } from '@/lib/pos/pos-calendar';
@@ -148,6 +148,11 @@ function fmtDate(iso: string | null, bcp47: string): string {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    // 🔴 S4: qarz SANASI shu oynadagi «necha kun» hisobi bilan bir MINTAQADA
+    // bo'lishi shart — `posDaysSince` Toshkent kalendar kunini sanaydi
+    // (S3). Mintaqasiz sana bilan ular o'zaro ziddiyatga tushardi:
+    // «01.09.2026 · 0 kun» o'rniga «31.08.2026 · 0 kun».
+    timeZone: POS_TZ,
   });
 }
 

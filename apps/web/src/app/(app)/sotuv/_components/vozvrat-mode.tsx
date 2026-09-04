@@ -18,6 +18,7 @@
  */
 
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { formatMoney } from '@moysklad/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -350,6 +351,9 @@ export function VozvratMode({
                         year: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit',
+                        // Kassir chekni SANA bo'yicha qidiradi — sana qurilma
+                        // mintaqasida siljisa qidiruv ham adashardi (S4).
+                        timeZone: POS_TZ,
                       })}
                     </span>
                   </div>

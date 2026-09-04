@@ -30,6 +30,7 @@ const COUNT_NUMPAD_USD = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0',
 const COUNT_MAX_LEN = 12;
 
 import { PosLocaleToggle } from '@/components/pos/pos-locale-toggle';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { isPosWorkstation } from '@/lib/pos-device';
 import type { CurrentSession } from '@moysklad/contracts';
@@ -231,6 +232,8 @@ export function SmenaMode({
             {new Date(session.openedAt).toLocaleTimeString(bcp47, {
               hour: '2-digit',
               minute: '2-digit',
+              // Smena SERVERda ochilgan — soati ham do'kon mintaqasida (S4).
+              timeZone: POS_TZ,
             })}
           </span>
         </div>

@@ -13,6 +13,7 @@
 
 import { usePermissions } from '@/hooks/use-permissions';
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import {
   type RefundTenderChoice,
@@ -409,6 +410,9 @@ export function ChekDetailPanel({
               month: '2-digit',
               hour: '2-digit',
               minute: '2-digit',
+              // Server `moment`i do'kon mintaqasida o'qiladi (S-reja S4) —
+              // qurilma TZ'i adashsa chek sanasi kunga siljib ko'rinardi.
+              timeZone: POS_TZ,
             })}
             {' · '}
             <ChekStateBadge state={data.state} label={stateLabel[data.state] ?? data.state} />
@@ -1074,6 +1078,7 @@ export function CheklarMode({
                       {new Date(sale.moment).toLocaleTimeString(bcp47, {
                         hour: '2-digit',
                         minute: '2-digit',
+                        timeZone: POS_TZ,
                       })}
                     </span>
                   </div>

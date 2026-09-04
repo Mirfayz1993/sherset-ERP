@@ -58,6 +58,7 @@ import {
 } from '@/lib/pos/cart-math';
 // Smena yopish sanog'i uchun xavfsiz pul-parse (buzuq kiritma → 0n, crash emas).
 import { parseAmountToMinor } from '@/lib/pos/parse-amount';
+import { posTimeDigits } from '@/lib/pos/pos-calendar';
 import { cartToProformaReceipt } from '@/lib/pos/receipt-proforma-model';
 import { scanFeedback } from '@/lib/pos/scan-feedback';
 import {
@@ -981,8 +982,12 @@ function SalesScreen({
       });
       number = String(allocated.number);
     } catch {
-      const two = (n: number) => n.toString().padStart(2, '0');
-      number = `CHEK-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+      // 🔴 SHAKL O'ZGARMAYDI: `CHEK-` + AYNAN 6 raqam, sekund aniqligida —
+      // takrorlanmaslik kafolati o'sha-o'sha. S4 da faqat MINTAQA qotirildi:
+      // `now.getHours()` qurilma sozlamasida o'qirdi, `posTimeDigits` esa
+      // do'kon (Toshkent) devor-soatida. Vaqt MANBASI S2 da allaqachon
+      // `serverNow()` bo'lgan. `document_sequences` shoxiga tegilmadi.
+      number = `CHEK-${posTimeDigits(now)}`;
     }
     const input = cartToProformaReceipt(cart, discountPct, {
       number,

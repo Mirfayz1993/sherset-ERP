@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import { formatAmountInput, parseAmountToMinor } from '@/lib/pos/parse-amount';
 import type { ListEnvelope } from '@moysklad/contracts';
@@ -465,6 +466,8 @@ export function CustomersPanel({
                             day: '2-digit',
                             month: '2-digit',
                             year: '2-digit',
+                            // Qaytarish sanasi — do'kon mintaqasida (S4).
+                            timeZone: POS_TZ,
                           })}
                           {r.payedSumMinor !== '0' &&
                             ` · ${t('unpaid_returns_partially_paid', {
@@ -788,10 +791,15 @@ export function CustomersPanel({
                           day: '2-digit',
                           month: '2-digit',
                           year: '2-digit',
+                          // Sana va soat BITTA `moment` dan chiziladi —
+                          // ikkalasi ham do'kon mintaqasida bo'lsin, aks holda
+                          // ular o'zaro ham nomuvofiq bo'lardi (S4).
+                          timeZone: POS_TZ,
                         })}{' '}
                         {new Date(sale.moment).toLocaleTimeString(bcp47, {
                           hour: '2-digit',
                           minute: '2-digit',
+                          timeZone: POS_TZ,
                         })}
                       </span>
                     </div>

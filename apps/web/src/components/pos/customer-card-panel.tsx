@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import type { ListEnvelope } from '@moysklad/contracts';
 import type { CurrencyCode } from '@moysklad/money/currencies';
@@ -196,6 +197,10 @@ function fmtDate(iso: string | null | undefined, bcp47: string): string {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
+    // S4: mintaqa ham qat'iy — sana do'kon kunida chizilsin, qurilma
+    // sozlamasida emas. Lokal (`bcp47`) ATAYLAB tegilmagan: u tilga bog'liq,
+    // mintaqa esa bog'liq emas.
+    timeZone: POS_TZ,
   });
 }
 

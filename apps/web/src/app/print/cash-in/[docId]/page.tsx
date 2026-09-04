@@ -2,6 +2,7 @@
 
 import { PrintShell } from '@/components/print/print-shell';
 import { api } from '@/lib/api-client';
+import { POS_TZ } from '@/lib/clock';
 import { formatMoney } from '@moysklad/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -28,6 +29,11 @@ function fmtDate(iso: string): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    // 🔴 S4: PKO — QOG'OZ hujjat, mijozning qo'lida qoladi. Sanasi bosgan
+    // mashinaning mintaqasiga bog'liq bo'lmasin (`receipt-model.ts` bilan
+    // ayni qaror, S2). `'uz-UZ'` lokali ATAYLAB tegilmadi — qog'oz-format
+    // qarori, mintaqa esa undan mustaqil.
+    timeZone: POS_TZ,
   });
 }
 
