@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -123,7 +123,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | **TUGADI** |
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | **TUGADI** |
-| **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | REJA |
+| **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | REJA |
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
 | **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | REJA |
@@ -1562,3 +1562,221 @@ matn bilan ishlaydi — u serverdan hech nima o'qimaydi va narx tushunchasini bi
 8. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
    T5 da ham tegilmadi va commitga tushmadi. Keyingi T-faza agenti ham o'z commitiga
    qo'shmasin. `docs/progress.json` esa `pre-commit` hook'i qo'shgan, begona ish emas.
+
+### T6 — Sanash progressi va «qolganini 0 qilib yopish» · **TUGADI** · 2026-09-04 · `4ac4aff0`
+
+**Nima qilindi**
+
+- **`CountScreen.kt`** (+407 / −7) — butun faza shu bitta ekranda; server fayllariga tegilmadi.
+
+  *1. Progress — «5/12 sanaldi»*
+
+  Ikkita yangi holat: `roster` (`assortmentId → nom`, MAXRAJ) va `marks`
+  (`assortmentId → Mark`, SURAT). Sarlavha-kartada `count_progress` qatori,
+  `done == total` bo'lganda **yashil**. Bo'sh yacheykada («0/0») qator umuman
+  chizilmaydi.
+
+  🔴 **Maxraj nega `items.length()` emas.** Server `set 0` dan keyin qatorni
+  `getCellStock` javobidan **olib tashlaydi** (`where: { …, qty: { gt: 0 } }` —
+  `store-address.service.ts:216`; biriktirilgan tovar istisno, u 0 bo'lib
+  qoladi). Ya'ni maxraj `items` dan olinsa, 12 qatorli yacheykada 5 tasi 0 deb
+  yopilgach maxraj 7 ga tushib **progress orqaga ketardi** va «hammasi sanaldi»
+  hech qachon chiqmasdi. `roster` esa sessiyada BIR MARTA ko'ringan har qatorni
+  saqlaydi va faqat o'sadi (`rosterSync()` — qo'shadi, o'chirmaydi).
+
+  *2. Qator belgisi*
+
+  `MarkedTitle` — nomdan chapda **✓ yashil** (shu sessiyada saqlandi) ·
+  **○ kulrang** (sanalmagan) · **✕ qizil** (yopishda xato). `SectionCard`
+  chegarasi ham shu rangga o'tadi (`markBorder`). Belgi rangdan tashqari
+  **shakl** bilan ham farq qiladi — 4" ekranda, qo'lqopda va yorug' omborda
+  rang yolg'iz ishonchli emas. Belgi uch joyda: qoldiq qatorlari,
+  biriktirilgan qatorlar va ochiq turgan «sanalayotgan tovar» kartasi.
+
+  *3. «Qolganini 0 qilib yopish»*
+
+  `pendingRows()` — ekrandagi ikki ro'yxatdan, **ko'rinish tartibida**,
+  `Mark.COUNTED` bo'lmaganlari. `Mark.FAILED` qatorlar QAYTA kiradi (ular
+  sanalmagan — ikkinchi urinish tugmani qayta bosish bilan). Tugma matni
+  sonni ko'rsatadi: «Qolganini 0 qilib yopish (7)»; `pending` bo'sh bo'lsa
+  tugma **umuman chizilmaydi** (yacheyka yopilganini shu ham bildiradi).
+
+  `closeRest()` — halqa, `shell.io` ichida, har qator uchun
+  `setCellStock(store, cell, id, "0")` (ya'ni `mode: 'set'`, mutlaq son —
+  semantika o'zgarmadi). Tarkib **oxirida bir marta** qayta o'qiladi (har
+  qatordan keyin emas: 30 qatorli yacheykada bu 30 ta ortiqcha so'rov bo'lardi).
+
+  *4. 🔴 Chiqim ogohlantirishi (reja bandi 4)*
+
+  Tasdiq kartasi qizil (`DangerContainer`/`Danger`) va matni:
+  «🔴 Bu qatorlarning qoldig'i 0 bo'ladi. **Qoldig'i bor har bir qator uchun
+  tizim avtomatik CHIQIM (Списание) hujjatini yozadi** — tovar hisobdan
+  yechiladi. Ilova orqali bekor qilib bo'lmaydi: qaytarish uchun to'g'ri sonni
+  qayta sanash kerak.» Ostida **N ta qator to'liq ro'yxat** bo'lib, har biri
+  yonida **hozirgi tizim qoldig'i** bilan turadi — chiqim aynan shuncha bo'ladi.
+  Ro'yxat **KESILMAYDI** («…va yana 20 ta» yo'q): yo'qotuvchi amalning
+  qamrovini yashirish T3 dagi «kesilgan ro'yxat» muammosining og'irroq shakli
+  bo'lardi. Tugmalar: «Ha, 0 qilib yopish» (qizil) va «Bekor qilish».
+
+- **`strings.xml`** (+16, faqat `uz`): `count_progress`, `count_row_failed`,
+  `count_close_rest`, `count_close_title`, `count_close_warning`,
+  `count_close_list`, `count_close_confirm`, `count_closing`,
+  `count_close_done`, `count_close_partial`, `count_close_stopped`.
+- **`README.md`** (+24 / −1): G6 «Qo'lda smoke» ro'yxatiga **13-band (T6)** —
+  progress, tasdiq kartasi, ERP tomonda Списание hujjatining borligi,
+  **aloqasiz xulq** va yacheyka almashganda progressning nolga tushishi;
+  eski «Narx tekshiruvi» bandi 14 ga surildi.
+
+**🔴 Rejadan chekinish: tasdiq DIALOG emas, KARTA (ochiq aytiladi)**
+
+Reja «tasdiq oynasi» deydi. `AlertDialog` **ATAYLAB ishlatilmadi**: `ScanBar`
+fokusni FAQAT ekran almashganda so'raydi (`LaunchedEffect(screenKey)`,
+`ScanBar.kt:104`) va ilovada bitta ham dialog yo'q. Dialog oynasi fokusni
+tortib olsa, yopilgandan keyin uni hech kim qaytarmaydi va
+**klaviatura-wedge skaner jim o'lardi** — omborchi buni «skaner buzildi» deb
+tushunardi. Karta oqim ichida turadi, fokusga umuman tegmaydi, 64dp
+tugmalarni to'liq enida ko'taradi va uzun ro'yxat bilan birga skrollda
+ochiladi. Tasdiqning MOHIYATI saqlandi: amal ikki bosishsiz bajarilmaydi,
+ro'yxat oldindan ko'rinadi, chiqim ochiq aytiladi.
+
+**Qisman xatolikda xulq (reja «qaysi qator yopilmagani ko'rinsin»)**
+
+| Nima bo'ldi | Qator | Halqa | Yakuniy xabar |
+|---|---|---|---|
+| 200 OK | **✓ yashil**, `counts` dan tozalanadi | davom etadi | — |
+| 4xx (`retriable == false`) — masalan o'chirilgan tovar (`setCellStock` → 404) | **✕ qizil** + «⛔ yopilmadi — qayta urinib ko'ring» | **DAVOM etadi** (bitta buzuq qator butun yacheykani ushlab qolmasin) | qizil banner «N qator yopildi, M qator YOPILMADI — qizil qatorlarga qarang» |
+| Aloqa yo'q / 5xx (`retriable == true`) | **✕ qizil** | **TO'XTAYDI** | qizil banner «Aloqa yo'q — to'xtatildi. N qator yopildi, M qator yopilmadi» |
+| Halqadan keyingi qayta o'qish yiqildi | belgilar O'Z JOYIDA qoladi | — | yakuniy xabar O'ZGARMAYDI, xato `Diagnostics` ga yoziladi |
+
+Yakuniy hisob **yopilgan qatorlardan** olinadi (`left = targets.size - ok`),
+xato sanog'idan emas — kutilmagan uzilishda ham «hammasi yopildi» degan yolg'on
+xabar chiqmaydi (IS-5). Halqa ketayotganda tugma o'rnida «Yopilmoqda… kutib
+turing (aloqa uzilsa to'xtaydi)» kartasi turadi, ya'ni ikkinchi marta bosib
+bo'lmaydi.
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean testDebugUnitTest assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 1m 1s** · **42 task, 41 bajarildi** · exit **0** |
+| Ogohlantirish | o'sha log, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build — `UP-TO-DATE` task natijani yashirmadi) |
+| Unit-testlar | o'sha buyruq (T5 dan qolgan `QtyExpressionTest`) | **17 test · 0 failure · 0 error · 0 skipped** — T6 ularni buzmadi |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat 4ac4aff0` da `apps/`, `packages/`, `prisma/` **yo'q**) |
+
+T6 uchun yangi unit-test **yozilmadi** va sababi ochiq: fazaning butun mantig'i
+Compose state va `Shell` chaqiruvlariga bog'liq (`marks`, `roster`, `shell.io`
+halqasi) — uni JVM testida qamrash uchun ekranni ViewModel'ga bo'lish kerak
+bo'lardi, bu esa fazadan tashqari ish (§2, qoida 2). T5 ning `QtyExpression`
+naqshi bu yerda takrorlanmaydi, chunki ajratiladigan **sof** funksiya yo'q.
+Sinov — jonli qurilmada, README 13-band (T8).
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` **ogohlantirishsiz** | ✔ | toza `clean` build, 42 task / 41 bajarildi, `w:`/`warning`/`e:` — **0 qator**, exit 0 |
+| Tasdiq oynasida **chiqim ogohlantirishi** bor | ✔ | `count_close_warning` — «avtomatik CHIQIM (Списание) hujjatini yozadi»; karta qizil, ro'yxatda har qatorning hozirgi qoldig'i ko'rinadi. Amal ogohlantirishsiz bajarilmaydi: `closeRest()` FAQAT `count_close_confirm` tugmasidan chaqiriladi |
+| Qisman muvaffaqiyatsizlikda **qaysi qator yopilmagani ekranda qoladi** (jim yo'qotish yo'q) | ✔ | `Mark.FAILED` → ✕ qizil belgi + qizil chegara + «⛔ yopilmadi» qatori; yakuniy banner sonni aytadi; qator `pendingRows()` da QOLADI, ya'ni tugma uni qayta taklif qiladi |
+| Progress «5/12» ko'rinadi (vazifa 1) | ✔ | `count_progress`, sarlavha-kartada; hisob ilova ichida — serverga sanash sessiyasi haqida **bitta so'rov ham** qo'shilmadi |
+| Sanalganda yashil, sanalmaganda kulrang (vazifa 2) | ✔ | `markGlyph`/`markColor`/`markBorder`; uch holat — ✓ / ○ / ✕ |
+| Sanalmaganlar **bittalab** `set 0`, har biriga alohida tasdiq YO'Q, oldindan ro'yxat BOR (vazifa 3) | ✔ | `closeRest()` halqasi ketma-ket (`ioPool` — **bitta oqim**, `MainActivity.kt:61`), bitta tasdiq, `pendingRows()` ro'yxati kesilmasdan chiziladi |
+| Yacheyka almashganda progress **nolga tushadi** (vazifa 5) | ✔ | `clearProgress()` — `openCell()` ning muvaffaqiyat shoxida va `reset()` da; `roster`, `marks`, `confirming` tozalanadi |
+| Oflayn navbatga **qo'yilmaydi** (cheklov) | ✔ | `closeRest()` da `shell.enqueue` **umuman yo'q**; `retriable` xatoda halqa `break` bilan to'xtaydi va banner «Aloqa yo'q — to'xtatildi» deydi. `ActionQueue`/`QueueSender` diffda yo'q |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Serverga **bitta bayt ham** tegilmadi: yangi endpoint ham, yangi javob maydoni
+ham, TSD allowlist qatori ham qo'shilmadi (`ApiClient.kt` diffda **umuman
+yo'q**). T6 faqat ikkita MAVJUD chaqiruvni ishlatadi — `setCellStock` (PUT,
+javobi ekranda o'qilmaydi) va `cellStock` (T1 dan beri o'sha yerda
+ishlatiladi). Yangi ko'rsatilayotgan yagona maydon — `stock[].qty`, ya'ni
+SON, tasdiq ro'yxatida ko'rinadi; u allaqachon «Tizimda» qatorida chizilardi.
+`buyPrice`/`salePrice`/`sum` — `getCellStock` select'ida umuman yo'q.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Sanash semantikasi (mutlaq son)** — buzilmadi. Yopish ham `setCellStock(…,
+  "0")`, ya'ni `mode: 'set'`. `add` hech qayerda paydo bo'lmadi. Qayta
+  yuborilganda natija AYNI (0 → 0).
+- **Oflayn navbat** — buzilmadi va unga tegilmadi. Sanash ilgarigidek navbatga
+  qo'yilmaydi; yangi amal ham qo'yilmaydi (yuqorida dalil). `ActionQueue`,
+  `QueueSender`, `DeviceStore`, `ScannerBridge`, `ApiClient` diffda **yo'q**
+  (§2, qoida 10).
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi: `onScan`, `pick`,
+  `PickProductScreen` ga tegilmadi.
+- **Skaner fokusi (T2 ishi)** — buzilmadi va aynan shuning uchun dialog
+  ishlatilmadi (yuqoridagi «chekinish» bandi). `ScanBar.kt` diffda yo'q,
+  yangi `requestFocus()` qo'shilmadi.
+- **Skan halqa ketayotganda** — `ioPool` bitta oqimli (`newSingleThreadExecutor`),
+  ya'ni yopish halqasi tugamaguncha skan **navbatda turadi** va keyin ishlaydi
+  (yo'qolmaydi). Shuning uchun «Yopilmoqda… kutib turing» matni qo'yildi.
+  Yon foyda: halqa o'rtasida yacheyka almashib qolishi amalda mumkin emas;
+  shunga qaramay har UI yozuvi `cell?.optString("id") == cellId` bilan
+  qo'riqlanadi — belgi boshqa yacheykaning qatoriga tushmasin.
+- **T4 ovoz/banner intizomi** — buzilmadi va unga ergashildi: yakuniy natija
+  muvaffaqiyatda `shell.success` (toast + yuqori ton), xatoda `shell.error`
+  (qizil banner + past ton). **Har qator uchun signal chiqmaydi** — 30 qatorli
+  yacheykada bu 30 ta signal bo'lardi.
+- **T5 kalkulyatori** — tegilmadi (`Widgets.kt`, `QtyExpression.kt` diffda
+  yo'q). `save()` imzosiga `name` qo'shildi, `input` ning yo'li o'zgarmadi.
+- **Sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» ogohlantirishi** — o'z
+  joyida (`PickedCard`), unga tegilmadi.
+- **Server bilan moslik** — faza serverga tegmagani uchun «eski ilova + yangi
+  server» va «yangi ilova + eski server» kombinatsiyalari o'zgarmaydi.
+- **Yagona xulq o'zgarishi:** endi bitta bosishda **ko'p qator** o'zgartirilishi
+  mumkin. Xavf tasdiq bilan qamraldi (ro'yxat + chiqim ogohlantirishi + qizil
+  rang), lekin u BOR: adashib tasdiqlangan yopish 7 ta Списание hujjatini
+  yozadi. Qaytarish yo'li — o'sha qatorlarni to'g'ri son bilan qayta sanash
+  (T7 buni bitta bosishga tushiradi).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan** — qabul mezoni «kodda ko'rsatilsin» edi.
+   README G6 ro'yxatiga **13-band** aynan shu uchun yozildi (progress, tasdiq
+   kartasi, ERP tomonda Списание hujjati, **Wi-Fi o'chiq holatda to'xtash**,
+   yacheyka almashganda nolga tushish). Sinov — **T8**.
+2. 🔴 **T1 ning «biriktirilgan» guruhi amalda deyarli hech qachon
+   ko'rinmaydi** — T6 ni yozayotganda koddan o'qib topildi.
+   `lookupCellByBarcode` ning `stock` maydoni `getCellStock` dan keladi va u
+   biriktirilgan tovarlarni **allaqachon `qty: 0` qator qilib qo'shadi**
+   (`store-address.service.ts:220-253`). Ya'ni `boundOnly()` faqat
+   `getCellProducts` qaytaradigan-u `getCellStock` chiqarib tashlaydigan
+   qatorlarni beradi — bu esa **`deletedAt != null`** (yumshoq o'chirilgan)
+   tovarlar: `getCellStock` da `deletedAt: null` filtri bor, `getCellProducts`
+   da **yo'q**. Amalda: T1 guruhi o'chirilgan tovarlarni ko'rsatishi mumkin va
+   ular sanalganda/yopilganda server 404 beradi (endi u **✕ qizil** bo'lib
+   ko'rinadi — T6 dan oldin faqat banner edi). **T6 buni tuzatmadi** (§2,
+   qoida 2: bu server sirtidagi nomuvofiqlik). Tuzatish bir qatorlik —
+   `getCellProducts` ga `deletedAt: null` qo'shish — lekin u web'ning
+   «Ko'rish» ekraniga ham tegadi, shuning uchun alohida qaror kerak.
+   Egasiga: bu **T11** (inventarizatsiya sessiyasi) bilan birga hal qilinsin.
+3. **Progress ILOVA ichida** — terminal qayta ishga tushsa yoki «Boshidan»
+   bosilsa belgilar yo'qoladi, va ikki omborchi bir yacheykani sanasa ular
+   bir-birining ✓ belgisini KO'RMAYDI. Bu reja bandining o'zi («hisob ilova
+   ichida, server sanash sessiyasini bilmaydi»), lekin jonlida chalkashlik
+   bo'lsa — **T11** ni kutish kerak. Eslatma: ekran nusxasi navigatsiya
+   tarixida saqlanadi (`Screen` KDoc), ya'ni «orqaga» bilan qaytilganda
+   progress **saqlanib qoladi**.
+4. **Biriktirilgan (qoldiq 0) qatorlar ham yopish ro'yxatiga kiradi** — ular
+   uchun `delta = 0` va server **hech qanday hujjat yozmaydi** (`willPostDoc`
+   sharti), qator faqat ✓ belgisini oladi. Ogohlantirish matni shuni hisobga
+   olib «**qoldig'i bor** har bir qator uchun» deb yozilgan. Kerak bo'lsa
+   keyingi faza ularni ro'yxatdan chiqarib tashlashi mumkin — hozir ATAYLAB
+   qoldirildi: «sanaldi» belgisi ular uchun ham ma'noli.
+5. **Ochiq turgan («sanalayotgan») qator ham yopish ro'yxatiga kiradi** —
+   agar omborchi son yozib SAQLAMAGAN bo'lsa, yozgani yo'qoladi va qator 0
+   bo'ladi. Ro'yxatda u ko'rinadi, shuning uchun jim emas; yopilgach karta
+   yopiladi (`picked = null`).
+6. **`ShortageScreen` hamon ifoda rejimisiz** (T5 ning 4-bandi) — T6 unga
+   tegmadi (§2, qoida 2). Bir qatorlik ish, keyingi fazalardan biriga
+   qo'shilsin.
+7. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName`
+   **oshirilmadi** (hamon `4`/`0.4.0`), `tools/publish.sh` chaqirilmadi.
+   T1–T6 bitta o'rnatishda sinalgani ma'qul — **T8**.
+8. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer
+   planshet rejasi) — T6 da ham tegilmadi va commitga tushmadi
+   (`git show --stat 4ac4aff0` — faqat 3 ta `android/tsd-app` fayli +
+   `pre-commit` hook'i qo'shgan `docs/progress.json`). Diqqat: T6 sessiyasi
+   davomida **boshqa sessiya** kassa (S2) ishini shu branchga commit qildi
+   (`988fb45c`, `57217f3e`) — keyingi faza agenti `git log` ni o'qiganda
+   adashmasin.
