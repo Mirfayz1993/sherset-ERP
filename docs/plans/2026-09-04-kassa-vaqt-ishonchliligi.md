@@ -268,9 +268,10 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventari
 
 ### S3 — «O'tgan vaqt» hisoblari
 
-**Fayllar:** `sotuv/_components/navbat-mode.tsx:43-45` (`useNowTick` → `useServerClock`);
-`components/pos/debt-payment-dialog.tsx:154`; `sotuv/page.tsx:904,928,1007` (qoralama `createdAt`) va
-`:1028` (`timeLabel` ga `timeZone: POS_TZ`).
+**Fayllar** (qatorlar S2 dan KEYIN qayta o'lchandi, HEAD `57217f3e`):
+`sotuv/_components/navbat-mode.tsx:42-50` (`useNowTick` → `useServerClock`) va `:51-62`
+(`formatElapsed`); `components/pos/debt-payment-dialog.tsx:153-157` (`daysSince`);
+`sotuv/page.tsx:906,930,1014` (qoralama `createdAt`) va `:1035` (`timeLabel` ga `timeZone: POS_TZ`).
 
 **Testlar:** navbat kartasining «o'tgan vaqt»i skew ostida to'g'ri chiqishi; qarz kechikish kunlari uchun
 chegara testi (kun chegarasida ±1 kun xato bermasin — hisob **`Asia/Tashkent` kalendar kuni** bo'yicha).
@@ -279,6 +280,71 @@ chegara testi (kun chegarasida ±1 kun xato bermasin — hisob **`Asia/Tashkent`
 - ✔ Skew +3 soat bo'lganda navbat «o'tgan vaqt»i o'zgarmaydi.
 - ✔ Qoralama vaqti server soatida yoziladi va ko'rsatiladi.
 - ✔ `newDraftId()` (`cart-drafts.ts:97`) TEGILMAGAN — u identifikator, vaqt emas (§2 qoida 4).
+
+<details><summary><b>S3 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-04-kassa-vaqt-ishonchliligi.md` ni TO'LIQ o'qi — §1 (ayniqsa §1.1, §1.2
+   va §1.5), §2 (o'zgarmas qoidalar), §4 (modul shartnomasi) va §5 dagi S3 bo'limi, hamda §6
+   dagi S0, S1 va S2 hisobotlari.
+2) Sen FAQAT **S3 — «O'tgan vaqt» hisoblari** fazasini bajarasan. Faqat web (`apps/web`);
+   serverga (`apps/api`) TEGILMAYDI. Hisobotda buni `git diff --stat` bilan yozma isbotla.
+3) 🔴 IKKINCHI VAQT MANBASI YARATMA. S1 da tayyor: `apps/web/src/lib/clock.ts`
+   (`serverNow()`, `POS_TZ`) va `apps/web/src/hooks/use-server-clock.ts`
+   (`useServerClock(stepMs): Date | null`). Yangi skew mantig'i, yangi interval-soat
+   hook'i, yangi `Date.now()` o'quvchi — TAQIQ. Yangi so'rov/ping ham QO'SHILMAYDI.
+4) Ish (uch nuqta):
+   a) `sotuv/_components/navbat-mode.tsx` — `useNowTick()` (`Date.now()` + 30s interval)
+      OLIB TASHLANADI, o'rniga `useServerClock(30_000)`.
+      🔴 `useServerClock` mount'gacha `null` qaytaradi (gidratatsiya qarori, S1 hisoboti).
+      Karta «o'tgan vaqt»i shu bir renderda NIMA ko'rsatishini ATAYLAB hal qil va izohla:
+      soxta «hozir» chiqarma — bu kassirga yolg'on ma'lumot. Qarorni testga qulfla.
+      `formatElapsed` sof funksiya bo'lib qolsin (`now` PARAMETR bo'lib kiradi).
+   b) `components/pos/debt-payment-dialog.tsx` — `daysSince` (`:153-157`) hozir
+      `Date.now() − iso` ni 86 400 000 ga bo'ladi. Ikki nuqson: (1) qurilma soati,
+      (2) bu KALENDAR kun emas, 24 soatlik bo'lak — kechqurun to'langan qarz ertalab
+      «0 kun» bo'lib turadi. Hisob **`Asia/Tashkent` kalendar kunlari FARQI** bo'lsin.
+      Buni `lib/pos/` da SOF funksiyaga chiqar (ikkala sana ham parametr — modul ichida
+      `serverNow()` CHAQIRILMAYDI) va alohida sina; chaqiruvchi `serverNow()` beradi.
+      `fmtDate` (`:144`) mintaqasi ATAYLAB tegilmaydi — u §1.3 ro'yxatida, S4 doirasi.
+   c) `sotuv/page.tsx` — qoralama `createdAt` (`:906,930,1014`) `Date.now()` →
+      `serverNow().getTime()`; chip `timeLabel` (`:1035`) formatiga `timeZone: POS_TZ`.
+      🔴 `newDraftId()` (`lib/pos/cart-drafts.ts:97`) TEGILMAYDI — u identifikator,
+      vaqt emas (§2 qoida 4 dagi oq ro'yxat).
+      🔴 `localStorage` da TURIB QOLGAN eski qoralamalar qurilma vaqtida yozilgan:
+      `createdAt` tipi (`number`) va `parseCartDrafts` shartnomasi O'ZGARMASIN, aks holda
+      kassirning saqlangan savati YO'QOLADI. Eski yozuvlar vaqti bir marta siljib
+      ko'rinishi — qabul qilinadigan narx; buni hisobotda ochiq yoz.
+5) Testlar (majburiy, yangi mantiqqa YANGI test; mavjud fayllarga qo'sh):
+   - `app/(app)/sotuv/__tests__/navbat-mode.test.tsx` — skew +3 soat: qurilma soati
+     adashgan bo'lsa ham «o'tgan vaqt» server `moment`iga nisbatan to'g'ri
+     (skew'siz holatda 3 soat xato chiqishini ham ko'rsat);
+   - qarz kunlari uchun SOF funksiya testi — kun chegarasi: 23:50 (Toshkent) da yozilgan
+     qarz ertasi kuni 00:10 da «1 kun», «0 kun» EMAS; teskarisi ham (bir necha soatlik
+     farq bir xil kalendar kunda «0 kun»);
+   - qoralama chipi vaqti: skew ostida server soatida yoziladi va `Asia/Tashkent` da
+     chiziladi (mintaqa testini `vi.stubEnv('TZ', …)` bilan HAQIQATAN qizaradigan qil —
+     sinov mashinasining TZ'i `Asia/Tashkent`, S2 hisobotidagi naqsh);
+   - yugurt: `cd apps/web && npx vitest run "src/app/(app)/sotuv" src/components/pos src/lib/pos`
+     (to'liq suite SHART EMAS — S3 umumiy transportga tegmaydi);
+   - gate: `pnpm --filter @moysklad/web typecheck` · `npx biome check <o'zgargan fayllar>` ·
+     `pnpm i18n:gate` (yangi matn qo'shilsa ru+uz ikkalasi).
+6) ANTI-VAKUUM: har yangi testni tuzatishni vaqtincha orqaga qaytarib qizarishini o'lchа
+   va natijani hisobotda ko'rsat (S2 naqshi) — yashil test o'z-o'zidan dalil emas.
+7) Git: `git add` FAQAT o'zing tegan yo'llar bilan. Ish daraxtida T3 (TSD) ning commit
+   qilinmagan ishi turibdi (`apps/api/**`, `android/manager-app/`) — unga TEGMA va
+   commitingga qo'shma. Commit subject kichik harf.
+8) 🔴 Manba fayllarni `Get-Content`/`Set-Content` bilan qayta yozma — faqat Edit/Write
+   (2026-09-01 kodlash hodisasi).
+9) Deploy QILMA (§2 qoida 9) — kassa jonli ishlayapti, deploy uni to'xtatadi.
+10) Tugagach §6 ga «### S3 — …» hisobotini yoz: fayllar, commit, yangi testlar SONI,
+    test natijalari raqam bilan, anti-vakuum o'lchovi, qabul mezonining har bandi ✔/✘,
+    «bu o'zgarish qaysi mavjud oqimni buzishi mumkin?» javobi, ochiq qolganlar.
+11) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
 
 ---
 
