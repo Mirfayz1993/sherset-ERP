@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04, `fd271d18` — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04, `fd271d18` — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda), T10 TUGADI (2026-09-04, `8c0fd338`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -127,7 +127,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
 | **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | **QISMAN** |
-| **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | REJA |
+| **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | **TUGADI** |
 | **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | REJA |
 
 **Tartib sababi:** T1 eng arzon va rasmdagi holatni darhol yaxshilaydi; T2 matn kiritishning poydevori
@@ -2115,3 +2115,216 @@ API sirtiga tegmaydi.
    yo'q, `getCellProducts` da `deletedAt: null` filtri yo'q, T6 dagi 7 ta Списание. T9 ularga tegmadi.
 7. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T9 commitiga ham
    qo'shilmadi. Keyingi faza agenti ham o'z commitiga qo'shmasin.
+
+---
+
+### T10 — Oflayn o'quv keshi · **TUGADI** · 2026-09-04 · `8c0fd338`
+
+**Nima qilindi**
+
+*Yangi fayllar*
+
+- **`CacheShape.kt`** (YANGI, 287 qator) — **SOF modul** (`QtyExpression`/`CountUndo` naqshi,
+  T5/T7): Android ham, Compose ham, `R` ham kirmaydi. Keshning ikkita eng xavfli qarori shu
+  yerda va JVM testi bilan qulflangan:
+  - **oq ro'yxatlar** (`CELL_FIELDS`, `STOCK_FIELDS`, `BOUND_FIELDS`, `HIT_FIELDS`,
+    `HIT_CELL_FIELDS`, `TASK_CARD_FIELDS`, `TASK_FIELDS`, `LINE_FIELDS`) va ular ustida ishlaydigan
+    `pick()` / `pickAll()` proyeksiyasi;
+  - **hajm chegaralari** va `trim()` (eng eskisi chiqadi);
+  - **yosh** (`age()` → `Fresh` / `Minutes` / `Hours` / `Expired`) — matn EMAS, QAROR.
+- **`ReadCache.kt`** (YANGI, 127 qator) — `SharedPreferences` (`tsd_read_cache`), `ActionQueue`
+  naqshi: to'rt bo'lim (`cells`, `searches`, `tasks`, `task_list`), MRU tartib, `@Synchronized`,
+  har o'qish/yozish `runCatching` ichida (buzuq kesh ilovani yiqitmaydi — nosozlik `Diagnostics` ga).
+- **`CacheShapeTest.kt`** (YANGI, 295 qator, **15 test**).
+
+*Ekranlar*
+
+- **`CountScreen.kt`** (+218/−…): `cachedAt`, `cellCode`, `cacheRetry`, `refreshing` holatlari;
+  `adoptCell()` (jonli/kesh, `fresh` bayrog'i bilan), `openCellFromCache()`, `refreshQuietly()`;
+  `openCell()` endi keshni YOZADI va aloqa uzilsa keshdan ochadi; `onScan()` da `/tsd/scan`
+  yiqilsa keshdagi yacheykaga tushish.
+- **`TaskListScreen.kt`**, **`TaskDetailScreen.kt`** (+77 / +100): kesh o'qish/yozish, plashka,
+  jim yangilash; detalda oflaynda AMAL tugmalari chizilmaydi.
+- **`SearchScreen.kt`** (+36): AYNI so'rov bilan oxirgi natijalar (jim yangilash YO'Q — sabab quyida).
+- **`Widgets.kt`** (+49): `OfflineBadge()` — sariq karta, yoshi har 30 soniyada QAYTA hisoblanadi
+  (aks holda «2 daq oldin» yozilgan paytdagi raqamda muzlab qolardi).
+- **`Shell.kt`** / **`MainActivity.kt`**: `val cache: ReadCache`. `queue` bilan adashtirmaslik uchun
+  izoh: `queue` — YUBORILADIGAN amallar, `cache` — KO'RSATILADIGAN ma'lumot.
+- **`strings.xml`** (+11), **`build.gradle.kts`** (+7 — `testImplementation("org.json:json:20240303")`,
+  faqat TEST klasspathi, APK'ga tushmaydi), **`README.md`** (+40: «Oflayn o'quv keshi (T10)» bo'limi
+  + fayl xaritasi).
+
+**Nima keshlanadi (va nima ATAYLAB keshlanmaydi)**
+
+| Yo'l | Keshlanadi | Kalit | Bo'lim chegarasi |
+|---|---|---|---|
+| `cellByBarcode` — yacheyka tarkibi | `cells` + `stock` + `products` | SKANERLANGAN kod | **50** yacheyka |
+| `/tsd/search` | `products` + `truncated` | so'rov (registrsiz) | **20** so'rov |
+| `/restock-tasks/:id` | `id`, `sourceName`, `lines` | `taskId` | **20** topshiriq |
+| `/restock-tasks?assigneeId` | `items` | **`employeeId`** | **5** xodim |
+
+- **`/tsd/scan` KESHLANMAYDI** — u kodni TASNIFLAYDI (yacheykami/tovarmi/bo'lakmi). Eski tasnif
+  skanni noto'g'ri yo'lga yuborardi; oflaynda esa keshdan tovar «tanlash» **multi-hit qoidasini**
+  (tanlovni ODAM qiladi) chetlab o'tishga yo'l ochardi.
+- **`pieceTracked` / `pieceOptions` keshga tushmaydi** (`LINE_FIELDS` da yo'q) — kesim YOZUV amali;
+  test `bolakMaydonlariKeshgaTushmaydi` buni qulflaydi.
+- **`description` / `mainImageId` olinmaydi** — ekran ularni chizmaydi, tavsif esa keshning eng
+  katta va eng foydasiz qismi bo'lardi.
+- Ko'p natijali yacheyka yorlig'i (`cells.length() != 1`) **keshga umuman yozilmaydi**.
+- **Chiqishda kesh TOZALANMAYDI** va bu ataylab: PIN har ochilishda so'raladi, tozalansa kesh
+  eng kerak paytda (401 — ko'pincha aloqa uzilgani uchun) bo'sh bo'lardi. Sir ham, narx ham
+  saqlanmaydi; ro'yxat esa `employeeId` bilan kalitlangan, ya'ni boshqa smenaniki ko'rinmaydi.
+
+**Hajm chegarasi (raqamlar — qabul mezoni talab qiladi)**
+
+| Chegara | Qiymat | Sabab |
+|---|---|---|
+| Yacheyka yozuvlari | **50** | bitta smenada omborchi ~50 javon aylanadi |
+| Qidiruv yozuvlari | **20** | |
+| Topshiriq detallari | **20** | |
+| Xodim ro'yxatlari | **5** | bitta terminal — bir necha smena |
+| Bitta yacheykadagi qator | **200** | jonlidagi eng «qalin» javondan ancha yuqori shift |
+| Bitta topshiriqdagi qator | **300** | |
+| Qidiruv natijasi | **30** | server o'zi shuncha kesadi |
+| 🔴 **Har bo'lim** | **256 KB** | HAL QILUVCHI chegara |
+| 🔴 Eskirish | **12 soat** | bitta smena |
+
+Bayt chegarasi hal qiluvchi ekani ataylab: `SharedPreferences` butun faylni xotiraga o'qiydi va
+har `apply()` da qayta yozadi — bu esa eng issiq yo'lda (har yacheyka ochilishida) sodir bo'ladi.
+**O'lchandi** (`engQalinYacheykaBolimgaSigadi` testi, jurnalga chiqaradi): eng yomon holatdagi
+yacheyka yozuvi (200 qator) = **33 628 bayt**, ya'ni bo'limga **~7 ta** shunday yacheyka sig'adi.
+Jonlidagi odatiy javon (10–20 qator) ~2–3 KB, ya'ni amalda 50 ta yozuv chegarasi ishlaydi.
+Ikkalasidan qaysi biri oldin to'lsa, o'sha kesadi va **eng ESKISI** chiqadi.
+
+**Yosh belgisi**
+
+`OfflineBadge` — sariq karta, ro'yxatlardan OLDIN:
+
+| Yosh | Plashka |
+|---|---|
+| < 1 daq | «📴 Oflayn ma'lumot · hozirgina olingan» |
+| 1–59 daq | «📴 Oflayn ma'lumot · **12 daq oldin**» |
+| 1–11 soat | «📴 Oflayn ma'lumot · **3 soat oldin**» |
+| > 12 soat yoki **kelajakdan** | yozuv umuman BERILMAYDI (`Expired`) |
+
+Yosh **jonli**: karta ekranda turgan sayin har 30 soniyada qayta hisoblanadi. «Kelajakdan» ham
+`Expired`: qurilma soati orqaga surilsa «−3 soat oldin» plashkasi omborchiga hech nima demaydi.
+Sanash ekranida plashka ostida qo'shimcha izoh turadi: «🔴 Sanoq maydonlari BO'SH qoldirildi…»,
+topshiriq detalida — «🔴 Oflayn ko'rinish — faqat o'qish uchun…».
+
+**🔴 «Keshdan yozish qarori chiqmaydi» — qayerda va qanday (prompt bandi 3)**
+
+| Yo'l | Oflaynda | Mexanizm |
+|---|---|---|
+| Sanoq maydonining **sukut qiymati** | maydon **BO'SH** | `counts[id] ?: if (staleAt == null) qty else ""` — eng muhim bandi: eski «tizim soni» maydonda tursa, «Saqlash» bir bosishda uni **mutlaq sanoq** qilib yuborardi |
+| «Sanalayotgan tovar» kartasining soni | **BO'SH** | `pick()`: `if (cachedAt != null) ""` |
+| «Qolganini 0 qilib yopish» | **chizilmaydi** | `CloseRestBlock` boshida `if (cachedAt != null) return` — ro'yxat kesh bo'lsa, boshqa terminal sanagan qator «sanalmagan» ko'rinib, CHIQIM yozilardi |
+| ⟲ «Oxirgi sanoq» qaytarish | **taklif qilinmaydi** | `undoPoint()` boshida `if (cachedAt != null) return null` — nishon keshdagi eski qiymatdan olinardi |
+| Topshiriqda «Oldim»/«Topolmadim»/«✂ Kesish» | **chizilmaydi** | `LineCard`: `if (cachedAt != null) return@SectionCard` — tugma «qator hali OCHIQ» degan keshdan chiqqan xulosani bajarardi |
+| Topshiriqda **skan bilan tasdiq** | ishlamaydi | `onScan` da `/tsd/scan` yiqilsa xato aytiladi; keshda «bu shtrix qaysi tovar» javobi YO'Q |
+| «Tizimda» ustuni | yorlig'i «**Tizimda (eski nusxa)**» | `count_system_qty_stale` |
+
+Saqlash tugmasining O'ZI oflaynda ham bosiladi va bu to'g'ri: serverga ketadigan son —
+**omborchi kiritgan son**, keshdan olingan emas (prompt bandi 3 ning aynan shu shartlanishi).
+Amalda so'rov baribir `count_offline` bilan tushadi va son **maydonda turadi** — jim yo'qotish yo'q.
+
+**Narx qoidasi (§2, qoida 3) — yozma isbot**
+
+Server sirtiga **hech nima qo'shilmadi**: `git show --stat 8c0fd338` da `apps/`, `packages/`,
+`prisma/` **yo'q**, `tsd-policy.ts` ga qator qo'shilmadi, `ApiClient.kt` ham diffda yo'q
+(yangi endpoint chaqirilmadi — kesh MAVJUD javoblar ustida ishlaydi).
+
+Ilova ichida esa narx **tuzilmaviy** jihatdan keshga o'ta olmaydi: `ReadCache` javobni nusxa
+QILMAYDI, u `CacheShape` oq ro'yxatidan o'tkazadi va
+
+- ro'yxatda yo'q maydon tashlanadi;
+- ro'yxatda bor, lekin `nested` da e'lon qilinmagan **ichki obyekt** ham tashlanadi
+  (`price: { value, currency }` shakli ham o'ta olmaydi);
+- massiv `nested` bo'lmasa faqat **skalyarlari** ko'chiriladi.
+
+Bu test bilan qulflangan: **`cachedaNarxYoq`** — javobga `salePrice`, `buyPrice` va ichki
+`price` obyekti qo'shiladi, keshning matn ko'rinishida `price`/`narx`/`цена`/`uzs` va aniq
+sonlarning birortasi ham chiqmasligi tekshiriladi. **`oqRoyxatlarQulflangan`** esa oq
+ro'yxatlarning O'ZINI yozib qo'yadi: kimdir ularga maydon qo'shsa test yiqiladi.
+
+**Aloqa qaytganda jim yangilash**
+
+- Sanash / topshiriqlar ro'yxati / topshiriq detali: plashka turganda har **20 soniyada**
+  (`CacheShape.RETRY_MS`) bitta urinish. Muvaffaqiyatda ovoz ham, toast ham, banner ham YO'Q —
+  plashka shunchaki yo'qoladi; xatoda faqat `Diagnostics` ga qator.
+- 🔴 **Bitta urinish qo'riqchisi** (`refreshing`): `Shell.io` YAGONA thread'da yuradi va zaif
+  Wi-Fi'da bitta so'rov 15 s `connectTimeout` ushlaydi — qo'riqchisiz 20 soniyalik halqa navbatni
+  o'stirardi va **omborchining o'z amallari** o'sha navbat orqasida kutib qolardi.
+- Sanashda jim yangilash `fresh = false` bilan boradi: omborchi oflaynda terib qo'ygan sonlar,
+  ✓ belgilari va progress **saqlanadi**, faqat server ma'lumoti almashadi.
+- **Qidiruvda jim yangilash ATAYLAB YO'Q**: qidiruvni omborchi boshlaydi va «Qidirish» ni qayta
+  bosishning o'zi — aloqani qayta sinashning tayyor yo'li.
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Build | `gradle --no-daemon clean testDebugUnitTest assembleDebug` (Gradle 8.7, JDK 17) | **BUILD SUCCESSFUL in 1m 04s** · **42 task, 41 bajarildi** · exit **0** |
+| Ogohlantirish | o'sha log, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build) |
+| Unit-testlar | o'sha buyruq | **40 test · 0 failure · 0 error · 0 skipped** — `QtyExpressionTest` 17 (T5) + `CountUndoTest` 8 (T7) + **`CacheShapeTest` 15 (YANGI)** |
+| Eng qalin yacheyka yozuvi | `engQalinYacheykaBolimgaSigadi` (jurnalga chiqaradi) | **33 628 bayt** · bo'limga ~**7 ta** sig'adi |
+| APK | `app/build/outputs/apk/debug/app-debug.apk` | **13 029 136 bayt** (chiqarilmadi — §2 qoida 9) |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat 8c0fd338` da `apps/`, `packages/`, `prisma/` yo'q) |
+
+**Yangi testlar (15 ta)**
+
+Narx va shakl: **`cachedaNarxYoq`** · `oqRoyxatsizObyektTushmaydi` · `elonQilinganIchkiRoyxatOtadi` ·
+`nullSaqlanadi` · **`bolakMaydonlariKeshgaTushmaydi`** · **`oqRoyxatlarQulflangan`** ·
+`nuqsonliJavobYiqitmaydi`.
+Yosh: `yoshDaqiqaVaSoatda` · **`smenadanEskiYozuvKorsatilmaydi`** · `kelajakdagiYozuvHamEski`.
+Hajm: `yozuvSoniChegarasi` · `baytChegarasiHamKesadi` · **`engQalinYacheykaBolimgaSigadi`** ·
+`qidiruvNatijasiChegarada` · `topshiriqQatorlariChegarada`.
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` yashil (ogohlantirishsiz) | ✔ | toza `clean` build, 42 task / 41 bajarildi, `w:`/`warning`/`e:` — **0 qator**, exit 0 |
+| Kesh yoshi ko'rinadi | ✔ | `OfflineBadge` — «hozirgina / N daq oldin / N soat oldin», har 30 soniyada qayta hisoblanadi; 12 soatdan eskisi umuman berilmaydi |
+| Aloqa yo'q bo'lganda ekran o'qiladi | ✔ | sanash (yacheyka tarkibi), topshiriqlar ro'yxati, topshiriq detali, qidiruv — to'rttasi ham keshdan chiziladi. Ilgari uchtasi «Yuklanmoqda…» da abadiy qolardi |
+| Kesh hajmi chegaralangan va son hisobotda | ✔ | 50/20/20/5 yozuv · 200/300/30 qator · **256 KB** har bo'lim · **12 soat** eskirish; o'lchangan eng yomon yozuv **33 628 bayt** |
+| 🔴 Keshdan yozish qarori chiqmaydi | ✔ | yuqoridagi 7 qatorli jadval |
+| 🔴 Oflayn navbat qoidalari o'zgarmadi | ✔ | `ActionQueue.kt` va `QueueSender.kt` diffda **YO'Q**; sanash hamon navbatga qo'yilmaydi |
+| 🔴 Keshda narx yo'q | ✔ | oq ro'yxatli proyeksiya + `cachedaNarxYoq` va `oqRoyxatlarQulflangan` testlari; server sirti o'zgarmadi |
+| Room kiritilmadi | ✔ | `SharedPreferences` (`ReadCache`); `build.gradle.kts` ga faqat `testImplementation("org.json:json")` qo'shildi — APK'ga tushmaydi |
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+| Oqim | Xulosa | Dalil |
+|---|---|---|
+| **Sanash semantikasi (mutlaq son)** | buzilmaydi | `ApiClient.setCellStock` diffda YO'Q; `mode: 'set'` o'zgarmadi; `add` paydo bo'lmadi. Kesh sonni HECH QACHON yubormaydi |
+| **Oflayn AMAL navbati** | tegilmagan | `ActionQueue.kt`, `QueueSender.kt` — diffda yo'q. Kesh alohida `SharedPreferences` faylida (`tsd_read_cache`), `clientOpId` ni bilmaydi |
+| **Multi-hit (tanlovni ODAM qiladi)** | buzilmaydi | `/tsd/scan` keshlanmaydi; ko'p natijali yacheyka yorlig'i keshga yozilmaydi; qidiruvda keshdan kelgan ro'yxat ham o'sha `ProductHitCard` bilan chiziladi va bosishni odam qiladi |
+| **Narx qoidasi** | buzilmaydi | yuqoridagi «yozma isbot» bandi |
+| **ONLAYN yo'l (aloqa bor)** | o'zgarmaydi | jonli javobda `cachedAt = null` ⇒ hamma sukut qiymat, tugma va chiziq AVVALGIDEK. Yagona qo'shimcha ish — muvaffaqiyatli javobdan keyin IO thread'da bitta `SharedPreferences.apply()` (asinxron disk) |
+| **Yacheyka ochish tezligi** | ~o'zgarmaydi | kesh yozuvi IO thread'da va `apply()` (asinxron); bo'lim 256 KB dan oshmaydi |
+| **T6 progress / T7 chiziq** | saqlanadi | jim yangilash `fresh = false` bilan boradi (belgilar va sonlar qoladi); yacheyka almashsa `clearProgress()` hammasini, jumladan `cachedAt` ni tozalaydi |
+| **Xotira/disk** | chegarada | eng yomon holatda 4 bo'lim × 256 KB = **1 MB** |
+| ⚠️ **Yangi xulq: oflaynda «Oldim» tugmasi yo'q** | ATAYLAB | ilgari bu ekran oflaynda UMUMAN ochilmasdi, ya'ni yo'qotilgan imkoniyat yo'q. Tugmani kesh ustida chizish «qator ochiq» degan eskirgan xulosani bajarardi va amal 4xx bilan rad etilganlar ro'yxatiga tushardi |
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan** — bu faza kod va build darajasida yopildi. Oflayn xulqni
+   **T8 smoke ro'yxatiga** qo'shish kerak: (a) Wi-Fi o'chirilgan holda avval ochilgan yacheykani
+   qayta skanerlash → sariq plashka + BO'SH sanoq maydonlari; (b) Wi-Fi yoqilgach ≤20 soniyada
+   plashka o'zi yo'qolishi; (c) topshiriq detalida oflaynda tugmalar yo'qligi.
+2. **`ScanInfoScreen`, `PlaceScreen`, `CutScreen`, `ShortageScreen` keshlanmadi** — ular
+   YOZUV oqimlari yoki ma'lumoti keshdan foyda ko'rmaydigan ekranlar. Ataylab: T10 doirasi
+   rejada uchta o'quv yo'li bilan chegaralangan.
+3. **Kesh diagnostikada ko'rinmaydi** — `DiagnosticsScreen` da «keshda nechta yacheyka / oxirgi
+   yozuv qachon» qatori yo'q. Jonlida «nega plashka chiqmadi?» savoli tug'ilsa shu kerak bo'ladi.
+4. **`org.json:json` test-bog'liqligi qo'shildi** (faqat `testImplementation`). Ilova baribir
+   Android'ning o'z `org.json` ini ishlatadi; APK hajmi o'zgarmadi (13 029 136 bayt, T7 dagi
+   13 007 956 dan farq — T9/T10 kodi).
+5. **Pre-commit hook `docs/progress.json` ni commitga qo'shdi** (faqat `generatedAt` vaqt tamg'asi
+   yangilandi) — bu avtomatik generatsiya, T10 ishi emas.
+6. **Oldingi fazalardan qolgan ochiqlar hamon ochiq**: `ShortageScreen` da ifoda rejimi yo'q,
+   `getCellProducts` da `deletedAt: null` filtri yo'q, T6 dagi 7 ta Списание, T9 ning egasidan
+   kutilayotgan ikki ishi (zaxira + jonli o'tish). T10 ularga tegmadi.
+7. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T10 commitiga ham
+   qo'shilmadi (§2 qoida 6). Keyingi faza agenti ham o'z commitiga qo'shmasin.
