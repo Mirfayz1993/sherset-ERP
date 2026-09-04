@@ -4,7 +4,15 @@
   `values-ru/strings.xml` qo'shiladi — kod o'zgarmaydi.
 -->
 <resources>
-    <string name="app_name">Sherset Menejer</string>
+    <!--
+      v0.2 dan boshlab ilova FAQAT menejerniki emas — «Mening kunim» bo'limi
+      har bir xodimga ochiq (X-reja X1–X6). Shuning uchun launcher yorlig'i
+      «Sherset Menejer» EMAS, shunchaki «Sherset». Paket nomi (`uz.sherset.manager`)
+      va katalog nomi (`manager-app`) ATAYLAB o'zgarmadi: `applicationId` ni
+      o'zgartirish — bu BOSHQA ilova degani, ya'ni yangilanish kanali uziladi
+      va planshetda ikkita ilova qolib ketardi.
+    -->
+    <string name="app_name">Sherset</string>
 
     <!-- Kirish (v0.1 — email+parol) -->
     <string name="login_title">Kirish</string>

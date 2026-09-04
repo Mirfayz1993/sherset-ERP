@@ -684,3 +684,111 @@ Xavfsizlik bundan zaiflashmaydi: himoyani **darvoza emas, QAMROV** beradi — `e
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x6 — oyligim ekrani va hr/payroll/my endpointi`.
+
+---
+
+### X7 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi (chiqarish darvozasi ochiq — lekin egasidan bir nechta band kutilmoqda, pastdagi «Egasidan kutilmoqda» ro'yxati)
+
+**O'zgargan/yangi fayllar:**
+
+| Fayl | Nima qilindi |
+|---|---|
+| `android/manager-app/app/build.gradle.kts` | Versiya **0.1.0 → 0.2.0**, `versionCode` **1 → 2**. **Release imzo bloki** (tsd-app T9 naqshi): `~/.sherset/sherset-manager-release.properties` dan o'qiladi (yo'lni `SHERSET_MANAGER_KEYSTORE_PROPS` bilan ko'chirish mumkin), `signingConfigs.release` faqat kalit MAVJUD bo'lsa yaratiladi, `buildTypes.release.signingConfig = findByName("release")`, oxirida `assembleRelease`/`bundleRelease` uchun aniq xabarli to'siq. |
+| `…/app/src/main/res/values/strings.xml` | `app_name`: «Sherset Menejer» → **«Sherset»**. Izohda `applicationId` NEGA o'zgarmagani yozildi. |
+| `…/.gitignore` | `*.jks`, `*.keystore`, `*keystore*.properties`, `sherset-manager-release.properties` (tsd-app bilan bir xil to'siq). |
+| `…/tools/imzo-yarat.sh` | **YANGI.** Release kalitni BIR MARTA yaratish (PKCS12, RSA 4096, 2056 gacha). Kalit bor bo'lsa TO'XTAYDI; kalit repo ICHIDA yaratilishini rad etadi; parol `openssl rand -hex 24`; oxirida sertifikat izini chiqarib, `EXPECTED_SIGNER` ga yozishni va ZAXIRA olishni talab qiladi. |
+| `…/tools/publish.sh` | **Uchta tuzatish** (pastda 1–3 topilma): `grep -oP` → `sed`, `assembleDebug` → **`assembleRelease` + `apksigner` imzo tekshiruvi**, apostrof nuqsoni. `EXPECTED_SIGNER` bo'sh — fail-closed. |
+| `…/README.md` | v0.2 ga to'liq yangilandi: sarlavha/holat, «Boshqaruv» va «Mening kunim» bo'limlari, own-only endpointlar jadvali, darvoza divergensiyasi izohi, 🔴 uchta ma'lumot bandi jadvali, **«Release imzo» bo'limi (5 kichik bo'lim: yaratish · iz · zaxira · debug→release o'tishi · boshqa mashina)**, build/test buyruqlari, to'liq fayl xaritasi. v0.1 smoke ro'yxati OLIB TASHLANDI. |
+| `docs/ops/2026-09-04-menejer-v0.2-smoke.md` | **YANGI — yagona smoke-reja.** 10 bo'lim, ~70 band, har biri «kim · qaysi qurilma · nima bosadi · nima kutiladi» jadvali: oldindan-shartlar (kalit, kanal, ruxsatlar) · 3 xil sinov hisobi (A menejer / B oddiy xodim / C haydovchi) · o'rnatish · **rolga moslashuv** · v0.1 regressiyasi · X2–X6 ekranlari · **9-bo'lim: xavfsizlik** (`?employeeId=` bilan qo'lda urinish bandlari) · yangilanish kanali · imzo blanki. |
+| `android/manager-app/**` (v0.1 poydevori) | **Kuzatuvga OLINDI** — pastda 5-topilma. |
+
+**Testlar (yakuniy tekshiruv, 0-bo'lim 6-qoidasi):**
+
+- `gradle testDebugUnitTest` → **139 test, 139 o'tdi, 0 yiqildi, 0 xato.** Fayl kesimida o'lchandi: `MyPayrollTest` 30 · `MyKpiTest` 27 · `RoutesTest` 27 · `DavomatTest` 22 · `TasksTest` 17 · `HrAccessTest` 16.
+- `gradle assembleDebug` → **BUILD SUCCESSFUL.** APK 13 057 620 bayt.
+  ⚠️ Bu X6 dagi 13 746 148 baytdan **688 528 bayt KICHIK**. Sabab tekshirildi va u KOD YO'QOLISHI EMAS: APK 5 ta dex'ga bo'lingan va `classes*.dex` ichidan HAR BIR ekran sinfi qidirib topildi (`AttendanceScreen`, `MyTasksScreen`, `RoutesScreen`, `MyKpiScreen`, `MyPayrollScreen`, `HomeScreen`, `HrAccess`, `Davomat`, `Locator`, `SessionUser`, `ComingSoonScreen` — hammasi `classes3.dex` da). Farq — inkremental va `--rerun-tasks` bilan qurilgan build'lar orasidagi dex-bo'linish farqi (X6 `--rerun-tasks` bilan o'lchagan).
+- 🔴 `gradle assembleRelease` → **kutilgandek yiqildi**, aynan mo'ljallangan joyda:
+  `Execution failed for task ':app:assembleRelease' > Release kaliti topilmadi: C:\Users\user\.sherset\sherset-manager-release.properties`
+  **Konfiguratsiya bosqichi TOZA o'tdi** (46 ta task bajarildi, `packageRelease` ham) — ya'ni reja talabi «assembleRelease konfiguratsiya darajasida xato bermasin» BAJARILDI, to'siq esa ijro bosqichida.
+- 🔴 **To'siq NEGA kerakligi O'LCHAB tasdiqlandi:** `packageRelease` gacha yetib borgani uchun diskda `app-release-unsigned.apk` (10 164 609 bayt) HOSIL BO'LDI. `apksigner verify` unga → **`DOES NOT VERIFY / Missing META-INF/MANIFEST.MF`**. Ya'ni to'siqsiz AGP jimgina imzosiz APK berardi. Himoya uch qavatli: (a) Gradle to'sig'i, (b) `publish.sh` `app-release.apk` ni topmay to'xtaydi, (c) `apksigner` izi solishtiriladi.
+- `aapt2 dump badging` (qurilgan APK'ning O'ZIDAN, hujjatdan emas) → `package: name='uz.sherset.manager' versionCode='2' versionName='0.2.0'`, `application-label:'Sherset'`. Ya'ni 1-vazifa uch nuqtada ham tasdiqlandi va **paket nomi o'zgarmadi** (yangilanish kanali butun).
+- `apps/api` `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato.**
+- `vitest run src/modules/hr src/app-boot.test.ts` → **102 fayl, 1138 test, hammasi o'tdi** (X6 dagi son bilan AYNI — X7 serverga bitta qator ham yozmadi).
+- `no-mojibake.test.ts` → 4 test, o'tdi. X7 ning 7 ta yangi/o'zgargan matn fayli qo'lda ham skanlandi: **BOM'siz UTF-8, mojibake imzosi 0 marta.**
+- `bash -n` ikkala skriptga → toza. `publish.sh` fail-closed yo'li HAQIQATDA yuritildi: versiyani to'g'ri o'qidi (`0.2.0 (code 2)`) va `EXPECTED_SIGNER` bo'shligi uchun **jonli serverga BIRORTA ham so'rov yubormasdan** to'xtadi (to'siq `curl` dan OLDIN turadi — 0-bo'lim 4-qoidasi).
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **`publish.sh` APOSTROF tufayli UMUMAN ISHGA TUSHMASDI — va bu nuqson `tsd-app` da HOZIR HAM BOR.** `echo "topilgan: ${SIGNER:-<imzo yo'q>}"` — `${VAR:-matn}` ichidagi apostrof qo'sh tirnoq ichida ham yangi tirnoq ochadi, natijada bash BUTUN faylni parse qila olmaydi va skript BIRINCHI QATORDAyoq `unexpected EOF while looking for matching '` bilan yiqiladi. Alohida 2 qatorli namunada izolyatsiya qilib tasdiqlandi.
+   🔴 **`android/tsd-app/tools/publish.sh` — `bash -n` → line 108 da AYNI xato.** Ya'ni **TSD 0.6.0 ni bu skript bilan chiqarib bo'lmaydi** (T9 hisoboti buni sezmagan: skript «tayyorlandi», lekin hech qachon YURITILMAGAN). Men uni TUZATMADIM — 0-bo'lim 5-qoidasi (boshqa fazaning fayli). **Egasiga: bir qatorlik tuzatish**, `android/tsd-app/tools/publish.sh` da `yo'q` → `topilmadi` (yoki apostrofni olib tashlash).
+2. 🔴 **`publish.sh` DEBUG APK chiqarardi.** Skript `assembleDebug` qilib `app-debug.apk` ni serverga yuklardi — ya'ni v0.2 debug-kalit bilan chiqib ketardi va release-imzoga o'tishning ma'nosi qolmasdi. Endi `assembleRelease` + `apksigner` izi tekshiruvi.
+3. **`grep -oP` Git Bash'da ishlamaydi** (tsd-app T9 da o'lchangan tuzoq: «grep: -P supports only unibyte and UTF-8 locales»). Manager skriptida u ikki joyda edi — ikkalasi ham `sed` ga o'tkazildi.
+4. ⚠️ **`EXPECTED_SIGNER` bo'sh qoldi — ATAYLAB, va skript bundan TO'XTAYDI.** Kalit hali yaratilmagani uchun izni bilib bo'lmaydi. «Iz bo'sh bo'lsa tekshiruvni o'tkazib yuborish» varianti RAD ETILDI: aynan «kalit sozlanmagan» holatda imzosiz/debug-imzoli APK chiqib ketish xavfi eng yuqori. Fail-closed. Egasi kalitni yaratgach izni bir marta yozadi (yoki `SHERSET_MANAGER_SIGNER=` bilan beradi).
+5. **X1 ning 4-topilmasi (X2–X6 da OLTI marta takrorlangan) — YOPILDI.** X1 «Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 agentiga shu vazifa berilsin)» degan edi; X7 chiqarish darvozasi bo'lgani va poydevorsiz repo ilovani UMUMAN qura olmagani uchun vazifa shu yerda bajarildi. Commitga qo'shildi: `BriefingScreen.kt`, `CollectionScreen.kt`, `KpiScreen.kt`, `MoneyMapScreen.kt`, `Theme.kt`, `Widgets.kt`, `Fmt.kt`, `Updater.kt`, `UpdateCard.kt`, `config.xml`, `res/xml/file_paths.xml`, `gradle.properties`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` va v0.1 rejasi (`docs/plans/2026-09-02-menejer-planshet-apk.md` — README undan havola qiladi). **Endi X1…X7 commitlari yolg'iz o'zi yig'iladi.**
+6. ⚠️ **`apps/api/src/scripts/ops-menejer-rol.ts` ATAYLAB commit QILINMADI** — u boshqa sessiyaning fayli (0-bo'lim 5-qoidasi) va X7 qabul mezoni uni «egasidan kutilmoqda» ro'yxatiga qo'yadi. O'qib chiqildi: u `general_manager` rolini va `hrRoles` lug'atiga `'manager'` qiymatini jonlida yaratadi. **Ya'ni X1 ning 2-topilmasining YARMI shu skriptda javob topgan** (`manager` qiymati aynan `'manager'`), lekin **`driver` qiymati unda YO'Q** — haydovchi savoli hamon ochiq.
+7. 🔴 **MUHIT: `C:` diski 100% to'lgan edi (0 bayt bo'sh) va Gradle UMUMAN ishga tushmasdi** («Unable to create daemon log file … not enough space»). Bu X7 ning kodiga aloqasi yo'q, lekin har qanday build'ni to'xtatadi. Bo'shatildi: `AppData/Local/npm-cache` (1,3 GB — sof kesh, o'zi qayta yaratiladi) va `.gradle/daemon` loglari. Hozir **1,3 GB bo'sh**. ⚠️ Bu VAQTINCHA yengillik: `AppData/Local/pnpm` (1016 MB) va `.gradle/caches` (1,2 GB) hamon turibdi va ular ISHLATILADI — o'chirilmadi. **Egasiga: `C:` da joy jiddiy kam, keyingi build yana to'xtashi mumkin.**
+8. **Ilova nomi o'zgardi, PAKET nomi O'ZGARMADI — bu ataylab.** `applicationId` ni `uz.sherset.manager` dan boshqasiga o'tkazish Android uchun BOSHQA ilova degani: yangilanish kanali uzilardi va qurilmada ikkita ilova qolib ketardi. Katalog nomi (`manager-app`) ham shu sababdan o'zgarmadi. Buning izohi `strings.xml`, README va build faylida yozib qo'yildi.
+9. ⚠️ **«debug → release» o'tishi jonli holatga bog'liq va uni MEN tekshira olmayman** (0-bo'lim 4-qoidasi — jonliga tegilmaydi). Ikki stsenariy README da ham, smoke-rejada ham yozilgan: (a) `/downloads/menejer/` kanali hali OCHILMAGAN bo'lsa (`latest.json` yo'q) — 0.2.0 birinchi chiqarish, hech qanday qo'l ishi kerak emas; (b) v0.1 biror planshetga qo'lda o'rnatilgan bo'lsa — o'sha qurilmada o'chirib qayta o'rnatish va **qayta login** kerak. **Egasi qaysi biri ekanini tasdiqlasin.** Yo'qoladigan narsa faqat sessiya: ilova hech nimani oflayn navbatda saqlamaydi (TSD dan farqli — u yerda juftlash va `ActionQueue` yo'qolardi).
+10. **Kalit tsd-app nikidan ALOHIDA.** `sherset-tsd-release.jks` qayta ishlatilmadi: ikki ilova ikki xil `applicationId` ga ega va bitta kalitning yo'qolishi IKKI kanalni birdaniga o'ldirardi. Alias `sherset-manager`, fayl `sherset-manager-release.jks`.
+11. **Smoke-reja BITTA fayl bo'ldi va README dagi eskisi olib tashlandi.** Reja «yagona smoke-reja» deydi; README da v0.1 ning 10 bandli ro'yxati turgan edi — ikki joyda ikki xil ro'yxat vaqt o'tib bir-biridan uzoqlashardi. Endi README faqat havola qiladi, v0.1 bandlari yangi faylning 1-, 3- va 10-bo'limlariga singdirildi.
+12. **Reja «docs/ops ga yagona smoke-reja» deydi — imzo yo'riqnomasi esa README ga yozildi**, alohida `docs/ops/menejer-release-imzo.md` YARATILMADI. Sabab: X7 vazifa matni aynan «yo'riqnomani README'ga yoz» deydi va bitta yangi ops-fayl (smoke) so'raydi. tsd-app da yo'riqnoma alohida ops-faylda (`tsd-release-imzo.md`) — ya'ni ikki ilova ikki xil joyda saqlaydi. **Kelajakda birlashtirish kerak bo'lsa** README dagi bo'lim shundayligicha ops-faylga ko'chiriladi.
+
+---
+
+## 🔷 X1–X7 JAMLAMA (X7 vazifa 5)
+
+### Nima qilindi — bir qarashda
+
+| Faza | Server | Ilova | Yangi testlar |
+|---|---|---|---|
+| X1 | — | Bosh ekran rolga moslashadi, `hrRoles`/`hrPermissions` sessiyada | 16 JVM |
+| X2 | `GET /hr/attendance/my/history` | Davomat ekrani (+ GPS `Locator`) | 12 server + 22 JVM |
+| X3 | 🔴 `employeeId`-override nuqsoni + `GET /hr/tasks/my` | Ishlarim + javob yuborish | 22 server + 17 JVM |
+| X4 | — | Yo'nalishlarim (smena, reyslar, naqd) | 27 JVM |
+| X5 | `GET /hr/kpi/my` | Mening KPI'im | 47 server + 27 JVM |
+| X6 | `GET /hr/payroll/my/:yearMonth` | Oyligim | 36 server + 30 JVM |
+| X7 | — | 0.2.0, «Sherset», release-imzo, publish, smoke | — |
+
+**Yakuniy o'lchov:** ilova **139 JVM testi**, HR moduli **1138 test / 102 fayl**, typecheck **0 xato**, `assembleDebug` **yashil**, APK **0.2.0 (code 2)**, ilova nomi **«Sherset»**.
+
+### Fazalararo nomuvofiqliklar
+
+1. ⚠️ **Darvozalar bir xil emas — ONGLI, lekin oqibati bor.** `hr/kpi/my` `JwtAuthGuard` bilan (X5), `hr/payroll/my` esa `oylik:own_only` bilan (X6). Ikkala qaror ham o'z hisobotida asoslangan va ikkalasi ham to'g'ri, LEKIN natija shu: **«Mening KPI'im» har xodimda ishlaydi, «Oyligim» esa faqat ruxsat qatori berilganida.** Bu nuqson emas, ammo egasi buni BILISHI kerak — aks holda «KPI ochildi, oylik 403» chalkash ko'rinadi. README va smoke-rejaga yozildi.
+2. 🔴 **Uchta bir xil sinfdagi «jonlida ma'lumot bormi?» savoli — X1#2, X3#9, X6#2 — HAMON OCHIQ va endi BITTA ro'yxat.** Ular kod nuqsoni emas, ma'lumot bandi; hammasi fail-closed (xavfsiz, lekin foydasiz):
+
+   | Nima kerak | Berilmasa | Qayerdan |
+   |---|---|---|
+   | HR `tasks:own_only` | «Ishlarim» → 403 | HR ekrani (qo'lda) |
+   | HR `oylik:own_only` | «Oyligim» → 403 | HR ekrani (qo'lda) |
+   | `hrRoles` da `driver` **va** `trackingMode='field'` | «Yo'nalishlarim» ko'rinmaydi / 400 | HR ekrani |
+
+   ⚠️ `seed-hr.ts` sahifa ruxsatlarini FAQAT egalarga/adminlarga yozadi. `ops-menejer-rol.ts` `manager` qiymatini beradi, `driver` ni EMAS.
+3. **Sana/vaqt ikki xil turda — ikkala tuzoq ham yopilgan, lekin X8–X9 da QAYTADI.** `Date` maydonlari (`sentAt`, `computedAt`, `startedAt`…) UTC keladi va Toshkentga O'GIRILADI (`Tasks.dateTime`); `@db.Date` maydonlari (`EmployeeDailyKpi.date`, `yearMonth`) esa YORLIQ va SURILMAYDI (`MyKpi.dateOnly`, `Davomat`). Ikkovini adashtirish kunni bir kunga surib yuboradi. Testlari bor.
+4. **`Locale.ROOT` va ko'rinmas belgilar** (X4#7, X5#9, X6#5): `%f` kasr ajratgichi, U+00A0 minglik ajratgichi, U+2212 minus. Har uchalasi test bilan qulflangan — yangi ekran yozilganda takrorlanadi.
+5. **Texnik qarz — ro'yxatga olindi, X7 da TUZATILMADI** (qamrovdan tashqarida): (a) muhr qoidasi UCH joyda (X5#1) → `kpi-seal.util.ts` ga chiqarish kerak; (b) `HR_BONUS_FINE_SOURCES` zod-enumi eskirgan, kod undan tashqarida 3 qiymat yozadi (X6#3); (c) `GET /hr/kpi/daily` boshqa jadvaldan o'qiydi va endi faqat eski web ekranini boqadi (X5#6); (d) reyslarda mijoz ismi yo'q (X4#2) — kerak bo'lsa server ishi.
+6. **ATAYLAB ulanmagan amallar** (uchalasi ham bir xil qarordan): `POST /driver-cash/collect` (X4#9), `POST payroll/compute` (X6#10), reys bosqichini o'zgartirish (X4#4). Hammasi pul/dispecher zanjiriga YOZADIGAN amallar — alohida fazaga arziydi.
+7. **X2#5 va X5#7 — «halol, lekin bo'sh ekran» xavfi:** hafta jadvali biriktirilmagan xodimda butun oy «dam olish», KPI profili biriktirilmagan xodimda ball umuman yo'q. Ikkalasi ham MAVJUD xulq (menejer hisoboti ham shunday), lekin jonlida nechta xodim shunday ekanini o'lchash kerak.
+
+### ✅ Jonliga TAYYOR
+
+- Kod: X1–X6 ning hammasi, testlar yashil, typecheck toza, APK quriladi.
+- Release-imzo **konfiguratsiyasi** va uning uch qavatli himoyasi.
+- `publish.sh` — endi release quradi va imzoni tekshiradi (uchta nuqson tuzatilgan).
+- Yagona smoke-reja: `docs/ops/2026-09-04-menejer-v0.2-smoke.md`.
+- Repo endi ilovani o'zi qura oladi (v0.1 poydevori kuzatuvga olindi).
+
+### ⏳ EGASIDAN kutilmoqda (chiqarishdan OLDIN)
+
+1. 🔴 **Release kalitni yaratish** — `bash android/manager-app/tools/imzo-yarat.sh`, so'ng **zaxira** (ikki joyga) va izni `publish.sh` dagi `EXPECTED_SIGNER` ga yozish. Busiz `assembleRelease` ishlamaydi.
+2. 🔴 **Uchta ma'lumot bandi** (yuqoridagi jadval): `tasks:own_only`, `oylik:own_only`, `driver` + `trackingMode='field'`.
+3. 🔴 **`ops-menejer-rol.ts` ni jonlida yuritish** (boshqa sessiyaning fayli, hali commit qilinmagan) — `general_manager` roli va `hrRoles` da `manager`.
+4. ⚠️ **Tasdiqlash:** `/downloads/menejer/` kanali ochilganmi va v0.1 biror qurilmaga o'rnatilganmi (9-topilma — debug→release o'tishi kerakmi yo'qmi shunga bog'liq).
+5. ⚠️ **Serverda katalog:** `mkdir -p /var/www/kassa-downloads/menejer` (birinchi chiqarishdan oldin).
+6. **Deploy oynasi** (20:00–04:30) — server o'zgarishlari (X2/X3/X5/X6 endpointlari) jonliga shu oynada chiqadi.
+7. ⚠️ **`android/tsd-app/tools/publish.sh` dagi apostrof nuqsoni** (1-topilma) — TSD ning O'Z chiqarishini bloklaydi, bir qatorlik tuzatish.
+8. ⚠️ **`C:` diskida joy** (7-topilma).
+
+**Commit:** kod, v0.1 poydevori va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x7 — 0.2.0, release-imzo va yagona smoke-reja`.

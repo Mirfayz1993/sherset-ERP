@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backend bazaviy URL. `usesCleartextTraffic=false` ⇒ FAQAT https. -->
+    <string name="api_base_url">https://erp.sherset.uz/api/v1</string>
+
+    <!--
+      Yangilanish manifesti (`Updater.kt`). API EMAS — nginx statikasi
+      (`/var/www/kassa-downloads/menejer/latest.json`), tokensiz o'qiladi.
+      Shakli: {versionCode, versionName, url, sha256, notes}.
+    -->
+    <string name="update_manifest_url">https://erp.sherset.uz/downloads/menejer/latest.json</string>
+</resources>

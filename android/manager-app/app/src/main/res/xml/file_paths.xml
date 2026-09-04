@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider yo'llari. FAQAT ichki keshdagi `update.apk` ulashiladi —
+  boshqa hech narsa (tokenlar) tashqariga chiqmaydi.
+-->
+<paths>
+    <cache-path name="update" path="." />
+</paths>

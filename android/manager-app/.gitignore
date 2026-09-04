@@ -1,0 +1,18 @@
+# Android build artefaktlari
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+.idea/
+captures/
+.cxx/
+
+# 🔴 Imzo kaliti va parollar (X-reja X7) — repo public. Kalit aslida repodan
+# TASHQARIDA (`~/.sherset/`) turadi; bular xato bilan ko'chirilgan nusxadan
+# himoya (tsd-app/.gitignore bilan bir xil to'siq).
+*.jks
+*.keystore
+*keystore*.properties
+sherset-manager-release.properties
