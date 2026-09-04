@@ -350,10 +350,13 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventari
 
 ### S4 — TZ qotirish + guard test
 
-**Fayllar:** §1.3 dagi ro'yxatning S2/S3 da yopilmagan qolgani — `cheklar-mode.tsx:407,1074` ·
-`smena-mode.tsx:231` · `vozvrat-mode.tsx:347` · `zakazlar-mode.tsx:284` · `customers-panel.tsx:464,787,792` ·
-`customer-card-panel.tsx:195` · `debt-payment-dialog.tsx:144` · `customer-display/page.tsx:886` ·
-`app/print/cash-in/[docId]/page.tsx:25` · `app/print/cash-out/[docId]/page.tsx:28`.
+**Fayllar** (qatorlar S3 dan KEYIN qayta o'lchandi, HEAD `aebaba5e` — 11 ta nuqta):
+`cheklar-mode.tsx:407,1074` · `smena-mode.tsx:231` · `vozvrat-mode.tsx:347` · `zakazlar-mode.tsx:284` ·
+`customers-panel.tsx:464,787,792` · `customer-card-panel.tsx:195` · `debt-payment-dialog.tsx:147` ·
+`customer-display/page.tsx:887` · `app/print/cash-in/[docId]/page.tsx:25` ·
+`app/print/cash-out/[docId]/page.tsx:28`. Bularga qo'shimcha ikki qoldiq:
+`sotuv/page.tsx:985` (zaxira `CHEK-HHMMSS` — `getHours/getMinutes/getSeconds` qurilma mintaqasida) va
+`customer-display/page.tsx:344` (`Date.now()` — DEMO qoralama yoshi; oq ro'yxat qarori).
 
 **Yangi guard:** `apps/web/src/__tests__/pos-clock-discipline.test.ts` — manba-skaner
 (`kassa-default-printer.test.ts` uslubi: izohlar `stripComments` bilan olib tashlanadi + **anti-vacuity**
@@ -370,6 +373,94 @@ tekshiruvi):
 
 **Qabul mezoni:** ✔ guard yashil va **vacuity emas** (ataylab buzilgan namunada qizarishi hisobotda
 ko'rsatiladi) · ✔ mavjud POS testlari regress yo'q.
+
+<details><summary><b>S4 sessiyasi uchun PROMPT</b></summary>
+
+```
+Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2, branch yacheyka-inventarizatsiya).
+
+1) `docs/plans/2026-09-04-kassa-vaqt-ishonchliligi.md` ni TO'LIQ o'qi — §1 (ayniqsa §1.3),
+   §2 (o'zgarmas qoidalar, xususan qoida 4 dagi OQ RO'YXAT), §4 va §5 dagi S4 bo'limi,
+   hamda §6 dagi S0, S1, S2, S3 hisobotlari.
+2) Sen FAQAT **S4 — TZ qotirish + guard test** fazasini bajarasan. Faqat web (`apps/web`);
+   serverga (`apps/api`) TEGILMAYDI. Hisobotda buni `git diff --stat` bilan yozma isbotla.
+3) 🔴 IKKINCHI VAQT MANBASI YARATMA. Tayyor: `lib/clock.ts` (`serverNow`, `POS_TZ`),
+   `hooks/use-server-clock.ts`, `lib/pos/pos-calendar.ts` (Toshkent kalendar kuni).
+   Yangi skew/format/kalendar moduli — TAQIQ. Yangi so'rov ham qo'shilmaydi.
+4) 🔴 LOKALNI O'ZGARTIRMA. Bu faza FAQAT `timeZone` qo'shadi. `useBcp47()` ham,
+   `'ru-RU'`/`'uz-UZ'` qattiq teglari ham O'Z JOYIDA qoladi — ular alohida qaror
+   (`pos-bcp47-guard.test.ts` va uning oq ro'yxati buni hujjatlaydi). Lokalga tegsang
+   pul/sana ko'rinishi tilga qarab siljiydi — bu regressiya.
+5) Ish (uch qism):
+   a) **TZ qotirish — 11 ta nuqta** (qatorlar HEAD `aebaba5e` da o'lchangan; avval
+      `grep` bilan qayta tekshir, boshqa sessiyalar fayllarni siljitgan bo'lishi mumkin):
+      `sotuv/_components/cheklar-mode.tsx:407,1074` · `smena-mode.tsx:231` ·
+      `vozvrat-mode.tsx:347` · `zakazlar-mode.tsx:284` ·
+      `components/pos/customers-panel.tsx:464,787,792` · `customer-card-panel.tsx:195` ·
+      `debt-payment-dialog.tsx:147` · `app/customer-display/page.tsx:887` ·
+      `app/print/cash-in/[docId]/page.tsx:25` · `app/print/cash-out/[docId]/page.tsx:28`.
+      Har biriga `timeZone: POS_TZ` qo'shiladi, boshqa hech nima.
+      🔴 `customer-display/__tests__/customer-display.test.tsx:82` dagi fixture
+      (`new Date(2026, 8, 1, 5, 1)`) MASHINA mintaqasida yozilgan — sinov mashinasi
+      Toshkentda bo'lgani uchun u hozir tasodifan yashil. Uni ANIQ instantga
+      (`new Date('…T00:01:00.000Z')` kabi) ko'chir, aks holda guard qo'shilgach ham
+      test boshqa mashinada qizarardi.
+   b) **Ikki qoldiq** (S2/S3 hisobotlarida ochiq deb yozilgan):
+      · `sotuv/page.tsx:985` — tarmoq yiqilgandagi zaxira `CHEK-HHMMSS` raqami
+        `now.getHours/getMinutes/getSeconds` bilan yasaladi, ya'ni QURILMA mintaqasida.
+        Vaqt manbasi allaqachon `serverNow()`; endi mintaqa ham Toshkent bo'lsin.
+        🔴 Bu IDENTIFIKATOR: raqam formati (`CHEK-HHMMSS`, 6 raqam) va takrorlanmaslik
+        kafolati O'ZGARMASIN, `document_sequences` asosiy shoxiga TEGILMASIN.
+      · `app/customer-display/page.tsx:344` — `Date.now()` DEMO qoralama yoshi uchun.
+        Bu nisbiy o'lchov (`?demo=1` ko'rgazma rejimi), ya'ni oq ro'yxatga tushishi
+        mumkin — QARORNI o'zing qabul qil va guard'ning oq ro'yxatida SABAB bilan yoz.
+   c) **Yangi guard:** `apps/web/src/__tests__/pos-clock-discipline.test.ts` — manba-skaner,
+      `kassa-default-printer.test.ts` uslubida (izohlar `stripComments` bilan olib
+      tashlanadi). Uch qoida:
+      1. POS yo'llarida (`app/(app)/sotuv/**`, `components/pos/**`, `lib/pos/**`,
+         `app/customer-display/**`) `new Date()` / `Date.now()` YO'Q — §2 qoida 4 dagi
+         oq ro'yxatdan tashqari (`sotuv-mode.tsx:109` debounce, `cart-drafts.ts:97`
+         `newDraftId`, + o'zing qo'shgani). Oq ro'yxat FAYL BO'YICHA va SABAB bilan.
+      2. O'sha yo'llarda sana ustidan `toLocaleTimeString`/`toLocaleDateString`/
+         `toLocaleString` `timeZone`siz chaqirilmaydi.
+         🔴 YOLG'ON-POZITIV XAVFI: `toLocaleString` RAQAM uchun ham ishlatiladi —
+         `sotuv-mode.tsx:217` (`onHand.toLocaleString`), `pos-rate-chip.tsx:43`,
+         `receipt-model.ts:217` (`fmtQty`), `payment-dialog.tsx:32`. Skaner faqat
+         SANA ustidagi chaqiruvni tutsin; raqamlarni tutsa guard shovqinga aylanadi.
+      3. POS'dan serverga `moment` yuborilmasligi (§2 qoida 3 ni testga aylantiradi) —
+         S2 hisobotidagi o'lchov usuli: yozish yo'nalishida `moment` faqat proforma
+         qog'oz yo'lida; `sortBy=moment` GET parametri va javobni O'QISH mustasno.
+6) 🔴 ANTI-VACUITY MAJBURIY. Guard uchun ham, TZ tuzatishlari uchun ham:
+      · guard: ataylab buzilgan namunada (masalan vaqtincha `new Date()` qo'shib)
+        QIZARISHINI o'lchab, natijani hisobotga yoz;
+      · TZ: sinov mashinasining o'z mintaqasi `Asia/Tashkent` — shuning uchun
+        `timeZone` qo'shilgani oddiy testda KO'RINMAYDI. `vi.stubEnv('TZ', 'Pacific/Honolulu')`
+        naqshini ishlat (S2/S3 hisobotlarida ishlagan) va tuzatishni vaqtincha orqaga
+        qaytarib qizarishini ko'rsat. Yashil test o'z-o'zidan dalil EMAS.
+7) Testlar:
+   - tegilgan komponentlarning mavjud testlariga TZ stsenariysi qo'shiladi (kamida
+     `cheklar-mode`, `customers-panel`, `customer-display` va `print/cash-*` uchun);
+   - yugurt: `cd apps/web && npx vitest run "src/app/(app)/sotuv" src/components/pos
+     src/lib/pos src/app/customer-display src/app/print src/__tests__`;
+   - gate: `pnpm --filter @moysklad/web typecheck` · `npx biome check <o'zgargan fayllar>` ·
+     `pnpm i18n:gate`.
+8) Git: `git add` FAQAT o'zing tegan yo'llar bilan.
+   🔴 DIQQAT (2026-09-04 da bir marta SODIR BO'LGAN): repoda parallel sessiyalar ishlaydi
+   (TSD/T-reja, android/manager-app/X-reja). `git add` va `git commit` orasida indeksga
+   BEGONA fayllar tushib qolgan edi. Commitdan KEYIN `git show --name-only HEAD` bilan
+   tekshir; begona fayl kirsa `git reset --soft HEAD~1` + `git restore --staged <yo'l>`
+   bilan tuzat. `android/`, `apps/api/**`, boshqa rejalar — SENIKI EMAS.
+   Commit subject kichik harf.
+9) 🔴 Manba fayllarni `Get-Content`/`Set-Content` yoki butun faylni qayta yozadigan
+   skript bilan o'zgartirma — faqat Edit/Write (2026-09-01 kodlash hodisasi).
+10) Deploy QILMA (§2 qoida 9) — kassa jonli ishlayapti, deploy uni to'xtatadi.
+11) Tugagach §6 ga «### S4 — …» hisobotini yoz: fayllar, commit, yangi testlar SONI,
+    test natijalari raqam bilan, ANTI-VACUITY o'lchovi, guard oq ro'yxatining har bandi
+    va SABABI, qabul mezonining har bandi ✔/✘, «bu o'zgarish qaysi mavjud oqimni buzishi
+    mumkin?» javobi, ochiq qolganlar.
+12) KEYINGI FAZANI BOSHLAMA. TO'XTA.
+```
+</details>
 
 ---
 
