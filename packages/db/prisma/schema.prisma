@@ -7611,6 +7611,28 @@ model Inventory {
   published   Boolean @default(false)
   attributes  Json?   @default("{}")
 
+  /// N-reja (sanash sessiyasi) — bu hujjat TSD sanash sessiyasi.
+  ///
+  /// 🔴 HAQIQIY USTUN, `attributes` EMAS: `AttributeMetadataService.
+  /// validateAndNormalize` metadatada ro'yxatdan o'tmagan kalitlarni jimgina
+  /// tashlaydi, ya'ni belgi web'dagi BIRINCHI tahrirda yo'qolardi — va u bilan
+  /// birga quyidagi qo'riqchi ham (N-reja §2.2).
+  ///
+  /// 🔴 Bayrog'i YOQILGAN hujjat `post` ham, `cancel` ham QILINMAYDI: qoldiq
+  /// `setCellStock` yozgan avto-hujjatlar bilan ALLAQACHON tenglashgan,
+  /// `applyDeltas` esa uni IKKINCHI marta harakatlantirardi (N-reja §2.1).
+  countSession Boolean   @default(false) @map("count_session")
+  /// Sessiyani TSD'da ochgan omborchi (`Employee.id`). FK ATAYLAB yo'q —
+  /// `restock_task_lines.shortage_by_id` naqshi: iz qatlami xodim yozuvi
+  /// o'chirilganda ham qolishi kerak.
+  countedBy    String?   @map("counted_by") @db.Uuid
+  /// Omborchi sessiyani YOPGAN payt (`state = 'counted'` bilan birga).
+  closedAt     DateTime? @map("closed_at") @db.Timestamptz()
+  /// Bosh omborchi (`warehouse_manager`) tasdig'i — FAQAT iz, qoldiqqa
+  /// TEGMAYDI (N-reja Q3).
+  confirmedBy  String?   @map("confirmed_by") @db.Uuid
+  confirmedAt  DateTime? @map("confirmed_at") @db.Timestamptz()
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz()
@@ -7631,6 +7653,8 @@ model Inventory {
   @@index([accountId, moment(sort: Desc)])
   @@index([accountId, ownerId])
   @@index([accountId, projectId])
+  /// «Ochiq sessiyalar» (`closedAt = NULL`) va «yopilganlar» ro'yxati uchun.
+  @@index([accountId, countSession, closedAt])
   @@map("inventories")
 }
 
@@ -7670,6 +7694,17 @@ model InventoryPosition {
   /// ko'zi haqiqat manbai). Σ tarkib === `actualQty` bo'lishi SHART, aks holda
   /// post bo'lgan zahoti reyestr va qoldiq bir-biriga zid bo'lardi.
   pieceEntry String? @map("piece_entry")
+
+  /// N-reja — sanoq qatori QAYSI avto-hujjatni tug'dirgani (`setCellStock`
+  /// darhol yozadigan Оприходование / Списание). Iz qatlami: bosh omborchi
+  /// «bu farq qayerga yozildi?» degan savolga javob olsin.
+  ///
+  /// FK ATAYLAB yo'q va nom DENORMAL saqlanadi — hujjat keyinchalik
+  /// o'chirilsa ham qog'ozdagi raqam hisobotda ko'rinib tursin.
+  /// `autoDocType`: 'enter' (Оприходование) | 'loss' (Списание).
+  autoDocType String? @map("auto_doc_type") @db.VarChar(10)
+  autoDocId   String? @map("auto_doc_id") @db.Uuid
+  autoDocName String? @map("auto_doc_name") @db.VarChar(100)
 
   inventory Inventory  @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
   product   Product?   @relation("ProductInventoryPositions", fields: [productId], references: [id], onDelete: Restrict)

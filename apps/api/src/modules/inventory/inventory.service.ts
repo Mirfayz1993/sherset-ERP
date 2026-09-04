@@ -108,6 +108,39 @@ export function reverseVarianceCost(varianceQty: string, unitCostMinor: bigint):
   return -computeLineCost(varianceQty, unitCostMinor);
 }
 
+/** `assertNotCountSession` rad etadigan amallar. */
+export type CountSessionGuardedAction = 'post' | 'cancel' | 'update';
+
+const COUNT_SESSION_REFUSAL: Record<CountSessionGuardedAction, string> = {
+  post: 'Sanash sessiyasi post qilinmaydi: qoldiq allaqachon avto-hujjatlar bilan tenglashgan',
+  cancel: 'Sanash sessiyasi bekor qilinmaydi: qoldiq allaqachon avto-hujjatlar bilan tenglashgan',
+  update: 'Sanash sessiyasi tahrirlanmaydi: hujjat omborchining sanoq izi',
+};
+
+/**
+ * 🔴 SANASH SESSIYASI QO'RIQCHISI (N-reja §2.1, §5-N1).
+ *
+ * `countSession = true` hujjat — omborchi TSD'da sanagan narsaning IZI, buyruq
+ * EMAS: `setCellStock` qoldiqni sanoq PAYTIDA avto-Оприходование /
+ * avto-Списание bilan allaqachon tenglashtirgan. Shu sababli:
+ *
+ *   · `post`   — `applyDeltas` farqni qoldiqqa IKKINCHI marta yozardi;
+ *   · `cancel` — u ham `applyDeltas` chaqiradi, ya'ni HECH QACHON qo'llanmagan
+ *                deltani «teskari» qilib qoldiqni buzardi;
+ *   · `update` — `positions` berilganda `deleteMany` sanoq izini yo'q qilardi.
+ *
+ * Bayroq ATAYLAB haqiqiy ustunda (`inventories.count_session`), `attributes` da
+ * EMAS — `validateAndNormalize` metadatasiz kalitni jimgina tashlab, birinchi
+ * tahrirdayoq qo'riqchini o'chirib qo'yardi (§2.2).
+ */
+export function assertNotCountSession(
+  doc: { countSession?: boolean | null },
+  action: CountSessionGuardedAction,
+): void {
+  if (doc.countSession !== true) return;
+  throw new BadRequestException(COUNT_SESSION_REFUSAL[action]);
+}
+
 /**
  * InventoryService — physical recount with variance handling.
  *
@@ -547,6 +580,12 @@ export class InventoryService {
   async update(accountId: string, userId: string, id: string, raw: unknown) {
     const parsed = this.parseUpdate(raw);
     const existing = await this.findById(accountId, id);
+    // 🔴 N-reja §5-N1: sanash sessiyasi web'dan TAHRIRLANMAYDI. Sabab mexanik —
+    // quyidagi `$transaction` `positions` berilganda `deleteMany` qiladi, ya'ni
+    // omborchi TSD'da yozgan sanoq izi (kim, qaysi yacheyka, tizimda nechta edi,
+    // qaysi avto-hujjat) bir tahrirda BUTUNLAY o'chib ketardi. Iz — bu rejaning
+    // yagona mahsuloti, uni tiklab bo'lmaydi.
+    assertNotCountSession(existing, 'update');
     if (existing.applicable) {
       throw new BadRequestException("Provedeno inventory'ni o'zgartirib bo'lmaydi");
     }
@@ -642,6 +681,20 @@ export class InventoryService {
     // biznes-xatosi bilan to'xtaydi va u qayta urinilmaydi.
     const result = await withSerializationRetry(async () => {
       const existing = await this.findById(accountId, id);
+      // 🔴 IKKI KARRA QO'LLASHDAN QO'RIQCHI (N-reja §2.1) — bu rejaning o'zagi.
+      //
+      // Sanash sessiyasining qatorlari `setCellStock` qoldiqni ALLAQACHON
+      // tenglashtirgandan KEYIN yoziladi (avto-Оприходование / avto-Списание
+      // o'sha zahoti chiqadi). Ya'ni sessiya hujjati — IZ, buyruq emas.
+      // `post` ham (`applyDeltas` — post() ichida), `cancel` ham
+      // (`applyDeltas` — cancel() ichida) o'sha farqni qoldiqqa IKKINCHI marta
+      // yozardi: aynan «361 885 soxta son» sinfidagi hodisa, faqat kattaroq
+      // miqyosda. Shuning uchun taqiq ikkala yo'nalishga ham qo'yiladi va
+      // ikkalasining ham YAGONA kirish nuqtasi — mana shu joy.
+      //
+      // Biznes-xatosi ⇒ `withSerializationRetry` uni qayta urinmaydi
+      // (u faqat 40001 serializatsiya konfliktini qayta uradi).
+      assertNotCountSession(existing, target);
       return target === 'post'
         ? this.post(accountId, userId, id, existing)
         : this.cancel(accountId, userId, id, existing);
@@ -697,6 +750,14 @@ export class InventoryService {
         attributes: (source.attributes ?? {}) as Prisma.InputJsonValue,
         state: 'draft',
         applicable: false,
+        // 🔴 N-reja §5-N1: sessiya bayrog'i KO'CHIRILMAYDI (oshkora `false`,
+        // ustun defaultiga tayanmasdan — niyat kodda ko'rinib tursin). Nusxa —
+        // ODDIY qoralama: unda `actualQty = 0`, ya'ni u sanoq izi emas va
+        // omborchi uni post qilib qoldiqni tenglashtirishi KERAK. Bayroq
+        // ko'chsa nusxa hech qachon post bo'lmaydigan «o'lik» hujjat bo'lardi.
+        // `countedBy` / `closedAt` / `confirmedBy` / `confirmedAt` ham shu
+        // sababdan ko'chmaydi — ular MANBA sessiyaning izi.
+        countSession: false,
         positions: {
           create: source.positions.map((p) => ({
             accountId,
