@@ -288,6 +288,7 @@ describe('PosHeader — qurilma soati ogohlantirishi (S5)', () => {
 describe('PosHeader — skew hali O`LCHANMAGAN (S5)', () => {
   afterEach(() => {
     vi.doUnmock('@/hooks/use-server-clock');
+    vi.doUnmock('@/lib/clock');
     vi.unstubAllGlobals();
     vi.resetModules();
     vi.useRealTimers();
@@ -298,17 +299,24 @@ describe('PosHeader — skew hali O`LCHANMAGAN (S5)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-04T10:00:00.000Z'));
     window.localStorage.clear();
-    // 🔴 Tarmoq YOPILADI. Stsenariy aynan «server bilan hech gaplashmagan
-    // qurilma», header ichidagi `PosRateChip` esa haqiqiy `authedFetch`
-    // qiladi — javob kelsa `noteServerDate` skew'ni O'LCHANGAN qilib
-    // qo'yardi va test o'z stsenariysini yo'qotardi. (Lokal mashinada port
-    // bo'sh bo'lgani uchun so'rov o'zi yiqilardi va bu yashirin qolgan edi;
-    // serverda o'sha portda BOSHQA ilova javob berib testni qizartirdi.)
+    // 🔴 Tarmoq YOPILADI: header ichidagi `PosRateChip` haqiqiy `authedFetch`
+    // qiladi va javob kelsa `noteServerDate` skew'ni O'LCHANGAN qilib qo'yardi.
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new Error('tarmoq yo`q'))),
     );
     vi.resetModules();
+    // 🔴 «O'lchanmagan» holat MOCK bilan beriladi, modul holatini tozalash
+    // bilan EMAS. Sabab (2026-09-04 da jonli serverda o'lchandi): `resetModules`
+    // + dinamik import har muhitda BIR XIL toza nusxa bermaydi — bu mashinada
+    // modul yangilanardi, serverda esa oldingi testlarning skew'i (5 daqiqa)
+    // saqlanib qolib chip `behind` chizardi. Komponentning shartnomasi esa
+    // aniq: «o'lchanmagan bo'lsa — neytral yozuv», shuni to'g'ridan-to'g'ri
+    // sinaymiz.
+    vi.doMock('@/lib/clock', async () => {
+      const actual = await vi.importActual<typeof import('@/lib/clock')>('@/lib/clock');
+      return { ...actual, clockSkewMeasured: () => false, clockSkewMs: () => 0 };
+    });
     const { PosHeader: FreshHeader } = await import('../pos-header');
 
     renderWithProviders(<FreshHeader session={SESSION()} shiftAge="3 soat" connectionOk={false} />);
