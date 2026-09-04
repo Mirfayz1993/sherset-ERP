@@ -7,7 +7,16 @@ interface MakeOpts {
   /** HR-2: nomli (siklik/erkin) HrSchedule — berilmasa hafta-kuni fallback. */
   schedule?: unknown;
   workSchedules?: { weekday: number; startTime: string; endTime: string; isDayOff: boolean }[];
+  /**
+   * X8: `resolveAllowedLocations` qaytaradigan ro'yxat — asosiy filial +
+   * `HrEmployeeBranch`. Berilmasa: asosiy filial bor bo'lsa faqat o'sha,
+   * yo'q bo'lsa BO'SH ro'yxat (biriktirilgan joy yo'q ⇒ `no_location`).
+   */
+  locations?: { id: string; lat: number; lng: number; radiusMeters: number }[];
 }
+
+/** Asosiy filial — eski mock'dagi koordinatalar (INSIDE aynan shu nuqta). */
+const WL1 = { id: 'wl1', lat: 41.311, lng: 69.24, radiusMeters: 150 };
 
 /**
  * Hafta-kuni fallback: HAR KUN 09:00–18:00 (eski `employeeWorkSchedule.findUnique`
@@ -26,6 +35,7 @@ function makePrisma(opts: MakeOpts = {}) {
     workLocationId = 'wl1',
     schedule = null,
     workSchedules = EVERY_WEEKDAY_9_TO_18,
+    locations = workLocationId ? [{ ...WL1, id: workLocationId }] : [],
   } = opts;
   return {
     client: {
@@ -35,7 +45,7 @@ function makePrisma(opts: MakeOpts = {}) {
           .mockResolvedValue({ attendanceOptIn, workLocationId, schedule, workSchedules }),
       },
       hrWorkLocation: {
-        findFirst: vi.fn().mockResolvedValue({ lat: 41.311, lng: 69.24, radiusMeters: 150 }),
+        findMany: vi.fn().mockResolvedValue(locations),
       },
       hrLocationPing: {
         findFirst: vi.fn().mockResolvedValue(null), // last ping today (jumpFilter prev)
@@ -396,5 +406,169 @@ describe('HR-2 — kechikish resolveShift orqali hisoblanadi', () => {
       INSIDE,
     );
     expect(prisma.client.employeeWorkSchedule.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * X8 — geofence xodimga BIRIKTIRILGAN hamma ish joyiga solishtiriladi.
+ *
+ * Ilgari ikkala yo'l ham faqat `emp.workLocationId` ga qarardi: boshqa
+ * omborga ish bilan borgan xodim «Keldim» bosganda `outside` olardi va hech
+ * qanday yozuv YARATILMASDI — o'sha kun oylik tarixda «kelmadi» bo'lib
+ * qolardi. Endi ruxsat etilgan joylardan BIRORTASIGA tushsa `inside`, va
+ * yozuvga AYNAN MOS KELGAN joy yoziladi (aks holda menejer paneli xodimni
+ * noto'g'ri filialda ko'rsatardi).
+ */
+describe('X8 — biriktirilgan hamma ish joyi bo`yicha geofence', () => {
+  /** Asosiy filial — INSIDE nuqtasi; qo'shimcha filial — OUTSIDE nuqtasi (~4,3 km). */
+  const TWO_BRANCHES = [
+    { id: 'wl1', lat: 41.311, lng: 69.24, radiusMeters: 150 },
+    { id: 'wl-branch', lat: 41.35, lng: 69.24, radiusMeters: 150 },
+  ];
+  const FAR = { lat: 41.5, lng: 69.9, accuracy: 10 };
+
+  /** Ikkita ketma-ket namuna → KELDI qarori (`ingest` yo'li uchun). */
+  function keldi(prisma: ReturnType<typeof makePrisma>) {
+    prisma.client.hrLocationPing.findMany.mockResolvedValue([
+      { inside: true, createdAt: new Date() },
+      { inside: true, createdAt: new Date() },
+    ]);
+  }
+
+  function createdData(prisma: ReturnType<typeof makePrisma>) {
+    return (
+      prisma.client.hrAttendance.create.mock.calls[0]?.[0] as {
+        data: { workLocationId: string | null };
+      }
+    ).data;
+  }
+
+  describe('manualCheckIn («Keldim» tugmasi)', () => {
+    it('🟢 QO`SHIMCHA filialda «Keldim» ishlaydi va yozuvga O`SHA filial yoziladi', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      const r = await new HrPingIngestService(
+        prisma as never,
+        { emit: vi.fn() } as never,
+      ).manualCheckIn('acc', 'emp', OUTSIDE); // = wl-branch koordinatasi
+
+      expect(r).toMatchObject({ ok: true, reason: null, status: 'at_work' });
+      // 🔴 Asosiy filial (`wl1`) EMAS — aynan kirilgan joy.
+      expect(createdData(prisma).workLocationId).toBe('wl-branch');
+    });
+
+    it('asosiy filialda yozuv asosiy filialga yoziladi (regressiya yo`q)', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).manualCheckIn(
+        'acc',
+        'emp',
+        INSIDE,
+      );
+      expect(createdData(prisma).workLocationId).toBe('wl1');
+    });
+
+    it('birorta ham ruxsat etilgan joyga tushmasa — `outside` (xulq o`zgarmadi)', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      const r = await new HrPingIngestService(
+        prisma as never,
+        { emit: vi.fn() } as never,
+      ).manualCheckIn('acc', 'emp', FAR);
+
+      expect(r).toMatchObject({ ok: false, reason: 'outside' });
+      expect(prisma.client.hrAttendance.create).not.toHaveBeenCalled();
+      expect(prisma.client.hrLocationPing.create).not.toHaveBeenCalled();
+    });
+
+    it('biriktirilgan joy YO`Q (yoki hammasi arxivlangan) — `no_location`', async () => {
+      const prisma = makePrisma({ locations: [] });
+      const r = await new HrPingIngestService(
+        prisma as never,
+        { emit: vi.fn() } as never,
+      ).manualCheckIn('acc', 'emp', INSIDE);
+
+      expect(r).toMatchObject({ ok: false, reason: 'no_location' });
+      expect(prisma.client.hrAttendance.create).not.toHaveBeenCalled();
+    });
+
+    it('so`rov akkaunt + xodim bilan chegaralangan (asosiy filial + biriktiruv)', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).manualCheckIn(
+        'acc',
+        'emp',
+        INSIDE,
+      );
+      const where = (
+        prisma.client.hrWorkLocation.findMany.mock.calls[0]?.[0] as {
+          where: { accountId: string; archived: boolean; OR: unknown[] };
+        }
+      ).where;
+      expect(where.accountId).toBe('acc');
+      expect(where.archived).toBe(false);
+      expect(where.OR).toEqual([
+        { id: 'wl1' },
+        { branchEmployees: { some: { employeeId: 'emp', accountId: 'acc' } } },
+      ]);
+    });
+  });
+
+  describe('ingest (avtomatik ping)', () => {
+    it('🟢 QO`SHIMCHA filialdagi ping `inside`, KELDI yozuvi O`SHA filialga', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      keldi(prisma);
+      const r = await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).ingest(
+        'acc',
+        'emp',
+        OUTSIDE, // = wl-branch koordinatasi
+      );
+
+      expect(r).toMatchObject({ accepted: true, inside: true, decision: 'KELDI' });
+      expect(createdData(prisma).workLocationId).toBe('wl-branch');
+      // Ping ham `inside: true` bo'lib saqlanadi — holat mashinasi shundan o'qiydi.
+      const ping = prisma.client.hrLocationPing.create.mock.calls[0]?.[0] as {
+        data: { inside: boolean };
+      };
+      expect(ping.data.inside).toBe(true);
+    });
+
+    it('birorta joyga tushmagan ping `inside: false` bo`lib saqlanadi', async () => {
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      const r = await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).ingest(
+        'acc',
+        'emp',
+        FAR,
+      );
+
+      expect(r).toMatchObject({ accepted: true, inside: false });
+      const ping = prisma.client.hrLocationPing.create.mock.calls[0]?.[0] as {
+        data: { inside: boolean };
+      };
+      expect(ping.data.inside).toBe(false);
+    });
+
+    it('biriktirilgan joy yo`q — `no_location`, ping SAQLANMAYDI', async () => {
+      const prisma = makePrisma({ locations: [] });
+      const r = await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).ingest(
+        'acc',
+        'emp',
+        INSIDE,
+      );
+
+      expect(r).toMatchObject({ accepted: false, reason: 'no_location' });
+      expect(prisma.client.hrLocationPing.create).not.toHaveBeenCalled();
+    });
+
+    it('kechikish hisobi joydan MUSTAQIL — qo`shimcha filialda ham o`z smenasi bo`yicha', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-27T09:10:00+05:00'));
+      const prisma = makePrisma({ locations: TWO_BRANCHES });
+      keldi(prisma);
+      await new HrPingIngestService(prisma as never, { emit: vi.fn() } as never).ingest(
+        'acc',
+        'emp',
+        OUTSIDE,
+      );
+      // Hafta-kuni jadvali 09:00 ⇒ 10 daqiqa; filial almashishi buni o'zgartirmaydi.
+      const data = createdData(prisma) as unknown as { lateMinutes: number };
+      expect(data.lateMinutes).toBe(10);
+    });
   });
 });

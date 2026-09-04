@@ -792,3 +792,66 @@ Xavfsizlik bundan zaiflashmaydi: himoyani **darvoza emas, QAMROV** beradi — `e
 
 **Commit:** kod, v0.1 poydevori va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x7 — 0.2.0, release-imzo va yagona smoke-reja`.
+
+---
+
+### X8 hisoboti — 2026-09-05
+
+**Holat:** ✅ bajarildi (kod tomoni) — 🔴 **LEKIN jonlida hozircha HECH NARSANI o'zgartirmaydi:** `HrEmployeeBranch` jadvalini to'ldiradigan kod repoda UMUMAN yo'q (1-topilma).
+
+**O'zgargan/yangi fayllar** (faqat `apps/api`; ilova va migratsiya TEGILMADI):
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/attendance-geo/allowed-locations.util.ts` | **YANGI.** Ikki eksport: `resolveAllowedLocations(prisma, accountId, employeeId, primaryWorkLocationId)` — xodimga biriktirilgan, ARXIVLANMAGAN joylar (asosiy filial + `HrEmployeeBranch`) BITTA so'rovda; `pickInsideLocation(ping, locations)` — geofence'ga tushganlaridan ENG YAQINI (`{location, distanceMeters}`) yoki `null`. |
+| `…/attendance-geo/allowed-locations.util.test.ts` | **YANGI.** 12 test (pastda). |
+| `…/attendance-geo/ping-ingest.service.ts` | `ingest()` va `manualCheckIn()` — IKKALASI ham endi ruxsat etilgan joylar RO'YXATIGA solishtiradi; yozuvdagi `workLocationId` = MOS KELGAN joy. `isInsideGeofence` importi olib tashlandi (endi util ichida chaqiriladi — `geofence.util.ts`/`haversine.util.ts` ning O'ZIGA tegilmadi). |
+| `…/attendance-geo/ping-ingest.service.test.ts` | +9 test (X8 bo'limi). Mavjud 17 test AYNAN saqlandi; faqat umumiy `makePrisma` yordamchisi yangi so'rov shakliga moslandi (`hrWorkLocation.findFirst` → `findMany`, ixtiyoriy `locations` opsiyasi). |
+
+**So'rov shakli (xavfsizlik chegarasi kodda):**
+
+```ts
+where: {
+  accountId,                 // ← OR dan TASHQARIDA: ikkala tarmoqqa ham qo'llanadi
+  archived: false,           // ← shu ham
+  OR: [
+    { id: primaryWorkLocationId },                              // asosiy filial (bor bo'lsa)
+    { branchEmployees: { some: { employeeId, accountId } } },   // biriktirilgan filiallar
+  ],
+}
+```
+
+«Akkauntning hamma joylari» tarmog'i YO'Q va `primaryWorkLocationId` null bo'lsa `{ id: null }` kabi hamma joyni ochadigan band ham YARATILMAYDI — ikkalasi ham alohida test bilan qulflangan.
+
+**Testlar:**
+
+- `vitest run …/allowed-locations.util.test.ts …/ping-ingest.service.test.ts` → **38 test, 38 o'tdi** (12 yangi util + 17 mavjud + 9 yangi servis).
+  - Util (12): asosiy va qo'shimcha filial bitta OR so'rovida · **🔴 `archived: false`** · **🔴 `accountId` OR dan tashqarida + biriktiruv qatorining O'ZI ham akkauntga bog'langan (ikki qavat)** · `where` kalitlari QAT'IY tekshiriladi (kelajakda yangi tarmoq qo'shilsa test yiqiladi) · asosiy filialsiz xodimda OR faqat biriktiruv · bo'sh ro'yxat · asosiy joyda `inside` · qo'shimcha filialda `inside` **aynan o'sha filial id'si bilan** · begona nuqtada `null` · **ustma-ust tushgan radiuslarda eng yaqini (ro'yxat tartibi natijani o'zgartirmaydi)** · masofa qaytariladi · aniqlik chegarasi `isInsideGeofence` da qolgani (radius+min(accuracy,50)) — 178 m dagi nuqta aniqlik 10 da tashqarida, 50 da ichkarida.
+  - Servis (9): `manualCheckIn` qo'shimcha filialda ishlaydi va **yozuvga `wl-branch` yoziladi (`wl1` EMAS)** · asosiy filialda regressiya yo'q · birorta joyga tushmasa `outside` va ping ham, yozuv ham SAQLANMAYDI · biriktirilgan joy yo'q → `no_location` · so'rov `accountId`+`employeeId` bilan chegaralangani (servis yo'lidan ham) · `ingest` qo'shimcha filialda `inside: true` + KELDI yozuvi o'sha filialga · begona nuqtada ping `inside: false` bo'lib saqlanadi · joy yo'q → `no_location`, ping saqlanmaydi · **kechikish joydan MUSTAQIL** (qo'shimcha filialda ham o'z smenasidan 10 daqiqa — reja 3-bandi).
+- `vitest run src/modules/hr/attendance-geo` → **23 fayl, 152 test, 152 o'tdi** (X2 dagi 22 fayl / 131 testdan +1 fayl / +21 test).
+- `vitest run src/modules/hr` → **102 fayl, 1150 test, hammasi o'tdi.** X7 o'lchovi bilan qiyoslash: X7 `src/modules/hr src/app-boot.test.ts` ni birga yuritib 1138 bergan; `app-boot.test.ts` alohida **9 test** ⇒ 1150 + 9 = **1159 = 1138 + 21**. Ya'ni yiqilgan yoki yo'qolgan test YO'Q.
+- `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato.**
+- `biome check` (4 ta fayl) → toza, tuzatish kerak emas.
+- `apps/web` `no-mojibake.test.ts` → 4 test o'tdi; 4 ta faylning o'zi ham qo'lda skanlandi (`file`+`od`): **UTF-8, BOM YO'Q, mojibake imzosi 0 marta.**
+- Ilova tegilmagani uchun `assembleDebug` YURITILMADI (reja shunday deydi).
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **ENG MUHIMI — `HrEmployeeBranch` ni to'ldiradigan kod BUTUN REPODA yo'q, ya'ni jonlida jadval deyarli aniq BO'SH va X8 hozircha O'LIK KOD.** Repo bo'ylab qidirildi (`apps/**`, `packages/db/prisma`, `docs`, `tools`): jadval nomi FAQAT migratsiya SQL'ida, Prisma sxemasida, generatsiya qilingan klientda va endi MENING o'qish so'rovimda uchraydi. Hech qanday servis/kontroller/seed/web-ekran unga qator YOZMAYDI. Jonli bazani men o'lchay olmayman (0-bo'lim 4-qoidasi), ya'ni qator faqat QO'LDA SQL bilan kiritilgan bo'lsagina bor bo'lishi mumkin. **Egasidan:** (a) deploy oynasida `select count(*) from hr_employee_branches;` ; (b) bo'sh bo'lsa — X8 dan foyda olish uchun biriktirish yo'li kerak. Eng arzon yo'l: deploy oynasida qo'lda `INSERT` (qaysi xodim qaysi omborga borishi ma'lum bo'lsa). Barqaror yo'l: HR ekranida ko'p-filial biriktirish — bu X8 vazifalar ro'yxatida YO'Q, shuning uchun men qilmadim; ALOHIDA faza bo'lishi kerak.
+2. ⚠️ **Xulq o'zgarishi: ARXIVLANGAN joy endi ASOSIY filial bo'lsa ham hisobga olinmaydi.** Ilgari `hrWorkLocation.findFirst({ id, accountId })` `archived` ni umuman tekshirmasdi. Reja qabul mezoni «arxivlangan joy hisobga OLINMAYDI» deydi ⇒ shunday qilindi. Xavf o'lchandi va u KICHIK: `work-location.service.remove()` filialga xodim biriktirilgan bo'lsa arxivlashni RAD ETADI. Qolgan yagona teshik — `employee-schedule.service.setConfig()` ALLAQACHON arxivlangan filialni biriktira oladi (u `archived` ni tekshirmaydi); u holda xodim `no_location` oladi (ilgari geofence ishlayverardi). **Tavsiya:** `setConfig` ga `archived: false` sharti qo'shilsin — bir qatorlik ish, lekin X8 ro'yxatida yo'q, TEGILMADI.
+3. **`no_location` darvozasi endi `accuracy` darvozasidan KEYIN.** Sabab: ruxsat etilgan joylar ro'yxati DB so'rovini talab qiladi, aniqligi yomon ping esa baribir rad etiladi — chiqindi ping uchun bazaga bormaymiz. Amaliy farq faqat ikki nuqson BIRGA bo'lganda: (joy yo'q + aniqlik >100 m) da ilgari `no_location`, endi `accuracy` qaytadi. Ikkalasi ham benign (`accepted:false`), faqat ekrandagi sabab matni farq qiladi.
+4. **Asosiy filiali YO'Q, lekin biriktiruvi BOR xodim endi ishlaydi.** Ilgari `if (!emp.workLocationId) return no_location` qat'iy to'siq edi; endi qaror ruxsat etilgan RO'YXAT bo'shligiga qarab chiqadi — bu rejaning «asosiy + biriktirilgan» ta'rifidan bevosita kelib chiqadi.
+5. **Ustma-ust tushgan radiuslarda ENG YAQIN joy tanlanadi** (reja «mos kelgan joy» deydi, qaysi biri ekanini aytmaydi). Sabab: radiuslar kesishsa yozuvdagi filial SQL tartibiga, ya'ni tasodifga qolardi va menejer paneli xodimni goh u, goh bu filialda ko'rsatardi. Test tartibga bog'liq emasligini alohida tekshiradi.
+6. **`ingest()` da geofence HOZIRGI pingga, KELDI qarori esa namuna oynasiga tegishli** — bu ilgari ham shunday edi, o'zgarmadi. KELDI faqat oxirgi 2 namuna ichkarida bo'lganda chiqadi, oxirgi namuna esa aynan hozirgi ping ⇒ yozuv yaratilayotganda mos kelgan joy DOIM bor. Kodda baribir `?? emp.workLocationId` zaxirasi qoldirildi (kompilyator uchun ham, kelajakda reducer o'zgarsa ham).
+7. **Ikki biriktirilgan filial orasida yurgan xodim uzluksiz «ishda» bo'lib qolaveradi.** `HrLocationPing` da QAYSI joy ekani saqlanmaydi (ustun yo'q, jadvalga ALTER qilmaslik qoidasi) — namunalar faqat `inside` bayrog'ini biladi. Bu ATAYLAB: odam ikkala holatda ham ishda. Yagona oqibat — filialdan filialga o'tish `KETDI`/`KELDI` juftini yaratmaydi, kun bitta yozuv bo'lib qoladi.
+8. **`manualCheckOut()` TEGILMADI** — unda geofence darvozasi umuman yo'q (ataylab: odam chiqib ketayotib bosishi mumkin).
+9. **X9 uchun tayyorgarlik:** `pickInsideLocation` masofani ham qaytaradi, lekin X9 ga kerak bo'ladigani boshqacha — TASHQARIDAGI odamdan eng yaqin ruxsat etilgan joygacha masofa. Buni shu utilga qo'shish oson (`isInsideGeofence` filtri olib tashlangan `nearestLocation`), ammo X8 qamrovida bo'lmagani uchun YOZILMADI.
+10. **Migratsiya YOZILMADI** (reja shunday deydi) — `hr_employee_branches` jadvali `20260724133452_hr_timepay_attendance_core` migratsiyasida allaqachon bor, SQL o'qib tasdiqlandi (PK `(employee_id, work_location_id)`, uchala FK, `(account_id, work_location_id)` indeksi).
+11. **Daraxtdagi boshqa sessiyalarning ishiga TEGILMADI** va commitga ham kirmadi (`apps/api/src/modules/auth`, `permissions`, `seed-role-templates.ts`, `ops-menejer-rol.ts`, `j3-trial-*`, `docs/plans/2026-09-04-sanash-sessiyasi-farqlar-hisoboti.md`).
+12. 🔴 **CLAUDE.md §6.7-B HODISASI QAYTA TAKRORLANDI — va tuzatildi.** `git add` aniq 5 yo'l bilan qilingan edi, lekin `lint-staged` birinchi commitga (`778a3fa2`) parallel sessiyaning **5 faylini** qo'shib yubordi (`inventory.service.ts`, `inventory.count-session.test.ts`, `schema.prisma`, N1 migratsiyasi va uning rollback SQL'i). `post-commit` qo'riqchisi bor, lekin commit baribir tuzilib bo'lgan edi. Tuzatish yo'li §6.7 dagidek: `git reset --soft HEAD~1` + begona yo'llarni `git restore --staged`. Ularning MAZMUNIGA tegilmadi va tez orada o'sha sessiya ularni O'ZI toza commit qildi (`ace7876b feat(inventory): n1 …` — tekshirildi, ichida mening faylim YO'Q).
+    ⚠️ **Ikkinchi tuzoq:** §6.7 «qayta commit'da hook'larni bir martaga chetlab o't» deydi, lekin bu muhitda `core.hooksPath=/dev/null` bilan commit RUXSAT ETILMADI (xavfsizlik klassifikatori to'sdi). Shuning uchun oddiy commit qayta yuritildi. Aynan o'sha payt parallel sessiya O'Z commitini qilib, mening indeksimni tozalab yubordi (`no changes added to commit`) — fayllarim daraxtda BUTUN qoldi, faqat qayta `git add` kerak bo'ldi. Uchinchi urinish toza o'tdi (`57eb5823`), tarkib `git show --stat` bilan tekshirildi: mening 5 faylim + `docs/progress.json` (repo'ning O'Z ilgagi qo'shadi).
+    **Egasiga:** ikkita xulosa — (a) §6.7 ning tavsiya qilgan tuzatish buyrug'i endi ishlamaydi, matn yangilanishi kerak; (b) haqiqiy yechim §6.5 (worktree izolyatsiyasi) — bugun bitta daraxtda kamida 4 sessiya ishlayapti.
+13. ⚠️ **`biome check --apply` (birinchi commit ilgagi) parallel sessiyaning fayllariga ham formatlash qo'llagan bo'lishi mumkin** — bu repo'ning O'Z formatlagichi va o'sha sessiya baribir shu qoidalar bilan commit qiladi, shuning uchun ORQAGA QAYTARILMADI (qaytarish ularning mazmunini buzardi). Ularning N1 commiti keyin muvaffaqiyatli o'tdi.
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (hisobot commitning O'ZI ichida). Topish yo'li:
+`git log --oneline -1 -- apps/api/src/modules/hr/attendance-geo/allowed-locations.util.ts` → subject `feat(hr): x8 — geofence biriktirilgan hamma ish joyiga`.

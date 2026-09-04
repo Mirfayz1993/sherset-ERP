@@ -4,13 +4,13 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 import { HR_EVENT } from '../hr-shared/hr-events.types.js';
 import { HR_TZ, startOfLocalDay } from '../hr-shared/tz.util.js';
+import { pickInsideLocation, resolveAllowedLocations } from './allowed-locations.util.js';
 import type { PingInput } from './attendance-geo.schema.js';
 import {
   type AttendanceDecision,
   type InsideSample,
   decideAttendance,
 } from './attendance-reducer.util.js';
-import { isInsideGeofence } from './geofence.util.js';
 import { jumpFilter } from './jump-filter.util.js';
 import {
   type PrismaScheduleShape,
@@ -121,16 +121,19 @@ export class HrPingIngestService {
       select: CHECKIN_EMPLOYEE_SELECT,
     })) as CheckInEmployee | null;
     if (!emp || !emp.attendanceOptIn) return benign('not_opted_in');
-    if (!emp.workLocationId) return benign('no_location');
 
     // 2. Accuracy gate — unreliable pings never touch the state machine (no persist).
     if (dto.accuracy > ACCURACY_LIMIT_M) return benign('accuracy');
 
-    const loc = await this.prisma.client.hrWorkLocation.findFirst({
-      where: { id: emp.workLocationId, accountId },
-      select: { lat: true, lng: true, radiusMeters: true },
-    });
-    if (!loc) return benign('no_location');
+    // X8 — asosiy filial + `HrEmployeeBranch` dagi qo'shimcha filiallar.
+    // Birortasi ham yo'q (yoki hammasi arxivlangan) bo'lsa — `no_location`.
+    const allowed = await resolveAllowedLocations(
+      this.prisma,
+      accountId,
+      employeeId,
+      emp.workLocationId,
+    );
+    if (allowed.length === 0) return benign('no_location');
 
     const now = new Date();
     const dayStart = startOfLocalDay(now);
@@ -148,7 +151,14 @@ export class HrPingIngestService {
     if (!jumpFilter(prevPoint, { lat: dto.lat, lng: dto.lng, at: now })) return benign('jump');
 
     // 4. Geofence test + persist the ping (audit + state-machine source).
-    const inside = isInsideGeofence({ lat: dto.lat, lng: dto.lng, accuracy: dto.accuracy }, loc);
+    // X8 — ruxsat etilgan joylardan BIRORTASIGA tushsa `inside`; yozuvga aynan
+    // MOS KELGAN joy yoziladi (ilgari doim `emp.workLocationId` yozilardi, ya'ni
+    // menejer paneli boshqa omborga borgan xodimni noto'g'ri filialda ko'rsatardi).
+    const match = pickInsideLocation(
+      { lat: dto.lat, lng: dto.lng, accuracy: dto.accuracy },
+      allowed,
+    );
+    const inside = match !== null;
     await this.prisma.client.hrLocationPing.create({
       data: {
         accountId,
@@ -206,7 +216,10 @@ export class HrPingIngestService {
           checkInLng: dto.lng,
           checkInAccuracy: Math.round(dto.accuracy),
           source: 'auto_gps',
-          workLocationId: emp.workLocationId,
+          // KELDI qarori oxirgi namuna ICHKARIDA bo'lgandagina chiqadi (o'sha
+          // namuna — hozirgi ping), ya'ni bu yerda `match` doim bor; asosiy
+          // filial faqat himoya uchun zaxira.
+          workLocationId: match?.location.id ?? emp.workLocationId,
           lateMinutes,
         },
         select: { id: true, checkInTime: true, checkOutTime: true, lateMinutes: true },
@@ -257,14 +270,16 @@ export class HrPingIngestService {
       select: CHECKIN_EMPLOYEE_SELECT,
     })) as CheckInEmployee | null;
     if (!emp || !emp.attendanceOptIn) return manualBenign('not_opted_in');
-    if (!emp.workLocationId) return manualBenign('no_location');
     if (dto.accuracy > ACCURACY_LIMIT_M) return manualBenign('accuracy');
 
-    const loc = await this.prisma.client.hrWorkLocation.findFirst({
-      where: { id: emp.workLocationId, accountId },
-      select: { lat: true, lng: true, radiusMeters: true },
-    });
-    if (!loc) return manualBenign('no_location');
+    // X8 — `ingest()` bilan AYNI ro'yxat: asosiy filial + `HrEmployeeBranch`.
+    const allowed = await resolveAllowedLocations(
+      this.prisma,
+      accountId,
+      employeeId,
+      emp.workLocationId,
+    );
+    if (allowed.length === 0) return manualBenign('no_location');
 
     const now = new Date();
     const dayStart = startOfLocalDay(now);
@@ -290,8 +305,11 @@ export class HrPingIngestService {
       };
     }
 
-    const inside = isInsideGeofence({ lat: dto.lat, lng: dto.lng, accuracy: dto.accuracy }, loc);
-    if (!inside) return manualBenign('outside');
+    const match = pickInsideLocation(
+      { lat: dto.lat, lng: dto.lng, accuracy: dto.accuracy },
+      allowed,
+    );
+    if (!match) return manualBenign('outside');
 
     await this.prisma.client.hrLocationPing.create({
       data: {
@@ -314,7 +332,8 @@ export class HrPingIngestService {
         checkInLng: dto.lng,
         checkInAccuracy: Math.round(dto.accuracy),
         source: 'auto_gps',
-        workLocationId: emp.workLocationId,
+        // X8 — «Keldim» bosilgan joy (asosiy filial bo'lmasligi ham mumkin).
+        workLocationId: match.location.id,
         lateMinutes,
       },
       select: { id: true, checkInTime: true, checkOutTime: true, lateMinutes: true },
