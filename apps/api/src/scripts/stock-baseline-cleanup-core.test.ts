@@ -281,3 +281,50 @@ describe('qaytarish rejasi (qoida 12)', () => {
     expect(l.costDeltaMinor + (revert[0]?.costDeltaMinor ?? 0n)).toBe(0n);
   });
 });
+
+/**
+ * J1 — bo'lak hisobi yuritiladigan tovar RAD ETILADI (K-reja 7.4 / T1 qarzi).
+ *
+ * Bu skript `Stock.qty` ni kamaytiradi va `stock_pieces` ga TEGMAYDI. Bayroqli
+ * tovarda «Σ faol bo'lak === miqdor» invarianti (K-reja 3-bo'lim) shu bilan
+ * darhol buzilardi va K5 ommaviy kiritish oqimi 400 bilan yiqilardi.
+ */
+describe('bo‘lak hisobi — RAD ETISH (J1)', () => {
+  it('🔴 bayroqli tovar hisobdan chiqarilmaydi, sababi NOM bilan ko‘rinadi', () => {
+    const plan = buildCleanupPlan([row({ pieceTracked: true })]);
+    expect(plan.lines).toEqual([]);
+    expect(plan.skipped).toEqual([
+      { storeId: S, assortmentId: 'p1', reason: 'bolak-hisobi', surplus: '9960' },
+    ]);
+    expect(plan.totals).toEqual({ products: 0, qty: '0', costMinor: 0n });
+  });
+
+  it('🔴 rad etish HAMMA boshqa filtrdan OLDIN — «ortiqchasi yo‘q» deb yashirinmaydi', () => {
+    // Ortiqchasi yo'q (qty === assignedQty): eski mantiqda «ortiqcha-yoq»
+    // bo'lardi va operator skript bu tovarga TEGMASLIGINI bilmasdi.
+    const plan = buildCleanupPlan([row({ pieceTracked: true, qty: '40' })]);
+    expect(plan.skipped[0]?.reason).toBe('bolak-hisobi');
+  });
+
+  it('imzo-oralig‘i o‘chirilgan bo‘lsa ham rad etish kuchda qoladi', () => {
+    const plan = buildCleanupPlan([row({ pieceTracked: true })], { bandMin: null, bandMax: null });
+    expect(plan.lines).toEqual([]);
+    expect(plan.skipped[0]?.reason).toBe('bolak-hisobi');
+  });
+
+  it('bayroq o‘chiq / berilmagan tovarda xulq AYNAN avvalgidek', () => {
+    const off = buildCleanupPlan([row({ pieceTracked: false })]);
+    const absent = buildCleanupPlan([row()]);
+    expect(off.lines).toEqual(absent.lines);
+    expect(off.lines[0]?.writeOffQty).toBe('9960');
+  });
+
+  it('bir necha qatordan faqat bayroqlisi tushib qoladi', () => {
+    const plan = buildCleanupPlan([
+      row({ assortmentId: 'p1' }),
+      row({ assortmentId: 'p2', pieceTracked: true }),
+    ]);
+    expect(plan.lines.map((l) => l.assortmentId)).toEqual(['p1']);
+    expect(plan.skipped.map((s) => s.assortmentId)).toEqual(['p2']);
+  });
+});

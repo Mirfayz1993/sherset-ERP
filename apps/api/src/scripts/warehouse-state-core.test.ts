@@ -10,6 +10,7 @@ import {
   diffAgainstRegistry,
   exitCodeFor,
   parseRegistry,
+  pieceStateDrifts,
   readPosPriority,
 } from '../../../../packages/db/scripts/warehouse-state-core.js';
 
@@ -595,5 +596,233 @@ describe('haqiqiy reyestr fayli (docs/ops/jonli-holat.md)', () => {
     const brak = registry.stores.find((s) => s.brak === true);
     expect(brak?.name).toBe('Ombor 99');
     expect(brak?.posPriority ?? null).toBeNull();
+  });
+});
+
+/**
+ * J1 — bo'lak sverkasi bandi (K-reja T1 qarzi).
+ *
+ * Ikki narsa hamma narsadan muhim:
+ *   · sverka IKKI QATLAMLI — yacheykali bo'g'in `StockByCell` bilan,
+ *     yacheykasiz bo'g'in `Stock − Σ StockByCell` bilan (K1 semantikasi);
+ *   · driftlar HECH QACHON `xato` emas — kassa to'xtamasligi K-rejaning
+ *     asosiy qarori, chiqish kodi 2 esa deploy'ni to'xtatadi.
+ */
+describe('bo‘lak sverkasi (J1)', () => {
+  const CELL = 'cell-1';
+  const P = 'prod-kabel';
+
+  // ⚠️ Yuqoridagi `input()` yordamchisi maydonlarni BITTALAB ko'chiradi va
+  // bo'lak kirishlarini tushirib qoldirardi — shuning uchun bu yerda obyekt
+  // to'g'ridan-to'g'ri quriladi.
+  function pieceInput(over: Partial<WarehouseStateInput> = {}): WarehouseStateInput {
+    return {
+      stores: [store(POOL, 'Taqsimlanmagan', { __posPriority: 1 })],
+      cells: [cell(CELL, POOL, '01-01-01-01')],
+      storeStock: [],
+      cellStock: [],
+      openSessions: [{ storeId: POOL, sessions: 1 }],
+      ...over,
+    };
+  }
+
+  it('bayroq yo‘q ⇒ band bo‘sh, lekin BOR (0 bilan «o‘lchanmadi» ajratiladi)', () => {
+    const r = buildWarehouseState(pieceInput());
+    expect(r.pieces).toMatchObject({
+      trackedProducts: 0,
+      activePieces: 0,
+      diffProducts: 0,
+      diffBuckets: 0,
+      diffQty: '0',
+    });
+    expect(pieceStateDrifts(r)).toEqual([]);
+  });
+
+  it('reyestr qoldiqqa AYNAN teng ⇒ farq yo‘q', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'UzKabel VVG 2x2.5' }],
+        trackedStoreStock: [
+          { storeId: POOL, assortmentKind: 'product', assortmentId: P, qty: '1220' },
+        ],
+        trackedCellStock: [
+          { storeId: POOL, cellId: CELL, assortmentKind: 'product', assortmentId: P, qty: '1220' },
+        ],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: CELL,
+            assortmentKind: 'product',
+            assortmentId: P,
+            qty: '1220',
+            pieces: 7,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.activePieces).toBe(7);
+    expect(r.pieces.diffBuckets).toBe(0);
+    expect(r.pieces.diffQty).toBe('0');
+    expect(pieceStateDrifts(r)).toEqual([]);
+  });
+
+  it('🔴 yacheykasiz bo‘g‘in = ombor jamisi − yacheykalardagi (ikkinchi qatlam)', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'UzKabel' }],
+        // 1000 ombor jamisi, shundan 400 yacheykada ⇒ 600 hovuzda.
+        trackedStoreStock: [
+          { storeId: POOL, assortmentKind: 'product', assortmentId: P, qty: '1000' },
+        ],
+        trackedCellStock: [
+          { storeId: POOL, cellId: CELL, assortmentKind: 'product', assortmentId: P, qty: '400' },
+        ],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: CELL,
+            assortmentKind: 'product',
+            assortmentId: P,
+            qty: '400',
+            pieces: 2,
+          },
+          {
+            storeId: POOL,
+            cellId: null,
+            assortmentKind: 'product',
+            assortmentId: P,
+            qty: '600',
+            pieces: 3,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.diffBuckets).toBe(0);
+    expect(r.pieces.stockQty).toBe('1000');
+    expect(r.pieces.registryQty).toBe('1000');
+  });
+
+  it('farq chiqsa qator ko‘rinadi va DRIFT beradi — lekin OGOHLANTIRISH', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'UzKabel' }],
+        trackedStoreStock: [
+          { storeId: POOL, assortmentKind: 'product', assortmentId: P, qty: '1220' },
+        ],
+        trackedCellStock: [
+          { storeId: POOL, cellId: CELL, assortmentKind: 'product', assortmentId: P, qty: '1220' },
+        ],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: CELL,
+            assortmentKind: 'product',
+            assortmentId: P,
+            qty: '1000',
+            pieces: 5,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.diffProducts).toBe(1);
+    expect(r.pieces.diffBuckets).toBe(1);
+    expect(r.pieces.diffQty).toBe('-220');
+    expect(r.pieces.rows[0]).toMatchObject({
+      productName: 'UzKabel',
+      cellName: '01-01-01-01',
+      stockQty: '1220',
+      registryQty: '1000',
+      diffQty: '-220',
+      pieces: 5,
+    });
+    const drifts = pieceStateDrifts(r);
+    expect(drifts.map((d) => d.code)).toContain('bolak-sverkasi');
+    expect(drifts.every((d) => d.severity === 'ogohlantirish')).toBe(true);
+    // 🔴 J1 qabul mezoni: chiqish kodi O'ZGARMAYDI.
+    expect(exitCodeFor(drifts)).toBe(0);
+  });
+
+  it('🔴 bayroq YOQILGAN, reyestr BO‘SH (bugungi jonli holat) ⇒ alohida drift', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'Azia Avvg 3x25' }],
+        trackedStoreStock: [
+          { storeId: POOL, assortmentKind: 'product', assortmentId: P, qty: '10586' },
+        ],
+        trackedCellStock: [],
+        pieceBuckets: [],
+      }),
+    );
+    expect(r.pieces.flaggedWithoutRegistry).toBe(1);
+    expect(pieceStateDrifts(r).map((d) => d.code)).toEqual(
+      expect.arrayContaining(['bolak-reyestri-bosh', 'bolak-sverkasi']),
+    );
+    expect(exitCodeFor(pieceStateDrifts(r))).toBe(0);
+  });
+
+  it('bayroqsiz tovarda bo‘lak bo‘lsa — `pieces-without-flag` juftligi', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: CELL,
+            assortmentKind: 'product',
+            assortmentId: 'boshqa-tovar',
+            qty: '250',
+            pieces: 1,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.piecesWithoutFlag).toBe(1);
+    expect(r.pieces.activePieces).toBe(1);
+    // Bayroqsiz tovar sverkaga KIRMAYDI — farq sifatida sanalmaydi.
+    expect(r.pieces.diffBuckets).toBe(0);
+    expect(pieceStateDrifts(r).map((d) => d.code)).toEqual(['bolak-bayroqsiz']);
+  });
+
+  it('variantlar bo‘lak hisobidan TASHQARIDA (bayroq faqat `Product` da)', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'UzKabel' }],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: CELL,
+            assortmentKind: 'variant',
+            assortmentId: P,
+            qty: '100',
+            pieces: 1,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.piecesWithoutFlag).toBe(1);
+    expect(r.pieces.diffBuckets).toBe(0);
+  });
+
+  it('Decimal(20,6) kasrlari float’siz solishtiriladi', () => {
+    const r = buildWarehouseState(
+      pieceInput({
+        trackedProducts: [{ id: P, name: 'UzKabel' }],
+        trackedStoreStock: [
+          { storeId: POOL, assortmentKind: 'product', assortmentId: P, qty: '0.3' },
+        ],
+        trackedCellStock: [],
+        pieceBuckets: [
+          {
+            storeId: POOL,
+            cellId: null,
+            assortmentKind: 'product',
+            assortmentId: P,
+            qty: '0.1',
+            pieces: 1,
+          },
+        ],
+      }),
+    );
+    expect(r.pieces.diffQty).toBe('-0.2');
   });
 });

@@ -207,7 +207,15 @@ async function main(): Promise<void> {
       return;
     }
     // FAQAT butunlay bo'sh va hech qayerda ishlatilmagan yacheykalar o'chadi.
-    const [sbc, links, inv, loss, enter, supply, pret, sret, dem] = await Promise.all([
+    //
+    // 🔴 J1 — `stock_pieces` shu ro'yxatda YO'Q edi. FK esa `ON DELETE SET NULL`
+    //    (K1: «yacheyka o'chsa bo'lak ombor darajasiga TUSHADI, yo'qolmaydi»)
+    //    ⇒ bo'lagi bor yacheyka JIMGINA o'chib ketardi va omborchi jismonan
+    //    turgan rulonni yorlig'i bo'yicha topa olmay qolardi. Faqat `active`
+    //    to'sadi: `consumed` — tarix qatori, u yacheykani abadiy qulflab
+    //    qo'ymasligi kerak (`stock_operations` shu ro'yxatda bo'lmagani bilan
+    //    bir sabab).
+    const [sbc, links, inv, loss, enter, supply, pret, sret, dem, pieces] = await Promise.all([
       prisma.stockByCell.findMany({ where: { cellId: { in: ids } }, select: { cellId: true } }),
       prisma.productCellLink.findMany({ where: { cellId: { in: ids } }, select: { cellId: true } }),
       prisma.inventoryPosition.findMany({
@@ -226,13 +234,25 @@ async function main(): Promise<void> {
         select: { cellId: true },
       }),
       prisma.demandPosition.findMany({ where: { cellId: { in: ids } }, select: { cellId: true } }),
+      prisma.stockPiece.findMany({
+        where: { cellId: { in: ids }, status: 'active' },
+        select: { cellId: true },
+      }),
     ]);
     const used = new Set(
-      [sbc, links, inv, loss, enter, supply, pret, sret, dem].flat().map((r) => r.cellId as string),
+      [sbc, links, inv, loss, enter, supply, pret, sret, dem, pieces]
+        .flat()
+        .map((r) => r.cellId as string),
     );
+    const pieceCells = new Set(pieces.map((r) => r.cellId as string));
     const deletable = existingHere.filter((r) => !used.has(r.id));
     console.log(
       `Mavjud: ${existingHere.length} · ishlatilgan (saqlanadi): ${used.size} · o‘chiriladi: ${deletable.length}`,
+    );
+    // J1 — qator HAR DOIM chiqadi (0 bo'lsa ham).
+    console.log(
+      `Bo‘lak reyestri (K-reja): ${pieces.length} faol bo‘lak · ` +
+        `${pieceCells.size} yacheyka SHU SABAB saqlanadi`,
     );
     if (!APPLY) {
       console.log('\nDRY-RUN — hech nima o‘chirilmadi. Qo‘llash: --revert --apply --allow-remote');

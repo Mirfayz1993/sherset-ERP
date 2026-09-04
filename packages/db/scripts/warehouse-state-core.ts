@@ -75,12 +75,63 @@ export interface StateOpenSessionRow {
   sessions: number;
 }
 
+// --- K-reja bo'lak reyestri (J1) --------------------------------------------
+
+/** Bayrog'i YOQILGAN tovar (`Product.pieceTracked = true`). */
+export interface StateTrackedProductRow {
+  id: string;
+  name: string;
+}
+
+/**
+ * `stock_pieces` ning FAOL qatorlari, (ombor × yacheyka × assortiment)
+ * kesimida jamlangan. CLI `groupBy` bilan o'qiydi — reyestr to'lganda ham
+ * skript qator-ma-qator yuklamasin.
+ */
+export interface StatePieceBucketRow {
+  storeId: string;
+  /** NULL = ombor hovuzidagi (yacheykasiz) bo'laklar. */
+  cellId: string | null;
+  assortmentKind: string;
+  assortmentId: string;
+  /** Σ `length` (Decimal(20,6) satr). */
+  qty: string;
+  pieces: number;
+}
+
+/** Bayroqli tovarlarning ombor jamisi (`Stock.qty`). */
+export interface StateAssortmentStockRow {
+  storeId: string;
+  assortmentKind: string;
+  assortmentId: string;
+  qty: string;
+}
+
+/** Bayroqli tovarlarning yacheyka kesimi (`StockByCell.qty`). */
+export interface StateAssortmentCellStockRow {
+  storeId: string;
+  cellId: string;
+  assortmentKind: string;
+  assortmentId: string;
+  qty: string;
+}
+
 export interface WarehouseStateInput {
   stores: readonly StateStoreRow[];
   cells: readonly StateCellRow[];
   storeStock: readonly StateStoreStockRow[];
   cellStock: readonly StateCellStockRow[];
   openSessions: readonly StateOpenSessionRow[];
+  /**
+   * K-reja bo'lak sverkasi (J1). ATAYLAB IXTIYORIY — reyestr yo'q (yoki
+   * migratsiya berilmagan) bazada skript avvalgidek ishlaydi va bo'lak bandi
+   * nol qiymatlar bilan chiqadi. «Band YO'Q» bilan «band 0» ni ajratish shu
+   * skriptning butun ma'nosi (IS-7).
+   */
+  trackedProducts?: readonly StateTrackedProductRow[];
+  pieceBuckets?: readonly StatePieceBucketRow[];
+  trackedStoreStock?: readonly StateAssortmentStockRow[];
+  trackedCellStock?: readonly StateAssortmentCellStockRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +220,52 @@ export interface Drift {
   message: string;
 }
 
+/** Bo'lak sverkasining bitta bo'g'ini (farq bor bo'lganlari hisobotga chiqadi). */
+export interface PieceDiffRow {
+  storeId: string;
+  storeName: string;
+  cellId: string | null;
+  cellName: string | null;
+  assortmentKind: string;
+  assortmentId: string;
+  productName: string | null;
+  stockQty: string;
+  registryQty: string;
+  /** registry − stock. Musbat = ortiqcha, manfiy = yetishmaydi. */
+  diffQty: string;
+  pieces: number;
+}
+
+/**
+ * K-reja bo'lak reyestrining holati (J1). Uch xil nosozlik ATAYLAB ajratilgan
+ * — ular uch xil ish talab qiladi va bittasiga yig'ilsa signal «bo'ri keldi»
+ * ga aylanardi:
+ *   `flaggedWithoutRegistry` — J3 ning ishi (reyestrni to'ldirish);
+ *   `piecesWithoutFlag`      — K6 ekranidagi qaror (bayroqni yoqish);
+ *   `diffProducts`           — haqiqiy invariant buzilishi (tekshirish shart).
+ */
+export interface PieceState {
+  /** `Product.pieceTracked = true` tovarlar soni. */
+  trackedProducts: number;
+  /** Reyestrdagi FAOL bo'laklar soni (bayroqdan qat'i nazar). */
+  activePieces: number;
+  /** Reyestrda faol bo'lagi bor, lekin bayrog'i O'CHIQ tovarlar soni. */
+  piecesWithoutFlag: number;
+  /** Bayrog'i yoqilgan, qoldig'i bor, lekin reyestrda birorta bo'lagi yo'q tovarlar. */
+  flaggedWithoutRegistry: number;
+  /** Invariant farqi bor tovarlar soni. */
+  diffProducts: number;
+  /** Farq bor bo'g'inlar (ombor × yacheyka × tovar) soni. */
+  diffBuckets: number;
+  stockQty: string;
+  registryQty: string;
+  /** registry − stock, bayroqli tovarlar bo'yicha jami. */
+  diffQty: string;
+  /** Eng katta farqlar (kesilgan ro'yxat — `truncated` jim kesishni ochib beradi). */
+  rows: PieceDiffRow[];
+  truncated: number;
+}
+
 export interface WarehouseStateReport {
   stores: StoreState[];
   cascade: Array<{ id: string; name: string; posPriority: number }>;
@@ -179,6 +276,8 @@ export interface WarehouseStateReport {
   unreachableQty: string;
   unreachable: Array<{ storeId: string; storeName: string; qty: string; reach: ReachStatus }>;
   totals: { storeQty: string; cellQty: string; cells: number };
+  /** K-reja bo'lak reyestrining holati (J1). */
+  pieces: PieceState;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +467,205 @@ export function buildWarehouseState(input: WarehouseStateInput): WarehouseStateR
     unreachableQty: formatDecimalScaled(unreachableTotal),
     unreachable,
     totals,
+    pieces: buildPieceState(input),
   };
+}
+
+// ---------------------------------------------------------------------------
+// K-reja bo'lak sverkasi (J1)
+// ---------------------------------------------------------------------------
+
+/** Hisobotga chiqadigan farq qatorlari chegarasi — jim kesish YO'Q. */
+const PIECE_ROW_LIMIT = 20;
+
+const pieceKey = (storeId: string, cellId: string | null, kind: string, id: string): string =>
+  `${storeId}|${cellId ?? ''}|${kind}|${id}`;
+
+/**
+ * `SUM(stock_pieces.length) WHERE status='active'` ni `Stock`/`StockByCell`
+ * bilan solishtiradi — K1 ning `buildPieceReconciliation` bilan AYNI
+ * semantikada, IKKI QATLAM:
+ *   (a) yacheykali bo'g'in — `StockByCell.qty` bilan;
+ *   (b) yacheykasiz bo'g'in — `Stock.qty − Σ StockByCell.qty` bilan.
+ *
+ * ⚠️ TAKRORLANGAN MANTIQ: manba — `apps/api/src/modules/stock-piece/
+ * stock-piece-core.ts#buildPieceReconciliation`. `packages/db` app qatlamiga
+ * qaray olmaydi (`readPosPriority` va cost-basis takrorlari bilan bir sabab) —
+ * birini o'zgartirsangiz ikkinchisini ham. Bu yerda faqat XULOSA hisoblanadi,
+ * to'liq hisobot `/reports/piece-reconciliation` da qoladi.
+ */
+export function buildPieceState(input: WarehouseStateInput): PieceState {
+  const tracked = new Map((input.trackedProducts ?? []).map((p) => [p.id, p.name]));
+  const storeNames = new Map(input.stores.map((s) => [s.id, s.name]));
+  const cellNames = new Map(input.cells.map((c) => [c.id, c.name]));
+  const isTracked = (kind: string, id: string): boolean => kind === 'product' && tracked.has(id);
+
+  interface Bucket {
+    storeId: string;
+    cellId: string | null;
+    assortmentKind: string;
+    assortmentId: string;
+    stock: bigint;
+    registry: bigint;
+    pieces: number;
+  }
+  const buckets = new Map<string, Bucket>();
+  const ensure = (storeId: string, cellId: string | null, kind: string, id: string): Bucket => {
+    const key = pieceKey(storeId, cellId, kind, id);
+    let b = buckets.get(key);
+    if (!b) {
+      b = {
+        storeId,
+        cellId,
+        assortmentKind: kind,
+        assortmentId: id,
+        stock: 0n,
+        registry: 0n,
+        pieces: 0,
+      };
+      buckets.set(key, b);
+    }
+    return b;
+  };
+
+  // (a) yacheykali qoldiq + (ombor × tovar) bo'yicha yacheykalar yig'indisi.
+  const celledSum = new Map<string, bigint>();
+  for (const row of input.trackedCellStock ?? []) {
+    if (!isTracked(row.assortmentKind, row.assortmentId)) continue;
+    const micro = parseDecimalScaled(row.qty);
+    ensure(row.storeId, row.cellId, row.assortmentKind, row.assortmentId).stock += micro;
+    const k = pieceKey(row.storeId, null, row.assortmentKind, row.assortmentId);
+    celledSum.set(k, (celledSum.get(k) ?? 0n) + micro);
+  }
+  // (b) yacheykasiz qoldiq = ombor jamisi − yacheykalardagi.
+  for (const row of input.trackedStoreStock ?? []) {
+    if (!isTracked(row.assortmentKind, row.assortmentId)) continue;
+    const k = pieceKey(row.storeId, null, row.assortmentKind, row.assortmentId);
+    ensure(row.storeId, null, row.assortmentKind, row.assortmentId).stock +=
+      parseDecimalScaled(row.qty) - (celledSum.get(k) ?? 0n);
+  }
+
+  // Reyestr tomoni.
+  let activePieces = 0;
+  const withoutFlag = new Set<string>();
+  const registryProducts = new Set<string>();
+  for (const row of input.pieceBuckets ?? []) {
+    activePieces += row.pieces;
+    if (!isTracked(row.assortmentKind, row.assortmentId)) {
+      // Bayroq o'chiq, reyestr esa to'la — jim qolish IS-5 xatosi bo'lardi
+      // (K1 sverkasidagi `pieces-without-flag` ogohlantirishining aynan o'zi).
+      withoutFlag.add(`${row.assortmentKind}|${row.assortmentId}`);
+      continue;
+    }
+    registryProducts.add(row.assortmentId);
+    const b = ensure(row.storeId, row.cellId, row.assortmentKind, row.assortmentId);
+    b.registry += parseDecimalScaled(row.qty);
+    b.pieces += row.pieces;
+  }
+
+  // Bayrog'i yoqilgan, qoldig'i BOR, lekin reyestrda birorta bo'lagi yo'q
+  // tovarlar — J3 ning navbati (kassa xulqi esa ALLAQACHON o'zgargan).
+  const stockedTracked = new Set<string>();
+  for (const b of buckets.values()) {
+    if (b.stock !== 0n) stockedTracked.add(b.assortmentId);
+  }
+  let flaggedWithoutRegistry = 0;
+  for (const id of stockedTracked) if (!registryProducts.has(id)) flaggedWithoutRegistry += 1;
+
+  // Farqlar.
+  let stockTotal = 0n;
+  let registryTotal = 0n;
+  let diffBuckets = 0;
+  const diffProducts = new Set<string>();
+  const rows: Array<PieceDiffRow & { absDiff: bigint }> = [];
+  for (const b of buckets.values()) {
+    if (b.stock === 0n && b.registry === 0n && b.pieces === 0) continue;
+    stockTotal += b.stock;
+    registryTotal += b.registry;
+    const diff = b.registry - b.stock;
+    if (diff === 0n) continue;
+    diffBuckets += 1;
+    diffProducts.add(b.assortmentId);
+    rows.push({
+      storeId: b.storeId,
+      storeName: storeNames.get(b.storeId) ?? b.storeId,
+      cellId: b.cellId,
+      cellName: b.cellId ? (cellNames.get(b.cellId) ?? b.cellId) : null,
+      assortmentKind: b.assortmentKind,
+      assortmentId: b.assortmentId,
+      productName: tracked.get(b.assortmentId) ?? null,
+      stockQty: formatDecimalScaled(b.stock),
+      registryQty: formatDecimalScaled(b.registry),
+      diffQty: formatDecimalScaled(diff),
+      pieces: b.pieces,
+      absDiff: diff < 0n ? -diff : diff,
+    });
+  }
+  rows.sort(
+    (a, b) =>
+      (a.absDiff === b.absDiff ? 0 : a.absDiff > b.absDiff ? -1 : 1) ||
+      a.storeName.localeCompare(b.storeName) ||
+      (a.productName ?? a.assortmentId).localeCompare(b.productName ?? b.assortmentId) ||
+      (a.cellName ?? '').localeCompare(b.cellName ?? ''),
+  );
+
+  return {
+    trackedProducts: tracked.size,
+    activePieces,
+    piecesWithoutFlag: withoutFlag.size,
+    flaggedWithoutRegistry,
+    diffProducts: diffProducts.size,
+    diffBuckets,
+    stockQty: formatDecimalScaled(stockTotal),
+    registryQty: formatDecimalScaled(registryTotal),
+    diffQty: formatDecimalScaled(registryTotal - stockTotal),
+    rows: rows.slice(0, PIECE_ROW_LIMIT).map(({ absDiff: _absDiff, ...r }) => r),
+    truncated: Math.max(0, rows.length - PIECE_ROW_LIMIT),
+  };
+}
+
+/**
+ * Bo'lak sverkasining DRIFT qatorlari.
+ *
+ * 🔴 HAMMASI `ogohlantirish` — HECH QACHON `xato` EMAS. Sabab F-reja qoida 8:
+ * chiqish kodi 2 «jonli holat reyestrdan chetda ⇒ deploy davom etmasin» degani
+ * va u savdoni to'xtatadigan qaror. Bo'lak reyestridagi farq esa SIGNAL:
+ * K-rejaning butun dizayni «sverka farq bersa ham kassa TO'XTAMAYDI» ustiga
+ * qurilgan (K-reja 3-bo'lim). Bu yerdan `xato` chiqarish o'sha qarorni jimgina
+ * bekor qilardi.
+ */
+export function pieceStateDrifts(report: WarehouseStateReport): Drift[] {
+  const p = report.pieces;
+  const drifts: Drift[] = [];
+  if (p.piecesWithoutFlag > 0) {
+    drifts.push({
+      code: 'bolak-bayroqsiz',
+      severity: 'ogohlantirish',
+      message:
+        `${p.piecesWithoutFlag} tovarda reyestrda faol bo'lak bor, lekin ` +
+        "`pieceTracked` bayrog'i O'CHIQ — «Hal qilinmagan» ro'yxatida qaror qiling",
+    });
+  }
+  if (p.flaggedWithoutRegistry > 0) {
+    drifts.push({
+      code: 'bolak-reyestri-bosh',
+      severity: 'ogohlantirish',
+      message:
+        `${p.flaggedWithoutRegistry} tovarda bayroq YOQILGAN va qoldig'i bor, lekin ` +
+        "reyestrda birorta bo'lak yo'q — kassa taqsimoti ALLAQACHON cheklangan " +
+        "(7.1 istisnosi), foydasi esa hali yo'q",
+    });
+  }
+  if (p.diffBuckets > 0) {
+    drifts.push({
+      code: 'bolak-sverkasi',
+      severity: 'ogohlantirish',
+      message:
+        `bo'lak sverkasi: ${p.diffProducts} tovar / ${p.diffBuckets} bo'g'inda farq ` +
+        `(jami ${p.diffQty}) — /reports/piece-reconciliation da bittalab ko'ring`,
+    });
+  }
+  return drifts;
 }
 
 // ---------------------------------------------------------------------------

@@ -78,6 +78,17 @@ export interface BaselineRow {
   costBalanceMinor: bigint;
   /** Shu (ombor × tovar) bo'yicha eng oxirgi yacheyka-yozuvi vaqti (ISO). */
   countedAt?: string | null;
+  /**
+   * K-reja `Product.pieceTracked` — «bo'lak hisobi yuritilsin» (J1).
+   *
+   * 🔴 UCHINCHI QOIDA (yuqoridagi ikkitasi ustiga). Bunday tovarda ombor
+   * jamisi `stock_pieces` dagi jismoniy bo'laklar yig'indisiga QULFLANGAN
+   * (K-reja 3-bo'lim invarianti). Bu skript esa qoldiqni kamaytiradi va
+   * reyestrga TEGMAYDI ⇒ «Σ faol bo'lak === miqdor» darhol buzilardi va K5
+   * ning ommaviy kiritish oqimi 400 bilan yiqilardi. Kamaytirishning to'g'ri
+   * yo'li — inventarizatsiya: u ikkala tomonni BIRGA yozadi.
+   */
+  pieceTracked?: boolean;
 }
 
 export interface CleanupOptions {
@@ -91,6 +102,7 @@ export interface CleanupOptions {
 }
 
 export type SkipReason =
+  | 'bolak-hisobi'
   | 'ortiqcha-yoq'
   | 'sanalmagan'
   | 'imzo-oraligidan-tashqarida'
@@ -167,6 +179,14 @@ export function buildCleanupPlan(
         surplus: surplusStr,
       });
 
+    // 🔴 J1 — bo'lak hisobi RAD ETISH, filtr emas: shuning uchun u eng
+    //    boshda turadi. «Ortiqchasi yo'q» deb o'tkazib yuborilsa bayroq
+    //    yoqilgan tovar hisobotda umuman ko'rinmasdi va operator skript
+    //    unga TEGMASLIGINI hech qayerdan bilmasdi.
+    if (r.pieceTracked) {
+      skip('bolak-hisobi');
+      continue;
+    }
     if (surplus <= 0n) {
       skip('ortiqcha-yoq');
       continue;

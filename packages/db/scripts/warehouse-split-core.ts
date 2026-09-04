@@ -125,6 +125,27 @@ export interface StockRow {
   costBalanceMinor: bigint;
 }
 
+/**
+ * K-reja bo'lak reyestrining qatori (`stock_pieces`) — J1 (T1 qarzi).
+ *
+ * 🔴 NEGA REJAGA KIRDI. Bo'lak — JISMONIY narsa va u turgan yacheyka bilan
+ * birga ko'chadi. Yacheykani ko'chirib bo'lagini eski omborda qoldirsak
+ * `stock_pieces.store_id ≠ store_cells.store_id` bo'ladi va K1 sverkasi
+ * («Σ faol bo'lak === StockByCell.qty») ikkala omborda ham buziladi: eskisida
+ * qoldiqsiz bo'lak, yangisida bo'laksiz qoldiq. Reyestr BO'SH paytda bu
+ * ko'rinmaydi — to'lgan kunidan boshlab har split shuni yozib ketardi.
+ */
+export interface StockPieceRow {
+  id: string;
+  storeId: string;
+  /** NULL = ombor hovuzidagi (yacheykasiz) bo'lak — split unga TEGMAYDI. */
+  cellId: string | null;
+  assortmentKind: string;
+  assortmentId: string;
+  /** `active` | `consumed` — ikkalasi ham ko'chadi (pastdagi izohga qarang). */
+  status: string;
+}
+
 // ---------------------------------------------------------------------------
 // Reja (chiqish)
 // ---------------------------------------------------------------------------
@@ -153,12 +174,31 @@ export interface QtyMovePlan {
   costMinor: bigint;
 }
 
+/**
+ * Bitta bo'lakning ko'chishi — yacheykasi bilan birga, AYNI tranzaksiyada.
+ *
+ * `consumed` bo'laklar ham ko'chadi: ular o'sha yacheykaga bog'langan tarix
+ * qatorlari va joyida qoldirilsa `piece.storeId ≠ cell.storeId` degan YANGI
+ * nomuvofiqlik klassi tug'ilardi (V1 invariantining bo'lak varianti).
+ * Sverkaga faqat `active` kiradi — shuning uchun hisobotda ikkalasi ALOHIDA
+ * sanaladi.
+ */
+export interface PieceMovePlan {
+  pieceId: string;
+  cellId: string;
+  cellName: string;
+  fromStoreId: string;
+  warehouseNo: string;
+  status: string;
+}
+
 export interface SplitAnomaly {
   kind:
     | 'unparsed-cell' // kod NN- bilan boshlanmaydi — joyida qoladi
     | 'target-name-clash' // maqsad omborda shu nomli BOSHQA yacheyka bor
     | 'negative-cell-qty' // StockByCell qty < 0 — imzoli ko'chadi, halol
-    | 'cell-exceeds-stock'; // Σyacheyka > Stock.qty — manba Stock manfiyga ketadi
+    | 'cell-exceeds-stock' // Σyacheyka > Stock.qty — manba Stock manfiyga ketadi
+    | 'piece-store-mismatch'; // bo'lak ombori yacheykasinikiga teng emas (split OLDIN ham buzuq edi)
   detail: string;
 }
 
@@ -170,6 +210,10 @@ export interface WarehouseSummaryRow {
   /** Σ qty (Decimal string, imzoli). */
   qty: string;
   costMinor: bigint;
+  /** Shu omborga ko'chadigan bo'laklar (barcha holatlar). */
+  pieces: number;
+  /** Ulardan `active` — sverkaga kiradiganlari. */
+  activePieces: number;
 }
 
 export interface SplitPlan {
@@ -177,10 +221,22 @@ export interface SplitPlan {
   warehousesNeeded: string[];
   cellMoves: CellMovePlan[];
   qtyMoves: QtyMovePlan[];
+  /** K-reja bo'lak reyestri — yacheyka bilan birga ko'chadiganlar (J1). */
+  pieceMoves: PieceMovePlan[];
   /** Ko'chishda qatnashgan manba Store id'lari (rename nomzodlari). */
   sourceStoreIds: string[];
   summary: WarehouseSummaryRow[];
   anomalies: SplitAnomaly[];
+}
+
+/** Faol / jami bo'lak sanog'i — hisobot qatorlari bitta joydan chiqsin. */
+export function countPieceMoves(moves: readonly PieceMovePlan[]): {
+  total: number;
+  active: number;
+} {
+  let active = 0;
+  for (const m of moves) if (m.status === 'active') active += 1;
+  return { total: moves.length, active };
 }
 
 /**
@@ -196,6 +252,12 @@ export function buildSplitPlan(input: {
   stores: StoreRow[];
   stockByCell: StockByCellRow[];
   stocks: StockRow[];
+  /**
+   * K-reja bo'lak reyestri (J1). ATAYLAB IXTIYORIY: reyestr bo'lmagan (yoki
+   * hali migratsiya berilmagan) bazada skript avvalgidek ishlashi kerak —
+   * bo'lak hisobi yo'qligi split'ni to'xtatadigan sabab emas.
+   */
+  pieces?: readonly StockPieceRow[];
 }): SplitPlan {
   const anomalies: SplitAnomaly[] = [];
 
@@ -357,6 +419,37 @@ export function buildSplitPlan(input: {
     }
   }
 
+  // 2b) Bo'lak reyestri — yacheykasi bilan birga ketadigan `stock_pieces`
+  //     qatorlari (J1). Yacheykasiz (`cellId = null`) bo'laklar hovuzda
+  //     QOLADI: ular yacheykaga bog'lanmagan qoldiqning jismoniy ko'rinishi va
+  //     o'sha qoldiq ham «Taqsimlanmagan» da qoladi (F4 dizayni).
+  const pieceMoves: PieceMovePlan[] = [];
+  for (const piece of [...(input.pieces ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!piece.cellId) continue;
+    const move = moveByCellId.get(piece.cellId);
+    if (!move) continue; // yacheykasi ko'chmayapti — bo'lak ham joyida
+    if (piece.storeId !== move.fromStoreId) {
+      // Yacheyka bir omborda, bo'lagi boshqasida — split bunga SABAB emas,
+      // lekin jim tuzatib ketmaydi ham: ko'chadi va ANOMALIYA sifatida
+      // ko'rinadi (aks holda «qayerdan keldi?» degan savol javobsiz qolardi).
+      anomalies.push({
+        kind: 'piece-store-mismatch',
+        detail:
+          `bo'lak ${piece.id} («${move.cellName}» yacheykasida) ombori ` +
+          `${piece.storeId}, yacheykasiniki esa ${move.fromStoreId} — ` +
+          `${storeNameFor(move.warehouseNo)} ga ko'chiriladi`,
+      });
+    }
+    pieceMoves.push({
+      pieceId: piece.id,
+      cellId: piece.cellId,
+      cellName: move.cellName,
+      fromStoreId: piece.storeId,
+      warehouseNo: move.warehouseNo,
+      status: piece.status,
+    });
+  }
+
   // 3) Xulosa (ombor kesimida).
   const summaryMap = new Map<string, WarehouseSummaryRow & { qtyMicro: bigint }>();
   for (const m of cellMoves) {
@@ -370,6 +463,8 @@ export function buildSplitPlan(input: {
         qty: '0',
         qtyMicro: 0n,
         costMinor: 0n,
+        pieces: 0,
+        activePieces: 0,
       };
       summaryMap.set(m.warehouseNo, row);
     }
@@ -392,6 +487,11 @@ export function buildSplitPlan(input: {
     row.qtyMicro += parseDecimalScaled(q.qty);
     row.costMinor += q.costMinor;
   }
+  for (const p of pieceMoves) {
+    const row = summaryMap.get(p.warehouseNo)!;
+    row.pieces += 1;
+    if (p.status === 'active') row.activePieces += 1;
+  }
   const summary = [...summaryMap.values()]
     .sort((a, b) => a.warehouseNo.localeCompare(b.warehouseNo))
     .map(({ qtyMicro, ...row }) => ({ ...row, qty: formatDecimalScaled(qtyMicro) }));
@@ -400,6 +500,7 @@ export function buildSplitPlan(input: {
     warehousesNeeded: [...warehousesNeededSet].sort(),
     cellMoves,
     qtyMoves,
+    pieceMoves,
     sourceStoreIds: [...sourceStoreIds].sort(),
     summary,
     anomalies,
@@ -532,6 +633,10 @@ export function filterPlanTo(plan: SplitPlan, onlyNos: ReadonlySet<string>): Spl
     warehousesNeeded: plan.warehousesNeeded.filter((no) => onlyNos.has(no)),
     cellMoves,
     qtyMoves,
+    // Bo'laklar ham ombor bo'yicha kesiladi — aks holda `--only 01` da
+    // «bir kechada BITTA ombor» qoidasi buzilib, tegilmagan ombor bo'laklari
+    // ham yozuvga tushardi.
+    pieceMoves: plan.pieceMoves.filter((m) => onlyNos.has(m.warehouseNo)),
     sourceStoreIds: [...new Set(cellMoves.map((m) => m.fromStoreId))].sort(),
     summary: plan.summary.filter((s) => onlyNos.has(s.warehouseNo)),
     anomalies: plan.anomalies,

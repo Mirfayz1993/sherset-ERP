@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   if (!target) throw new Error(`«${UNALLOCATED_STORE_NAME}» ombori topilmadi`);
   const accountId = source.accountId;
 
-  const [cells, stocks, sbc] = await Promise.all([
+  const [cells, stocks, sbc, pieces] = await Promise.all([
     prisma.storeCell.findMany({ where: { storeId: source.id }, select: { id: true } }),
     prisma.stock.findMany({
       where: { accountId, storeId: source.id },
@@ -110,7 +110,18 @@ async function main(): Promise<void> {
       where: { accountId, storeId: source.id },
       select: { cellId: true, assortmentKind: true, assortmentId: true, qty: true },
     }),
+    // J1 — K-reja bo'lak reyestri. Bu skript butun OMBORNI bo'shatadi, ya'ni
+    // forward split'dan farqli o'laroq YACHEYKASIZ (`cellId IS NULL`) bo'laklar
+    // ham ko'chadi: hovuz qoldig'i ketayotgan bo'lsa uning jismoniy tarkibi
+    // ham ketishi shart, aks holda bo'lak bo'shatilgan omborda osilib qolardi.
+    prisma.stockPiece.groupBy({
+      by: ['status'],
+      where: { accountId, storeId: source.id },
+      _count: { _all: true },
+    }),
   ]);
+  const pieceTotal = pieces.reduce((a, r) => a + r._count._all, 0);
+  const pieceActive = pieces.find((r) => r.status === 'active')?._count._all ?? 0;
 
   const moving = stocks.filter(
     (s) => parseDecimalScaled(s.qty.toString()) !== 0n || s.costBalanceMinor !== 0n,
@@ -125,6 +136,8 @@ async function main(): Promise<void> {
     `Ko‘chadi: ${moving.length} tovar · ${formatDecimalScaled(totalQty)} dona · ` +
       `${totalCost.toString()} tiyin tan narx`,
   );
+  // J1 — qator HAR DOIM chiqadi (0 bo'lsa ham).
+  console.log(`Bo‘lak reyestri (K-reja): ${pieceTotal} bo‘lak ko‘chadi (faol ${pieceActive})`);
   if (!APPLY) {
     console.log('\nDRY-RUN — hech nima yozilmadi. Qo‘llash uchun: --apply --allow-remote');
     return;
@@ -141,6 +154,14 @@ async function main(): Promise<void> {
         data: { storeId: target.id, zoneId: null },
       });
       await tx.stockByCell.updateMany({
+        where: { accountId, storeId: source.id },
+        data: { storeId: target.id },
+      });
+      // 1b) Bo'lak reyestri — yacheykalilar ham, hovuzdagilar ham (J1).
+      //     `cellId` GA TEGILMAYDI: yacheykaning o'zi maqsad omborga ko'chdi,
+      //     ya'ni bog'lanish to'g'ri qoladi (`zoneId` esa yuqorida yacheykada
+      //     tozalandi — bo'lakda zona tushunchasi umuman yo'q).
+      await tx.stockPiece.updateMany({
         where: { accountId, storeId: source.id },
         data: { storeId: target.id },
       });
@@ -228,11 +249,20 @@ async function main(): Promise<void> {
           `INVARIANT BUZILDI: manbada ${formatDecimalScaled(leftQty)} dona / ${leftCost} tiyin qoldi — ROLLBACK`,
         );
       }
+      // J1 — bo'lak reyestri ham bo'shashi SHART. Qoldiq ketib bo'lak qolsa
+      // K1 sverkasi bo'shatilgan omborda «ortiqcha» deb qizil berardi.
+      const leftPieces = await tx.stockPiece.count({ where: { accountId, storeId: source.id } });
+      if (leftPieces !== 0) {
+        throw new Error(`INVARIANT BUZILDI: manbada ${leftPieces} bo‘lak qoldi — ROLLBACK`);
+      }
     },
     { isolationLevel: 'Serializable', timeout: 180_000 },
   );
 
-  console.log(`✓ Qaytarildi (docId ${docId}). Kassa endi shu tovarlarni sotadi.`);
+  console.log(
+    `✓ Qaytarildi (docId ${docId}) · ${pieceTotal} bo‘lak ham ko‘chdi. ` +
+      'Kassa endi shu tovarlarni sotadi.',
+  );
 }
 
 main()

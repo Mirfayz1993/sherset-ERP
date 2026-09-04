@@ -34,6 +34,7 @@ import {
   diffAgainstRegistry,
   exitCodeFor,
   parseRegistry,
+  pieceStateDrifts,
 } from './warehouse-state-core.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -77,31 +78,67 @@ const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
 const prisma = new PrismaClient({ log: ['error'] });
 
 async function readAccount(accountId: string): Promise<WarehouseStateReport> {
-  const [stores, cells, storeStock, cellStock, sessions] = await Promise.all([
-    prisma.store.findMany({
-      where: { accountId },
-      select: { id: true, name: true, archived: true, attributes: true },
-    }),
-    prisma.storeCell.findMany({
-      where: { accountId },
-      select: { id: true, storeId: true, zoneId: true, name: true },
-    }),
-    prisma.stock.groupBy({
-      by: ['storeId'],
-      where: { accountId },
-      _sum: { qty: true },
-    }),
-    prisma.stockByCell.groupBy({
-      by: ['storeId'],
-      where: { accountId },
-      _sum: { qty: true },
-    }),
-    prisma.cashierSession.groupBy({
-      by: ['storeId'],
-      where: { accountId, state: 'open' },
-      _count: { _all: true },
-    }),
-  ]);
+  const [stores, cells, storeStock, cellStock, sessions, trackedProducts, pieceBuckets] =
+    await Promise.all([
+      prisma.store.findMany({
+        where: { accountId },
+        select: { id: true, name: true, archived: true, attributes: true },
+      }),
+      prisma.storeCell.findMany({
+        where: { accountId },
+        select: { id: true, storeId: true, zoneId: true, name: true },
+      }),
+      prisma.stock.groupBy({
+        by: ['storeId'],
+        where: { accountId },
+        _sum: { qty: true },
+      }),
+      prisma.stockByCell.groupBy({
+        by: ['storeId'],
+        where: { accountId },
+        _sum: { qty: true },
+      }),
+      prisma.cashierSession.groupBy({
+        by: ['storeId'],
+        where: { accountId, state: 'open' },
+        _count: { _all: true },
+      }),
+      // J1 — K-reja bo'lak sverkasi. Ikkalasi ham FAQAT O'QISH.
+      prisma.product.findMany({
+        where: { accountId, pieceTracked: true },
+        select: { id: true, name: true },
+      }),
+      // `groupBy` ATAYLAB `findMany` o'rniga: reyestr to'lganda ham so'rov
+      // bo'g'inlar soni bilan chegaralanadi, qatorlar soni bilan emas.
+      prisma.stockPiece.groupBy({
+        by: ['storeId', 'cellId', 'assortmentKind', 'assortmentId'],
+        where: { accountId, status: 'active' },
+        _sum: { length: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+  // Bayroqli tovarlarning qoldiq kesimi — DOIRASI bayroq bilan CHEGARALANGAN
+  // (bayroq yo'q ⇒ so'rov ham yo'q). Sverka faqat shu tovarlar uchun ma'noli.
+  const trackedIds = trackedProducts.map((p) => p.id);
+  const [trackedStoreStock, trackedCellStock] = trackedIds.length
+    ? await Promise.all([
+        prisma.stock.findMany({
+          where: { accountId, assortmentKind: 'product', assortmentId: { in: trackedIds } },
+          select: { storeId: true, assortmentKind: true, assortmentId: true, qty: true },
+        }),
+        prisma.stockByCell.findMany({
+          where: { accountId, assortmentKind: 'product', assortmentId: { in: trackedIds } },
+          select: {
+            storeId: true,
+            cellId: true,
+            assortmentKind: true,
+            assortmentId: true,
+            qty: true,
+          },
+        }),
+      ])
+    : [[], []];
 
   return buildWarehouseState({
     stores,
@@ -109,6 +146,17 @@ async function readAccount(accountId: string): Promise<WarehouseStateReport> {
     storeStock: storeStock.map((r) => ({ storeId: r.storeId, qty: (r._sum.qty ?? 0).toString() })),
     cellStock: cellStock.map((r) => ({ storeId: r.storeId, qty: (r._sum.qty ?? 0).toString() })),
     openSessions: sessions.map((r) => ({ storeId: r.storeId, sessions: r._count._all })),
+    trackedProducts,
+    pieceBuckets: pieceBuckets.map((r) => ({
+      storeId: r.storeId,
+      cellId: r.cellId,
+      assortmentKind: r.assortmentKind,
+      assortmentId: r.assortmentId,
+      qty: (r._sum.length ?? 0).toString(),
+      pieces: r._count._all,
+    })),
+    trackedStoreStock: trackedStoreStock.map((r) => ({ ...r, qty: r.qty.toString() })),
+    trackedCellStock: trackedCellStock.map((r) => ({ ...r, qty: r.qty.toString() })),
   });
 }
 
@@ -186,6 +234,35 @@ function printReport(accountId: string, report: WarehouseStateReport): void {
   for (const u of report.unreachable) {
     console.log(`   · ${u.storeName}: ${u.qty} (${reachLabel(u.reach)})`);
   }
+  printPieces(report);
+}
+
+/**
+ * J1 — bo'lak sverkasi bandi. Qatorlar HAR DOIM chiqadi (hammasi 0 bo'lsa
+ * ham): «o'lchandi va 0» bilan «umuman o'lchanmadi» ni ajratish shu
+ * skriptning butun ma'nosi (IS-7).
+ */
+function printPieces(report: WarehouseStateReport): void {
+  const p = report.pieces;
+  console.log(
+    `\nBO‘LAK REYESTRI (K-reja): bayroqli tovar ${p.trackedProducts} · ` +
+      `faol bo‘lak ${p.activePieces} · farqli tovar ${p.diffProducts} ` +
+      `(${p.diffBuckets} bo‘g‘in, jami ${p.diffQty})`,
+  );
+  if (p.piecesWithoutFlag > 0) {
+    console.log(`   · bayroqsiz tovarda bo‘lak bor: ${p.piecesWithoutFlag}`);
+  }
+  if (p.flaggedWithoutRegistry > 0) {
+    console.log(`   · bayroq YOQILGAN, reyestri bo‘sh (qoldig‘i bor): ${p.flaggedWithoutRegistry}`);
+  }
+  for (const r of p.rows) {
+    console.log(
+      `   · ${r.storeName}${r.cellName ? `/${r.cellName}` : ' (yacheykasiz)'} — ` +
+        `${r.productName ?? r.assortmentId}: qoldiq ${r.stockQty}, reyestr ${r.registryQty}, ` +
+        `farq ${r.diffQty} (${r.pieces} bo‘lak)`,
+    );
+  }
+  if (p.truncated > 0) console.log(`   · … va yana ${p.truncated} bo‘g‘in ko‘rsatilmadi`);
 }
 
 function printDrifts(drifts: readonly Drift[]): void {
@@ -193,7 +270,7 @@ function printDrifts(drifts: readonly Drift[]): void {
     console.log('\n✅ Reyestrga MOS — farq yo‘q.');
     return;
   }
-  console.log('\n⚠️  REYESTRDAN FARQ:');
+  console.log('\n⚠️  FARQLAR (jonli holat reyestri + bo‘lak sverkasi):');
   for (const d of drifts) {
     console.log(`   [${d.severity}] ${d.code}: ${d.message}`);
   }
@@ -212,11 +289,18 @@ async function main(): Promise<void> {
 
   for (const { accountId } of accounts) {
     const report = await readAccount(accountId);
-    const drifts = registry ? diffAgainstRegistry(report, registry) : [];
+    // J1 — bo'lak driftlari reyestrdan MUSTAQIL: ular `docs/ops/jonli-holat.md`
+    // da e'lon qilinmaydi (bo'lak — TOVAR xossasi, ombor holati emas), lekin
+    // `--no-registry` da ham ko'rinishi kerak. Hammasi `ogohlantirish` ⇒
+    // chiqish kodiga TA'SIR QILMAYDI (`exitCodeFor` faqat `xato` ni sanaydi).
+    const drifts = [
+      ...(registry ? diffAgainstRegistry(report, registry) : []),
+      ...pieceStateDrifts(report),
+    ];
     payload.push({ accountId, report, drifts });
     if (!AS_JSON) {
       printReport(accountId, report);
-      if (registry) printDrifts(drifts);
+      if (registry || drifts.length > 0) printDrifts(drifts);
     }
   }
 

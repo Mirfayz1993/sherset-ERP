@@ -3,12 +3,14 @@ import {
   type CellRow,
   type SplitPlan,
   type StockByCellRow,
+  type StockPieceRow,
   type StockRow,
   type StoreRow,
   type TargetStoreState,
   UNALLOCATED_STORE_NAME,
   buildSplitPlan,
   checkPosReachability,
+  countPieceMoves,
   filterPlanTo,
   parseCellCode,
   storeNameFor,
@@ -381,5 +383,116 @@ describe('filterPlanTo — bir kechada BITTA ombor', () => {
 
   it('warehouseNosIn to‘liq rejadagi omborlarni tartibda beradi', () => {
     expect(warehouseNosIn(full())).toEqual(['01', '02', '03']);
+  });
+});
+
+/**
+ * J1 — K-reja bo'lak reyestri split rejasiga qo'shildi (T1 qarzi).
+ *
+ * Invariant: bo'lak JISMONIY narsa — yacheykasi ko'chsa u ham ko'chadi,
+ * yacheykasi joyida qolsa u ham qoladi. Buzilsa `stock_pieces.store_id` va
+ * `store_cells.store_id` ajralib ketadi va K1 sverkasi ikkala omborda ham
+ * yolg'on farq beradi.
+ */
+describe('bo‘lak reyestri — yacheyka bilan birga ko‘chadi (J1)', () => {
+  const CELL_MOVING = 'c-moving';
+  const CELL_STAYING = 'c-staying';
+
+  function piece(
+    id: string,
+    cellId: string | null,
+    over: Partial<StockPieceRow> = {},
+  ): StockPieceRow {
+    return {
+      id,
+      storeId: SRC,
+      cellId,
+      assortmentKind: 'product',
+      assortmentId: 'p1',
+      status: 'active',
+      ...over,
+    };
+  }
+
+  /** `01-…` yacheyka ko'chadi; `02-…` esa allaqachon «Ombor 02» da — qoladi. */
+  const W02 = 'store-w02';
+  function plan(pieces: StockPieceRow[]) {
+    return buildSplitPlan({
+      cells: [cell(CELL_MOVING, '01-01-01-01'), cell(CELL_STAYING, '02-01-01-01', W02)],
+      stores: stores([{ id: W02, name: 'Ombor 02', archived: false }]),
+      stockByCell: [],
+      stocks: [],
+      pieces,
+    });
+  }
+
+  it('ko‘chayotgan yacheykadagi bo‘lak rejaga tushadi', () => {
+    const p = plan([piece('pc-1', CELL_MOVING)]);
+    expect(p.pieceMoves).toEqual([
+      {
+        pieceId: 'pc-1',
+        cellId: CELL_MOVING,
+        cellName: '01-01-01-01',
+        fromStoreId: SRC,
+        warehouseNo: '01',
+        status: 'active',
+      },
+    ]);
+  });
+
+  it('🔴 YACHEYKASIZ bo‘lak hovuzda QOLADI (qoldig‘i ham qoladi)', () => {
+    expect(plan([piece('pc-pool', null)]).pieceMoves).toEqual([]);
+  });
+
+  it('ko‘chmaydigan yacheykadagi bo‘lakka TEGILMAYDI', () => {
+    expect(plan([piece('pc-2', CELL_STAYING, { storeId: W02 })]).pieceMoves).toEqual([]);
+  });
+
+  it('🔴 `consumed` bo‘lak ham ko‘chadi, lekin FAOL sanog‘iga kirmaydi', () => {
+    const p = plan([
+      piece('pc-a', CELL_MOVING),
+      piece('pc-b', CELL_MOVING, { status: 'consumed' }),
+    ]);
+    expect(p.pieceMoves).toHaveLength(2);
+    expect(countPieceMoves(p.pieceMoves)).toEqual({ total: 2, active: 1 });
+    expect(p.summary[0]).toMatchObject({ warehouseNo: '01', pieces: 2, activePieces: 1 });
+  });
+
+  it('bo‘lak ombori yacheykasinikiga teng bo‘lmasa — ko‘chadi VA anomaliya beradi', () => {
+    const p = plan([piece('pc-x', CELL_MOVING, { storeId: 'boshqa-ombor' })]);
+    expect(p.pieceMoves).toHaveLength(1);
+    expect(p.anomalies.map((a) => a.kind)).toContain('piece-store-mismatch');
+  });
+
+  it('bo‘laklar berilmasa reja avvalgidek quriladi (ixtiyoriy kirish)', () => {
+    const p = buildSplitPlan({
+      cells: [cell(CELL_MOVING, '01-01-01-01')],
+      stores: stores(),
+      stockByCell: [],
+      stocks: [],
+    });
+    expect(p.pieceMoves).toEqual([]);
+    expect(p.cellMoves).toHaveLength(1);
+    expect(p.summary[0]).toMatchObject({ pieces: 0, activePieces: 0 });
+  });
+
+  it('reja deterministik: kirish tartibi natijani o‘zgartirmaydi', () => {
+    const a = plan([piece('pc-b', CELL_MOVING), piece('pc-a', CELL_MOVING)]);
+    const b = plan([piece('pc-a', CELL_MOVING), piece('pc-b', CELL_MOVING)]);
+    expect(a.pieceMoves.map((m) => m.pieceId)).toEqual(['pc-a', 'pc-b']);
+    expect(a.pieceMoves).toEqual(b.pieceMoves);
+  });
+
+  it('🔴 `--only` bo‘laklarni ham kesadi (bir kechada BITTA ombor)', () => {
+    const p = buildSplitPlan({
+      cells: [cell('c1', '01-01-01-01'), cell('c2', '03-01-01-01')],
+      stores: stores(),
+      stockByCell: [],
+      stocks: [],
+      pieces: [piece('pc-01', 'c1'), piece('pc-03', 'c2')],
+    });
+    expect(p.pieceMoves).toHaveLength(2);
+    const only01 = filterPlanTo(p, new Set(['01']));
+    expect(only01.pieceMoves.map((m) => m.pieceId)).toEqual(['pc-01']);
   });
 });

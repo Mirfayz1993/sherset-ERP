@@ -39,6 +39,7 @@ import {
   UNALLOCATED_STORE_NAME,
   buildSplitPlan,
   checkPosReachability,
+  countPieceMoves,
   filterPlanTo,
   formatDecimalScaled,
   parseDecimalScaled,
@@ -123,7 +124,7 @@ const D = (s: string) => new Prisma.Decimal(s);
 // ---------------------------------------------------------------------------
 
 async function readAccountData(accountId: string) {
-  const [stores, cells, stockByCell, stocks] = await Promise.all([
+  const [stores, cells, stockByCell, stocks, pieces] = await Promise.all([
     prisma.store.findMany({
       where: { accountId },
       select: {
@@ -163,12 +164,27 @@ async function readAccountData(accountId: string) {
         costBalanceMinor: true,
       },
     }),
+    // J1 — K-reja bo'lak reyestri. Yacheykasiz bo'laklar ham o'qiladi (yadro
+    // ularni o'zi chetlab o'tadi), chunki «nega ko'chmadi?» savolining javobi
+    // ham shu ma'lumotdan chiqadi.
+    prisma.stockPiece.findMany({
+      where: { accountId },
+      select: {
+        id: true,
+        storeId: true,
+        cellId: true,
+        assortmentKind: true,
+        assortmentId: true,
+        status: true,
+      },
+    }),
   ]);
   return {
     stores,
     cells,
     stockByCell: stockByCell.map((r) => ({ ...r, qty: r.qty.toString() })),
     stocks: stocks.map((r) => ({ ...r, qty: r.qty.toString() })),
+    pieces,
   };
 }
 
@@ -232,6 +248,19 @@ function printPlan(accountId: string, plan: SplitPlan, storeNames: Map<string, s
         .join(', ')} → «${UNALLOCATED_STORE_NAME}» deb qayta nomlanadi`,
     );
   }
+  // J1 — bo'lak reyestri qatori HAR DOIM chiqadi (0 bo'lsa ham): reyestr
+  // bo'shligini KO'RSATISH ham natija, uni jim o'tkazib yuborish esa aynan
+  // T1 qarzining ildizi edi.
+  const pieces = countPieceMoves(plan.pieceMoves);
+  console.log(
+    `Bo‘lak reyestri (K-reja): ${pieces.total} bo‘lak ko‘chadi (faol ${pieces.active})` +
+      (pieces.total > 0
+        ? ` — ${plan.summary
+            .filter((s) => s.pieces > 0)
+            .map((s) => `${storeNameFor(s.warehouseNo)}: ${s.pieces} (faol ${s.activePieces})`)
+            .join(', ')}`
+        : ''),
+  );
   if (plan.anomalies.length) {
     console.log(`Anomaliyalar (${plan.anomalies.length}):`);
     for (const a of plan.anomalies) console.log(`  [${a.kind}] ${a.detail}`);
@@ -344,6 +373,7 @@ async function applyPlan(
     const targetId = targetIdByNo.get(no)!;
     const cellMoves = plan.cellMoves.filter((m) => m.warehouseNo === no);
     const qtyMoves = plan.qtyMoves.filter((m) => m.warehouseNo === no);
+    const piecesForThisWarehouse = plan.pieceMoves.filter((m) => m.warehouseNo === no);
     const docId = randomUUID();
 
     await prisma.$transaction(
@@ -380,6 +410,23 @@ async function applyPlan(
             where: { accountId, cellId: m.cellId, storeId: m.fromStoreId },
             data: { storeId: targetId },
           });
+        }
+
+        // 2b) K-reja bo'lak reyestri — AYNI tranzaksiyada (J1). Yacheyka bir
+        //     omborda, bo'lagi boshqasida qolsa sverka ikkala tomonda ham
+        //     farq berardi. `id` bo'yicha yoziladi: reja qaysi qatorlarni
+        //     ko'chirishini o'zi hal qilgan (yacheykasizlar TEGILMAYDI).
+        if (piecesForThisWarehouse.length > 0) {
+          const res = await tx.stockPiece.updateMany({
+            where: { accountId, id: { in: piecesForThisWarehouse.map((p) => p.pieceId) } },
+            data: { storeId: targetId },
+          });
+          if (res.count !== piecesForThisWarehouse.length) {
+            throw new Error(
+              `Bo‘lak ko‘chishi to‘liq emas: kutilgan ${piecesForThisWarehouse.length}, ` +
+                `yozildi ${res.count} — ROLLBACK`,
+            );
+          }
         }
 
         // 2c) Stock siljishlari — (manba, assortiment) bo'yicha jamlangan.
@@ -483,7 +530,8 @@ async function applyPlan(
       { isolationLevel: 'Serializable', timeout: 180_000 },
     );
     console.log(
-      `✓ ${storeNameFor(no)}: ${cellMoves.length} yacheyka, ${qtyMoves.length} qator ko‘chdi (docId ${docId})`,
+      `✓ ${storeNameFor(no)}: ${cellMoves.length} yacheyka, ${qtyMoves.length} qator, ` +
+        `${piecesForThisWarehouse.length} bo‘lak ko‘chdi (docId ${docId})`,
     );
   }
 
@@ -575,6 +623,17 @@ async function verify(accountId: string): Promise<boolean> {
     ok = false;
     for (const r of v3rows) console.log(`V3 XATO: «${r.name}» — ${r.bad} assortimentda farq`);
   }
+
+  // V4 (J1): yacheykali bo'lakning ombori — o'z yacheykasiniki. V1 ning bo'lak
+  // varianti. Buzilsa K1 sverkasi eski omborda «yo'qolgan», yangisida
+  // «ortiqcha» beradi va farqning sababi hech qayerdan ko'rinmaydi.
+  const pieceMismatch = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(*)::bigint AS n
+    FROM stock_pieces p JOIN store_cells c ON c.id = p.cell_id
+    WHERE p.account_id = ${accountId}::uuid AND p.store_id <> c.store_id`;
+  const v4 = pieceMismatch[0]?.n ?? 0n;
+  console.log(`V4 piece.storeId == cell.storeId: ${v4 === 0n ? 'OK' : `XATO (${v4} bo‘lak)`}`);
+  if (v4 !== 0n) ok = false;
 
   return ok;
 }

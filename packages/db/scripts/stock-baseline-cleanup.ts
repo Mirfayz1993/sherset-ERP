@@ -112,7 +112,7 @@ const OPTIONS: CleanupOptions = {
 // ---------------------------------------------------------------------------
 
 async function readRows(accountId: string): Promise<BaselineRow[]> {
-  const [stores, stocks, cells] = await Promise.all([
+  const [stores, stocks, cells, tracked] = await Promise.all([
     prisma.store.findMany({ where: { accountId }, select: { id: true, name: true } }),
     prisma.stock.findMany({
       where: { accountId },
@@ -131,8 +131,15 @@ async function readRows(accountId: string): Promise<BaselineRow[]> {
       _sum: { qty: true },
       _max: { updatedAt: true },
     }),
+    // J1 — bo'lak hisobi yuritiladigan tovarlar. Bayroq FAQAT `Product` da
+    // bo'ladi (variantlar bo'lak hisobidan tashqarida — K1 hisoboti).
+    prisma.product.findMany({
+      where: { accountId, pieceTracked: true },
+      select: { id: true },
+    }),
   ]);
 
+  const trackedIds = new Set(tracked.map((p) => p.id));
   const storeNames = new Map(stores.map((s) => [s.id, s.name]));
   const key = (s: string, k: string, a: string) => `${s}|${k}|${a}`;
   const byCell = new Map(
@@ -154,6 +161,7 @@ async function readRows(accountId: string): Promise<BaselineRow[]> {
       assignedQty: hit?.qty ?? '0',
       costBalanceMinor: BigInt(s.costBalanceMinor),
       countedAt: hit?.at ?? null,
+      pieceTracked: s.assortmentKind === 'product' && trackedIds.has(s.assortmentId),
     };
   });
 }
@@ -172,6 +180,8 @@ async function productNames(ids: readonly string[]): Promise<Map<string, string>
 // ---------------------------------------------------------------------------
 
 const SKIP_LABEL: Record<SkipReason, string> = {
+  'bolak-hisobi':
+    'bo‘lak hisobi yuritiladi — qoldiqni BU SKRIPT kamaytira olmaydi (tuzatish inventarizatsiya orqali)',
   'ortiqcha-yoq': 'ortiqcha yo‘q',
   sanalmagan: 'hali sanalmagan (yacheykasi yo‘q)',
   'imzo-oraligidan-tashqarida': 'imzo-oralig‘idan tashqarida',
@@ -213,6 +223,12 @@ async function printPlan(accountId: string, plan: CleanupPlan): Promise<void> {
   console.log(
     `Tegilmadi: ${[...bySkip.entries()].map(([r, n]) => `${SKIP_LABEL[r]} ${n}`).join(', ') || '—'}`,
   );
+  // J1 — qator HAR DOIM chiqadi (0 bo'lsa ham): «bo'lak hisobi yuritiladigan
+  // tovarga tegilmadi» degan fakt hisobotda ko'rinmasa, operator uni bilmasdi.
+  console.log(
+    `Bo‘lak reyestri (K-reja): ${bySkip.get('bolak-hisobi') ?? 0} qator RAD ETILDI ` +
+      '(bo‘lak hisobi yuritiladigan tovar — qoldiq faqat inventarizatsiya bilan tuzatiladi)',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +256,19 @@ async function applyPlan(accountId: string, plan: CleanupPlan, docId: string): P
           select: { qty: true, reservedQty: true, costBalanceMinor: true },
         });
         if (!fresh) return false;
+        // 🔴 J1 — bayroq DRY va APPLY orasida yoqilgan bo'lishi mumkin (K6
+        //    kartochkasidagi bitta tugma, deploy talab qilmaydi). Bayroqni
+        //    tranzaksiya ICHIDA qayta o'qiymiz — aks holda skript endigina
+        //    bo'lak hisobiga o'tgan tovarning qoldig'ini kamaytirib qo'yardi.
+        const flagged =
+          l.assortmentKind === 'product'
+            ? ((
+                await tx.product.findUnique({
+                  where: { id: l.assortmentId },
+                  select: { pieceTracked: true },
+                })
+              )?.pieceTracked ?? false)
+            : false;
         const cellSum = await tx.stockByCell.aggregate({
           where: {
             accountId,
@@ -261,6 +290,7 @@ async function applyPlan(accountId: string, plan: CleanupPlan, docId: string): P
               assignedQty: (cellSum._sum.qty ?? 0).toString(),
               costBalanceMinor: BigInt(fresh.costBalanceMinor),
               countedAt: null,
+              pieceTracked: flagged,
             },
           ],
           // Qayta qurishda `--since` NI QO'LLAMAYMIZ: satr allaqachon saralangan,
