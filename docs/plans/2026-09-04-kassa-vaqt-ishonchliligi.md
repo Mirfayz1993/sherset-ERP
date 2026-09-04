@@ -1,6 +1,6 @@
 # Kassa vaqt ishonchliligi — qurilma soatidan qutulish (S-reja)
 
-> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2, S3 TUGADI (2026-09-04)
+> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2, S3, S4 TUGADI (2026-09-04); qoldi: S5
 > **Boshlang'ich nuqta:** `yacheyka-inventarizatsiya` branch, HEAD `8e698b11`. Jonli: `erp.sherset.uz`.
 > **Sabab (egasining xabari, 2026-09-04):** «kassada vaqt qurilma vaqti bilan ishlayapti va qurilmada vaqt
 > xato bo'lsa xato ko'rsatmoqda».
@@ -135,7 +135,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 | **S1** | Poydevor: `serverNow()` + skew (`Date` sarlavhasi) + `POS_TZ`; iste'molchi — 2 ta soat | yo'q | 🔴 blok | **TUGADI** |
 | **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | **TUGADI** |
 | **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | **TUGADI** |
-| **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | REJA |
+| **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | **TUGADI** |
 | **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | REJA |
 
 **Tartib sababi:** S1 — poydevor, usiz qolganlari yo'q. S2 birinchi bo'lib bajariladi, chunki **qog'oz
@@ -806,3 +806,219 @@ qoralama umuman serverga chiqmaydi (`localStorage`), qarz to'lovi payload'i o'zg
 - §1.3 dagi qolgan formatlash nuqtalari va zaxira `CHEK-HHMMSS` soati — **S4**.
 - Ogohlantirish chipi + qurilmada NTP + jonli smoke — **S5**.
 - **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti.
+
+---
+
+### S4 — TZ qotirish + guard test · **TUGADI** · 2026-09-04
+
+**Commit:** `5efe6430` — `feat(kassa): pos sana/vaqt mintaqasi qotirildi + soat intizomi qo'riqchisi (S4)`
+
+**Nima qilindi** (faqat `apps/web` — 19 fayl; `apps/api` ga TEGILMADI)
+
+| Fayl | O'zgarish |
+|---|---|
+| `sotuv/_components/cheklar-mode.tsx` | 2 nuqta (`:407` detal sarlavhasi, `:1074` ro'yxat soati) → `timeZone: POS_TZ` |
+| `sotuv/_components/smena-mode.tsx` | `:231` smena ochilgan soati |
+| `sotuv/_components/vozvrat-mode.tsx` | `:347` chek sana+soati (kassir chekni SANA bo'yicha qidiradi) |
+| `sotuv/_components/zakazlar-mode.tsx` | `:284` buyurtma kuni (faqat kun/oy — mintaqasiz eng sezgir ko'rinish) |
+| `components/pos/customers-panel.tsx` | 3 nuqta (`:464` vozvrat sanasi, `:787`+`:792` chek sana+soati) |
+| `components/pos/customer-card-panel.tsx` | `:195` `fmtDate` |
+| `components/pos/debt-payment-dialog.tsx` | `:147` `fmtDate` — endi shu oynadagi `posDaysSince` bilan BIR mintaqada |
+| `app/customer-display/page.tsx` | `:887` `HoldCard` vaqti **+ `:344` `Date.now()` → `serverNow()`** (quyida qarorga qarang) |
+| `app/print/cash-in/[docId]/page.tsx` · `cash-out/[docId]/page.tsx` | PKO/RKO qog'oz sanasi |
+| `app/(app)/sotuv/page.tsx` | `:985` zaxira `CHEK-HHMMSS` → `posTimeDigits(now)` |
+| `lib/pos/pos-calendar.ts` | **`posTimeDigits`** qo'shildi (yangi modul EMAS — mavjud Toshkent-kalendar moduli kengaytirildi) |
+| `apps/web/src/__tests__/pos-clock-discipline.test.ts` | **YANGI** qo'riqchi — 21 test |
+| `app/print/cash-in/[docId]/cash-doc-timezone.test.tsx` | **YANGI** — 3 test |
+| +5 mavjud test fayli | TZ stsenariylari (quyida) |
+
+**Lokal TEGILMADI** (§5 S4 bandi 4): `useBcp47()` ham, `'ru-RU'`/`'uz-UZ'` qattiq teglari ham
+o'z joyida. Diffda birorta BCP-47 teg o'zgarmagan; `pos-bcp47-guard` yashil.
+
+**🔴 Nega `posTimeDigits` — yangi modul emas.** Zaxira chek raqamiga Toshkent devor-soati kerak edi.
+`toLocaleTimeString` YARAMADI: (1) u qattiq BCP-47 teg talab qilardi va `pos-bcp47-guard` uni rad
+etadi; (2) `hour12`/h24 chekkasi yarim tunni ba'zi ICU nusxalarida «24» qilib yozadi (S1 hisobotida
+o'lchangan) — identifikator ICU versiyasiga bog'lanib qolardi. Shuning uchun funksiya **mavjud**
+`lib/pos/pos-calendar.ts` ga qo'shildi: u allaqachon Toshkent kalendarining yagona egasi va
+`TASHKENT_OFFSET_MS` konstantasi bitta nusxada qoladi. Yangi vaqt manbasi yaratilmadi.
+
+**🔴 OQ RO'YXATGA TUSHMAGAN, TUZATILGAN nomzod — `customer-display/page.tsx:344`.**
+Reja uni «nisbiy o'lchov, oq ro'yxatga tushishi mumkin» deb qoldirgan edi; o'lchov boshqa natija
+berdi. Qiymat nisbiy EMAS: `HoldCard` uni `toLocaleTimeString` bilan **absolyut soat** qilib
+chizadi. Qurilma soati adashsa `?demo=1` ko'rgazma kartasi yonidagi sarlavha soatidan (S1 — server
+vaqti) aynan skew qadar farq qilardi, ya'ni ko'rgazma rejimi o'z-o'zi bilan ziddiyatda ko'rinardi.
+Haqiqiy qoralamalar ham S3 da `serverNow()` ga o'tgan. Qaror: **tuzatildi**, oq ro'yxat ikki bandda
+qoldi. Qaror guard faylida ham sabab bilan yozilgan (jim o'tkazilmadi).
+
+**Yangi testlar soni: 33**
+(`pos-clock-discipline` 21 · `cash-doc-timezone` 3 · `pos-calendar` +4 · `chek-detail-panel` +2 ·
+`customers-panel` +1 · `customer-display` +1 · `sales-screen-proforma` +1)
+
+**Test natijalari (raqam bilan)**
+
+- `src/__tests__/pos-clock-discipline.test.ts` — **21/21** ✔
+- `app/print/cash-in/[docId]/cash-doc-timezone.test.tsx` — **3/3** ✔
+- `lib/pos/pos-calendar.test.ts` — **14/14** ✔ (ilgari 10)
+- `sotuv/__tests__/chek-detail-panel.test.tsx` — **25/25** ✔ (ilgari 23)
+- `components/pos/__tests__/customers-panel.test.tsx` — **26/26** ✔ (ilgari 25)
+- `customer-display/__tests__/customer-display.test.tsx` — **19/19** ✔ (ilgari 18)
+- `sotuv/__tests__/sales-screen-proforma.test.tsx` — **7/7** ✔ (ilgari 6)
+- To'liq S4 doirasi (`sotuv` · `components/pos` · `lib/pos` · `customer-display` · `app/print` ·
+  `src/__tests__`) — **160 fayl · 2362 o'tdi · 25 o'tkazib yuborildi · 0 yiqildi** ✔
+- `pnpm --filter @moysklad/web typecheck` — **0 xato** ✔
+- `npx biome check` (o'zgargan 19 fayl) — **0 xato**, 83 ogohlantirish. Hammasi
+  `useSortedClasses`/`noNonNullAssertion`/`useExhaustiveDependencies` va **MENDAN OLDIN bor edi**:
+  ogohlantirish qatorlari `--reporter=github` bilan chiqarilib, `git diff -U0` ning o'zgargan qator
+  oraliqlari bilan solishtirildi — **birortasi ham** o'zgargan qatorga tushmadi.
+- `pnpm i18n:gate` — **20/20** ✔ (yangi matn qo'shilmadi)
+
+> **Test yugurtish eslatmasi (keyingi fazaga):** birinchi to'liq yugurishda 3 ta test qizardi
+> (`sales-screen-payment`, `sales-screen-shift`) — hammasi **5 s timeout**. Ular alohida
+> yugurtirilganda **47/47 yashil**; `--testTimeout=30000` bilan to'liq doira ham yashil. Ya'ni bu
+> parallel yuk ostidagi flake, S4 ning o'zgarishi emas. 160 fayllik doirani yugurtirganda
+> `--testTimeout=30000` ishlatilsin.
+
+**ANTI-VACUITY — har bir tuzatish o'lchandi (yashil test o'z-o'zidan dalil emas)**
+
+Sinov mashinasining o'z TZ'i `Asia/Tashkent`, shuning uchun `timeZone` qo'shilgani oddiy testda
+KO'RINMAYDI — hamma TZ testlari `vi.stubEnv('TZ', 'Pacific/Honolulu')` bilan yozildi va har
+tuzatish **vaqtincha orqaga qaytarilib** qizarishi o'lchandi:
+
+| Vaqtincha qaytarildi | O'lchangan natija |
+|---|---|
+| `timeZone: POS_TZ` (`cheklar-mode:1074`) | ✘ **ikki joyda** qizardi: qo'riqchining QOIDA 2 si (`cheklar-mode.tsx:1074 → timeZone: POS_TZ`) **va** komponent testi — `expected '…19:30…' to contain '10:30'` (Honolulu qiymati haqiqatan chiqdi) |
+| `posTimeDigits(now)` → `now.getHours()` | ✘ qizardi: `Toshkent soati emas: expected [ '173446','173447','173448' ] to include '023447'` — qurilma (Honolulu) raqami chiqdi |
+| `serverNow()` → `Date.now()` (CFD demo) | ✘ qizardi: QOIDA 1 — `app/customer-display/page.tsx:350 Date.now() → serverNow()` |
+| `timeZone: POS_TZ` (`print/cash-in`) | ✘ **ikki joyda**: QOIDA 2 **va** PKO testi — `expected '31/08/2026, 14:30' to match /01\D09\D2026/` (mintaqasiz qog'ozga BOSHQA KUN bosilardi) |
+| Haqiqiy faylga `new Date()` (`customer-card-panel`) | ✘ QOIDA 1 qizardi, `fayl:qator` bilan |
+| Haqiqiy faylga `api.post('…', { moment })` (`zakazlar-mode`) | ✘ QOIDA 3 qizardi: `zakazlar-mode.tsx:94 api.post(… moment …)` |
+
+Bundan tashqari qo'riqchining O'ZIDA 12 ta mutant-testi bor (skanerni sinaydi) va uchtasi
+**haqiqiy qo'riqlanadigan faylga** soxta buzilish qo'shib butun yo'lni — fayl ro'yxati + skaner —
+tekshiradi (`pos-bcp47-guard` naqshi).
+
+**🔴 O'lchov yo'lida topilgan VA tuzatilgan yashirin nuqson:** `vi.unstubAllEnvs()` boshda
+**o'rnatilmagan** `TZ` ni tiklamaydi — Node oldingi testdan qolgan mintaqada qoladi. Ya'ni
+`cash-doc-timezone.test.tsx` ning «mashina Toshkentda bo'lganda ham natija AYNI» testi o'zi
+«Toshkentda» deb atalib, aslida **Honoluluda** yugurardi (anti-vakuum bosqichida qizarish matni
+`31/08/2026, 14:30` ni ko'rsatib berdi). Endi u TZ ni ochiq `Asia/Tashkent` ga qo'yadi. Bu naqsh
+S5 uchun ham eslatma bo'lsin.
+
+**Guard oq ro'yxati — har band va SABABI**
+
+| Fayl | Sabab |
+|---|---|
+| `sotuv/_components/sotuv-mode.tsx` | **NISBIY O'LCHOV** — skaner «topilmadi» signalining 800 ms takror-oynasi (`now - last.at`). Ikki nuqta ham AYNI qurilmada olinadi, ya'ni skew ayirmada qisqaradi va natija o'zgarmaydi; qiymat ekranga vaqt bo'lib chiqmaydi. |
+| `lib/pos/cart-drafts.ts` | **IDENTIFIKATOR** — `newDraftId()` da `crypto.randomUUID` bo'lmasa zaxira kalit `Date.now().toString(36)` + tasodifdan yasaladi. Qoralamaning ICHKI kaliti: ekranda ham, serverda ham ko'rinmaydi. Vaqt manbasi almashsa takrorlanmaslik yaxshilanmaydi, faqat modul `lib/clock.ts` ga bog'lanib qolardi. S3 qabul mezoni buni ATAYLAB tegilmagan deb qulflagan. |
+
+Ro'yxat **fayl bo'yicha**, har band sabab bilan; qo'shimcha ikki qulf bor — (a) oq ro'yxatdagi fayl
+hamon mavjud va qamrovda ekani, (b) **istisno haqiqatan kerakmi** — faylda qurilma soati YO'Q bo'lsa
+test qizaradi, ya'ni o'lik istisno teshik bo'lib qolmaydi.
+
+**Guard qamrovi va yolg'on-pozitiv qulfi**
+
+Skaner olti papkani ko'radi: `app/(app)/sotuv`, `components/pos`, `lib/pos`, `app/customer-display`,
+`app/print/cash-in`, `app/print/cash-out`. `lib/pos` va `app/print/cash-*` ATAYLAB qo'shildi —
+S2 hisoboti `pos-bcp47-guard` ning `lib/pos` ni qamramasligini ochiq qoldirgan edi.
+`app/kassa-kirish` ATAYLAB YO'Q: unda sana/vaqt chizilmaydi va u sessiyagacha ishlaydi (skew hali
+o'lchanmagan). Reyestr yo'q — a'zolik mezoni «papkada turibdi», ya'ni yangi fayl o'zidan qo'riqchi
+ostiga tushadi.
+
+🔴 **Yolg'on-pozitiv qulfi (rejaning ogohlantirishi):** `toLocaleString` RAQAM uchun ham ishlatiladi.
+Skaner `toLocaleDateString`/`toLocaleTimeString` ni doim sana deb biladi (`Number.prototype` da ular
+YO'Q), `toLocaleString` ni esa faqat ikki holatda: qabul qiluvchi `new Date(…)` bo'lsa YOKI
+opsiyalarda sana maydoni (`day`, `hour`, `dateStyle`…) bo'lsa. Alohida test to'rtala haqiqiy raqam
+chaqiruvini (`sotuv-mode:217`, `pos-rate-chip:43`, `receipt-model:217`, `payment-dialog:32`) namuna
+sifatida beradi va **tutilmasligini** qulflaydi. Tekshiruv regex emas, **TypeScript AST** — shu
+sababdan qo'riqchining o'z izohlaridagi `new Date()`/`moment` so'zlari ham yolg'on-pozitiv bermaydi
+(`stripComments` keraksiz bo'ldi).
+
+**🔴 §2 qoida 3 — YOZMA ISBOT: serverga yangi maydon YUBORILMADI**
+
+`git diff --cached --stat` (S4 ning o'z fayllari):
+
+```
+ apps/web/src/__tests__/pos-clock-discipline.test.ts        | 598 +++++++++++
+ .../sotuv/__tests__/chek-detail-panel.test.tsx             |  51 +
+ .../sotuv/__tests__/sales-screen-proforma.test.tsx         |  55 +
+ .../app/(app)/sotuv/_components/cheklar-mode.tsx           |   5 +
+ .../src/app/(app)/sotuv/_components/smena-mode.tsx         |   3 +
+ .../app/(app)/sotuv/_components/vozvrat-mode.tsx           |   4 +
+ .../app/(app)/sotuv/_components/zakazlar-mode.tsx          |   5 +
+ apps/web/src/app/(app)/sotuv/page.tsx                      |   9 +-
+ .../customer-display/__tests__/customer-display.test.tsx   |  37 +-
+ apps/web/src/app/customer-display/page.tsx                 |  14 +-
+ .../print/cash-in/[docId]/cash-doc-timezone.test.tsx       | 105 +++
+ apps/web/src/app/print/cash-in/[docId]/page.tsx            |   6 +
+ apps/web/src/app/print/cash-out/[docId]/page.tsx           |   4 +
+ .../components/pos/__tests__/customers-panel.test.tsx      |  36 +
+ apps/web/src/components/pos/customer-card-panel.tsx        |   5 +
+ apps/web/src/components/pos/customers-panel.tsx            |   8 +
+ apps/web/src/components/pos/debt-payment-dialog.tsx        |   7 +-
+ apps/web/src/lib/pos/pos-calendar.test.ts                  |  49 +-
+ apps/web/src/lib/pos/pos-calendar.ts                       |  19 +
+ 19 files changed, 1012 insertions(+), 8 deletions(-)
+```
+
+1. Diffda **`apps/api` YO'Q** — server yozuvlariga tegilmadi.
+2. Bu faza **birorta so'rov tanasiga tegmadi**: o'zgarishlar `toLocale…` opsiyalar obyektiga
+   `timeZone` qo'shish, bitta zaxira satr yasash va bitta demo `useState` qiymatidan iborat.
+3. Endi bu **testga aylandi**: guard QOIDA 3 butun POS doirasi bo'ylab `api.post/put/patch/
+   postDownload/postOpenInBrowser` chaqiruvlarining argument daraxtida `moment` maydonini qidiradi
+   (ichma-ich obyektda ham). `sortBy=moment` GET parametri va javobni O'QISH mustasno — S2
+   hisobotidagi o'lchov usuli. Yonida **vacuity qulfi**: skaner haqiqatan yozish chaqiruvlarini
+   ko'rayotgani tekshiriladi (POS doirasida 26 ta topildi, chegara > 5).
+
+**Commit gigiyenasi (§2 qoida 7 / prompt bandi 8).** `git add` faqat S4 ning 19 fayli bilan
+qilindi; `git show --name-only HEAD` bilan tekshirildi. Commitga **20-chi fayl** —
+`docs/progress.json` — tushdi: uni **repo'ning O'Z `pre-commit` hook'i** qo'shadi
+(`pnpm -s progress … && git add docs/progress.json`), o'zgargani faqat `generatedAt` tamg'asi.
+Bu parallel sessiyaning fayli EMAS, shuning uchun `reset --soft` qilinmadi. `apps/api`,
+`android/`, boshqa rejalarning fayllari commitga KIRMADI.
+
+**Qabul mezoni**
+
+- ✔ **Guard yashil va vacuity emas** — 21/21; ataylab buzilgan namunada uchala qoida ham qizardi
+  (yuqoridagi jadval), ustiga 12 mutant-testi + 3 «haqiqiy faylga in'yeksiya» testi.
+- ✔ **Mavjud POS testlarida regress yo'q** — 160 fayl / 2362 test yashil, 0 yiqilgan.
+- ✔ **11 ta nuqta qotirildi** — `grep` bilan qayta o'lchandi: POS doirasida sana ustidagi
+  `toLocale…` chaqiruvlarining hammasida `timeZone` bor; qolgan 4 ta `toLocaleString` — RAQAM
+  (guard ularni ataylab tutmaydi).
+- ✔ **Ikki qoldiq yopildi** — zaxira `CHEK-HHMMSS` (shakl va takrorlanmaslik O'ZGARMADI) va
+  CFD demo qoralamasi.
+- ✔ **Lokal tegilmadi** — diffda BCP-47 teg o'zgarmagan, `pos-bcp47-guard` yashil.
+- ✔ **`customer-display.test.tsx:82` fikstura ANIQ instantga ko'chirildi** —
+  `new Date(2026, 8, 1, 5, 1)` (mashina mintaqasi) → `Date.parse('2026-09-01T00:01:00.000Z')`.
+
+**«Bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»**
+
+1. **Ko'rinish Toshkent mintaqasidagi mashinada AYNAN o'zgarmaydi** (barcha kassalar
+   O'zbekistonda) — mintaqasi adashgan mashinada esa tuzaladi. Bu fazaning butun ta'siri shu.
+2. **Zaxira `CHEK-HHMMSS` raqami** endi Toshkent devor-soatida. Shakl (`CHEK-` + 6 raqam) va
+   takrorlanmaslik kafolati (bir kun ichida sekund aniqligi) o'zgarmadi — ikkalasi ham testda
+   qulflangan. `document_sequences` asosiy shoxi (`POST /retail-sales/receipt-number`) diffda bitta
+   qator ham o'zgarmagan. Yagona ko'rinadigan farq: mintaqasi adashgan mashinada raqamning soat
+   bo'lagi endi boshqa — u **identifikator**, ma'no tashimaydi.
+3. **PKO/RKO qog'ozi** endi doim do'kon kunida bosiladi (`receipt-model.ts` bilan bir qaror, S2).
+   Chet elda ochilgan qog'oz ham do'kon kunini ko'rsatadi — to'g'ri xulq.
+4. **CFD demo rejimi** (`?demo=1`) endi server vaqtiga bog'liq: skew o'lchanmagan bo'lsa
+   (birinchi javobgacha) qiymat qurilma vaqtiga teng — bugungi xulq, regressiya emas.
+5. **Guard yangi to'siq qo'shadi.** Kelajakda POS'ga `new Date()` yozgan odam gate'da to'xtaydi.
+   Bu ataylab; xabar `fayl:qator` va «nima qilish kerak» bilan chiqadi, oq ro'yxatga qo'shish yo'li
+   ham ko'rsatiladi. Yolg'on-pozitiv xavfi (raqam formatlash) alohida test bilan yopilgan.
+6. **`pos-calendar.ts` kengaydi**, lekin mavjud eksportlari (`posDayKey`, `posDaysBetween`,
+   `posDaysSince`) va `TASHKENT_OFFSET_MS` tegilmagan — S3 ning qarz-kun hisobi o'zgarmadi
+   (10/10 → 14/14, eski 10 tasi o'sha-o'sha).
+
+**Ochiq qolganlar**
+
+- **Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke — S5.** Hozir buzuq soatli kassa
+  dasturiy jihatdan immunitetli, lekin kassir buzuqligini KO'RMAYDI.
+- `desktop/main.js:372` va `:563` (§2 qoida 4 dagi Electron istisnolari) bu qo'riqchi qamrovida
+  EMAS — u `apps/web/src` ni skanerlaydi. `desktop/` uchun alohida manba-skaner naqshi bor
+  (`kassa-default-printer.test.ts`); kerak bo'lsa S5 qarasin.
+- `pos-bcp47-guard` va `pos-clock-discipline` qamrovlari HAR XIL (birinchisida `app/kassa-kirish`
+  bor, ikkinchisida `lib/pos` + `app/print/cash-*`). Bu ataylab — ikki qo'riqchi ikki xil xato
+  sinfi haqida; birlashtirilsa ikkalasining hisoboti ham tushunarsiz bo'lardi.
+- **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda, egasi «chiqar» desa
+  chiqariladi.
