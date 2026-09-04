@@ -670,7 +670,7 @@ commit qilish (va tugagach begonalarini qaytarish).
    (`validateAndNormalize` uni tashlaydi, qo'riqchi esa faqat ustunni o'qiydi).
 ---
 
-### N2 — Sessiya sirti va `setCellStock` ilgagi · **TUGADI** · 2026-09-05 · `<commit>`
+### N2 — Sessiya sirti va `setCellStock` ilgagi · **TUGADI** · 2026-09-05 · `847ad63f`
 
 **0. N1 qo'riqchisi joyidami? (prompt 3-bandi — TEKSHIRILDI, JOYIDA)**
 
