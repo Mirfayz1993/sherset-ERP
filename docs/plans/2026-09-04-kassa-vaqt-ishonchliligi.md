@@ -590,7 +590,7 @@ OLDIN turgan commit qilinmagan ishi, ularga TEGILMADI va commitga QO'SHILMADI):
 
 - Zaxira `CHEK-HHMMSS` dagi `getHours/getMinutes/getSeconds` hamon qurilma mintaqasida — **S4**.
 - Qoralama chipi vaqti (`page.tsx` `draftChips.timeLabel`) hamon `Date.now()` + mintaqasiz — **S3**
-  (rejada shunday belgilangan).
+  (rejada shunday belgilangan). ✅ S3 da yopildi.
 - §1.3 dagi qolgan formatlash nuqtalari (`cheklar-mode`, `smena-mode`, `vozvrat-mode`,
   `zakazlar-mode`, `customers-panel`, `customer-card-panel`, `debt-payment-dialog`,
   `customer-display:886`, `print/cash-in`, `print/cash-out`) — **S4**.
@@ -606,6 +606,9 @@ OLDIN turgan commit qilinmagan ishi, ularga TEGILMADI va commitga QO'SHILMADI):
 > **Ijro eslatmasi:** §2 qoida 1 «bitta sessiya = bitta faza» edi; S3 egasining shu sessiyadagi
 > «davom et» ko'rsatmasi bilan S2 dan keyin AYNI sessiyada bajarildi. Qoidaning o'zi
 > o'zgarmadi — S4/S5 yana alohida sessiyada.
+
+**Commit:** `c1ed09b4` — `feat(kassa): «o'tgan vaqt» hisoblari server soatida (S3)`
+(T3 (TSD) ning commit qilinmagan ishi tegilmadi; commitda `apps/api` yo'q).
 
 **Nima qilindi** (faqat `apps/web` — 6 fayl, `apps/api` ga TEGILMADI)
 
