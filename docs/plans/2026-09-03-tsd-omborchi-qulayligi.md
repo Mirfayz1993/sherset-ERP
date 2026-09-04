@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -122,7 +122,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T2** | Qo'lda kiritish — `ScanBar` 350 ms tuzog'i va fokus | yo'q | 🔴 blok | **TUGADI** |
 | **T3** | Nom/artikul bo'yicha qidiruv (`GET /tsd/search` + ekran) | **ha** (yangi narxsiz sirt) | 🔴 blok | **TUGADI** |
 | **T4** | Skan javobi: ovoz, tebranish, xato banneri, ekran o'chmasligi | yo'q | 🟡 qulaylik | **TUGADI** |
-| **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | REJA |
+| **T5** | Miqdor kiritish: kalkulyator (`12*24`) + tez tugmalar | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | REJA |
 | **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | REJA |
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
@@ -1338,3 +1338,227 @@ yo'qoldi — ehtimol yonma-yon ishlayotgan boshqa sessiya. Ularga TEGILMADI va c
 7. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
    keyingi T-faza agenti ham o'z commitiga qo'shmasin. `apps/web` dagi vaqtinchalik o'zgarishlar
    (yuqoridagi ⚠ bandi) T4 tugagunicha o'z-o'zidan yo'qoldi.
+
+### T5 — Miqdor kiritish: kalkulyator va tez tugmalar · **TUGADI** · 2026-09-04 · `d47a9786`
+
+**Nima qilindi**
+
+*Yangi fayl — sof modul*
+
+- **`android/tsd-app/app/src/main/java/uz/sherset/tsd/QtyExpression.kt`** (YANGI, 264 qator).
+  Android ham, Compose ham, `R` ham unga KIRMAYDI — bu ataylab: shu tufayli mantiq oddiy JVM
+  unit-testi bilan qamraldi (pastda). Tashqi sirti: `parse(input): Result`
+  (`Empty` / `Ok(value, text)` / `Bad(problem)`), reja talab qilgan
+  `evaluate(text): BigDecimal?`, ekranlar ishlatadigan `qty(text): String?` va
+  `isExpression(text)`.
+  - **Rekursiv tushuvchi tahlilchi**, grammatikasi KDoc'da yozilgan:
+    `expr := term (('+'|'-') term)*` · `term := factor ('*' factor)*` ·
+    `factor := ('+'|'-')* primary` · `primary := number | '(' expr ')'`.
+    Ko'paytirish qo'shishdan ustun (`3*24+6` = **78**, 90 EMAS).
+  - Hisob **`BigDecimal`** da, `Double` da emas — `12.5*2.5` aynan `31.25`, suzuvchi
+    nuqta artefakti yo'q.
+  - 🔴 **Natija serverning shakliga bo'ysunadi.** `SetCellStockSchema.qty` /
+    `CellPlaceSchema.qty` / `CellMoveSchema.qty` — hammasi `/^\d+(\.\d{1,6})?$/`.
+    Shuning uchun modul `stripTrailingZeros().toPlainString()` beradi (`12.000000` → `12`,
+    `10*10` → `100`, **`1E+2` EMAS**) va manfiy / 6 xonadan uzun kasr / `1e9` dan katta
+    natijani **rad etadi**. Ya'ni ekranda «= 288» ko'ringan son serverda 400 bo'lib
+    qaytmaydi.
+  - 🔴 **Bo'lish (`/`, `:`, `÷`) — ALOHIDA sabab bilan rad etiladi**, umumiy «xato» emas:
+    omborchi «bo'lish yo'q» deb o'qisa muqobilini o'zi topadi, «ifoda noto'g'ri» desa
+    nima qilishini bilmasdi. Yaxlitlash siyosati ochilmadi (prompt bandi 3).
+
+*Vidjet*
+
+- **`Widgets.kt`** (+132 / −13): `NumberField` ga `expression: Boolean = false` parametri.
+  Yoqilganda maydon ostida:
+  1. **tez tugmalar qatori `+ − × ( )`** (`QtyOperatorRow`). Bu qulaylik EMAS, **zarurat**:
+     maydon `KeyboardType.Decimal` da ishlaydi va bu klaviaturada `*` tugmasi **umuman yo'q** —
+     tugmalarsiz omborchi `12*24` ni jismonan yoza olmasdi. Yorlig'i `×`, maydonga `*` yoziladi.
+     Tugmalar `weight(1f)` bilan teng bo'linadi, `contentPadding = 0` (sukut 24dp bo'lsa 4"
+     ekranda beshtasi sig'masdi), balandligi 48dp.
+  2. **natija / sabab qatori** (`QtyHint`): to'g'ri ifodada yashil «**= 288**», xatoda qizil
+     «⛔ <sabab>». Sof raqamda va bo'sh maydonda qator **umuman chizilmaydi** (4" ekranda joy).
+  - **Tartib: maydon → tugmalar → natija.** Natija tugmalar USTIGA qo'yilsa, birinchi `×`
+    bosilganda qator paydo bo'lib tugmalarni pastga surardi va keyingi bosish adashardi.
+    Hozirgi tartibda tegish nishonlari **qimirlamaydi**, natija esa Saqlash tugmasining
+    ustida — ko'z aynan shu yo'ldan o'tadi.
+  - `qtyProblemRes()` — sabab → `strings.xml`. Sabab matnlari ekranda, chunki `QtyExpression`
+    `R` ni ko'rmaydi.
+
+*Ekranlar — uch joyda yoqildi, uch joyda ham SAQLASH YO'LI qulflandi*
+
+- **`CountScreen.kt`** (+25 / −6): ikkala miqdor maydoni ham (`PickedCard` dagi sanoq va
+  ro'yxat qatoridagi sanoq) `expression = true`. Ikkala Saqlash tugmasi endi
+  `enabled = QtyExpression.qty(...) != null` — ro'yxat qatoridagi tugma ilgari **doim yoniq**
+  edi. `save()` imzosi `qty` → `input` ga o'zgardi va ichida ifoda **songa aylanadi**.
+- **`PlaceScreen.kt`** (+11 / −5): miqdor maydoni + tugma sharti; `submit()` ichida son
+  hisoblanadi va u **`payload` ga ham, oflayn navbatning YORLIG'IGA ham** tushadi
+  (ifoda matni navbatda qolsa, keyin server regexidan o'tmasdi).
+- **`CutScreen.kt`** (+45 / −13): `cutLength` va `remaining` — **ikkalasi ham**. Reja faqat
+  «kesim uzunligi» degan, lekin qo'shni ikki maydondan biri ifodani tushunib ikkinchisi
+  tushunmasa omborchi qaysi biriga nima yozishni bilmasdi, va `14,5` ikkinchi maydondan
+  jimgina serverga ketardi. Tugma sharti: `cutLength` to'g'ri **va** (`remaining` bo'sh
+  **yoki** to'g'ri) — «qolgan uzunlik» ixtiyorsiz emas, IXTIYORIY (bo'sh = server hisoblaydi).
+  - 🔴 **`needText()` `Double` dan `BigDecimal` ga ko'chirildi.** Bu «yo'l-yo'lakay tuzatish»
+    emas, T5 ning O'ZI keltirib chiqaradigan yiqilishning oldini olish: `250 − 237.3` `Double`
+    da **`12.700000000000017`** beradi, bu son maydonga **sukut** bo'lib tushardi va yangi
+    tekshiruv («kasr ≤ 6 xona») uni rad etib, omborchi **hech nima yozmasdan turib**
+    «Kesimni yozish» tugmasini o'chiq holatda ko'rardi — boshi berk ko'cha. Endi hisob aniq.
+- **`strings.xml`** (+11, faqat `uz`): `qty_result`, `qty_bad_syntax`, `qty_bad_division`,
+  `qty_bad_negative`, `qty_bad_long`, `qty_bad_big`, `qty_bad_precise`, `qty_invalid`.
+- **`README.md`** (+54 / −4): yangi «**Miqdor kiritish — kalkulyator (T5)**» bo'limi
+  (qo'llab-quvvatlanadigan sintaksisning to'liq jadvali + test buyrug'i), G6 smoke ro'yxatiga
+  **12-band (T5)** (eski «Narx tekshiruvi» 13 ga surildi), fayl xaritasiga `QtyExpression.kt`
+  va `app/src/test/` qatorlari.
+- **`app/build.gradle.kts`** (+6): `testImplementation("junit:junit:4.13.2")`.
+
+**Qo'llab-quvvatlanadigan sintaksis (to'liq)**
+
+| Yozildi | Natija | Izoh |
+|---|---|---|
+| `12`, `250`, ` 250 ` | `12`, `250`, `250` | chekka bo'shliqlar kesiladi |
+| `14.5` · `14,5` | `14.5` | **vergul ham, nuqta ham** (reja vazifasi 3 — kabel/shlang metrlari) |
+| `.5` · `14.` | `0.5` · `14` | yozayotgan odamning oraliq holati; natija qatorida KO'RINADI |
+| `12.000000` · `100.0` | `12` · `100` | serverning `Decimal(20,6)` sukut qiymati qisqaradi |
+| `12*24` · `12×24` · `12x24` · `12 * 24` | `288` | `×` va `x`/`X` ham ko'paytirish (fizik klaviatura) |
+| `10+5` · `10-5` | `15` · `5` | |
+| `3*24+6` · `6+3*24` | `78` | ko'paytirish ustun |
+| `(2+3)*4` | `20` | qavslar |
+| `12.5*2.5` · `2,5*15` | `31.25` · `37.5` | `BigDecimal`, artefakt yo'q |
+| `12*` · `*12` · `((3+4)` · `3+4)` · `()` · `1.2.3` · `abc` | ✘ SYNTAX | «Ifoda tugallanmagan» |
+| **`12 24`** | ✘ SYNTAX | 🔴 probel token AJRATADI — jimgina `1224` BO'LMAYDI |
+| `12/2` · `12:2` · `12÷2` | ✘ DIVISION | «Bo'lish qo'llab-quvvatlanmaydi» |
+| `-5` · `10-25` · `10*-2` | ✘ NEGATIVE | «Natija manfiy» |
+| 41 belgi | ✘ TOO_LONG | 40 belgi chegara (39 belgi hamon ishlaydi) |
+| `999999999*2` | ✘ TOO_BIG | ≥ 1e9 |
+| `0.0000001` · `0,001*0,0001` | ✘ TOO_PRECISE | server regexi: kasr ≤ 6 xona |
+
+**🔴 Sinov paytida topilgan va tuzatilgan xato (ochiq aytiladi)**
+
+Birinchi yozilishda `normalize()` **hamma bo'shliqni olib tashlardi** — natijada **`12 24`
+jimgina `1224` bo'lib ketardi**. Buni birinchi test yugurishi ushladi (17 tadan 1 tasi qizil).
+Bu aynan T5 tuzatayotgan kasallikning yangi shakli edi (jim noto'g'ri son), shuning uchun
+xulq o'zgartirildi: bo'shliq **saqlanadi va token ajratuvchi** bo'ladi — `12 * 24` ishlaydi,
+`12 24` esa XATO. Test qulf sifatida qoldirildi (`buzuqIfoda`).
+
+**O'lchandi**
+
+| Nima | Buyruq | Natija |
+|---|---|---|
+| Unit-testlar | `gradle --no-daemon clean testDebugUnitTest assembleDebug` | **17 test · 17 yashil · 0 qizil · 0 skipped** (`QtyExpressionTest`, 68 ta `assert`) |
+| Build | o'sha buyruq | **BUILD SUCCESSFUL in 53s** · **42 task, 41 bajarildi** · exit 0 |
+| Ogohlantirish | o'sha log, `grep -c -E "^w:\|warning\|^e:"` | **0 ta** (toza `clean` build'da o'lchandi — `UP-TO-DATE` task natijani yashirmadi) |
+| Server testlari | — | **yugurtirilmadi: server fayllariga tegilmagan** (`git show --stat d47a9786` da `apps/` yo'q) |
+
+🔴 **Ilovada endi unit-test bor.** U-reja «Ochiq qolganlar» dagi «TSD tomonda test
+infratuzilmasi yo'q» holati SHU faza uchun yopildi: `app/src/test/` manba to'plami va
+`testImplementation("junit:junit:4.13.2")` qo'shildi. Bu bog'liqlik **APK'ga tushmaydi**
+(`testImplementation`, `assembleDebug` uni hatto yechmaydi ham). Reja «test yo'q bo'lsa
+hisobotda ayting» degan edi — o'rniga test YOZILDI, chunki `QtyExpression` ataylab sof
+modul qilib chiqarilgan va aynan shu yerda test eng ko'p foyda beradi.
+
+**Tekshirilgan holatlar (17 test metodi)**
+
+`sofSonlar` · `vergulNuqtaBilanTeng` · `yarimYozilganSon` · `ortiqchaNollarKesiladi` ·
+`kopaytirish` · `qoshishVaAyirish` · `amallarTartibi` · `kasrliKopaytma` ·
+`evaluateSonQaytaradi` · `bosMaydonXatoEmasLekinYuborilmaydi` · `bolishQollabQuvvatlanmaydi` ·
+`buzuqIfoda` · `manfiyNatija` · `chegaralar` · **`serverRegexQulfi`** · `korsatkichliYozuvYoq` ·
+`natijaQatoriQachonKorinadi`.
+
+`serverRegexQulfi` — eng muhim qulf: 18 ta turli kirish uchun natija matni
+`^\d+(\.\d{1,6})?$` ga mos kelishi **testda tekshiriladi**, ya'ni ekrandagi son bilan
+serverning qoidasi bir-biridan ajralib ketolmaydi.
+
+**Qabul mezoni**
+
+| Band | Holat | Dalil |
+|---|---|---|
+| `assembleDebug` **ogohlantirishsiz** | ✔ | toza `clean` build, 42 task / 41 bajarildi, `w:`/`warning`/`e:` — **0 qator** |
+| Ifoda natijasi **serverga son bo'lib** ketishi (ifoda matni EMAS) — **kodda ko'rsatilsin** | ✔ | Uchala yozish yo'li ham bitta cho'qqidan o'tadi: `CountScreen.save()` → `val qty = QtyExpression.qty(input)` → `api.setCellStock(..., qty)`; `PlaceScreen.submit()` → `payload.put("qty", qty)` **va** navbat yorlig'i; `CutScreen.send()` → `api.cut(..., cut, remaining, ...)`. Maydondagi MATN (`12*24`) bu funksiyalardan nariga o'tolmaydi. Ustiga `serverRegexQulfi` testi shaklni qulflaydi |
+| Noto'g'ri ifodada **saqlash imkonsiz** | ✔ | ikki qavat: (1) tugma `enabled = QtyExpression.qty(...) != null` — `12*`, `-5`, `12/2`, `12 24` da **o'chadi**; (2) tugma chetlab o'tilsa ham `save`/`submit`/`send` `null` da to'xtaydi va bannerga sabab chiqaradi. **Jim 0 yuborilmaydi** — 0 faqat omborchi `0` (yoki `10-10`) yozganda ketadi |
+| Bo'linish (`/`) qo'llab-quvvatlanmaydi | ✔ | `Problem.DIVISION` — grammatikada `/` umuman yo'q, tugmasi ham yo'q; sababi ANIQ matn bilan aytiladi. Yaxlitlash siyosati ochilmadi |
+| Vergul/nuqta ikkalasi (reja vazifasi 3) | ✔ | `vergulNuqtaBilanTeng` testi: `ok("14,5") == ok("14.5") == "14.5"` |
+| Sanash va Joylashtirishda ishlaydi; kesim uzunligiga ham tatbiq etilgan (vazifa 4) | ✔ | `CountScreen` (2 maydon), `PlaceScreen` (1), `CutScreen` (2 — uzunlik **va** qolgan uzunlik) |
+| Testlar (vazifa 5) | ✔ | reja «test yo'q bo'lsa ayting» degan; o'rniga **17 ta JVM unit-test** yozildi va yashil |
+
+**Narx qoidasi (§2, qoida 3)**
+
+Serverga **bitta bayt ham** tegilmadi: `git show --stat d47a9786` da `apps/`, `packages/`,
+`prisma/` **umuman yo'q**. Yangi javob maydoni ham, allowlist qatori ham, yangi API chaqiruvi
+ham qo'shilmadi (`ApiClient.kt` diffda yo'q). `QtyExpression` faqat omborchi O'ZI kiritgan
+matn bilan ishlaydi — u serverdan hech nima o'qimaydi va narx tushunchasini bilmaydi.
+
+**Qaysi oqimni buzishi mumkin? (§2, qoida 8)**
+
+- **Sanash semantikasi (mutlaq son)** — buzilmadi. `setCellStock(..., qty)` va `mode: 'set'`
+  o'zgarmadi; o'zgargani faqat `qty` ning QAYERDAN kelishi (matn → hisoblangan son).
+  Sariq «yacheykada yo'q — KIRIM bo'lib yoziladi» ogohlantirishi (`PickedCard`) tegilmadi.
+- **Oflayn navbat** — buzilmadi va bu joyda kuchaydi ham: `PlaceScreen` navbatga
+  **hisoblangan sonni** qo'yadi, ya'ni aloqa qaytganda yuboriladigan `payload` server
+  regexidan o'tadi. Ilgari maydonda vergul bo'lsa navbatdagi amal 400 bo'lib **rad
+  etilganlar** ro'yxatiga tushardi. `ActionQueue`/`QueueSender`/`DeviceStore`/`ScannerBridge`/
+  `ApiClient` diffda **umuman yo'q** (§2, qoida 10). Sanash ilgarigidek navbatga QO'YILMAYDI.
+- **Multi-hit'da tanlovni odam qiladi** — buzilmadi: tanlov mantig'iga (`pick`, `onScan`,
+  `PickProductScreen`) tegilmadi.
+- **Skaner (T2 ishi)** — buzilmadi. `ScanBar.kt` diffda **yo'q**. Ifoda maydonlari `ScanBar`
+  emas, oddiy `NumberField`; ular fokusni o'zi TORTMAYDI (yangi `requestFocus()` qo'shilmadi),
+  ya'ni T2/T3 dagi fokus intizomi o'z holicha. Tez tugmalar `Button` — ular Compose'da
+  tegish rejimida fokus olmaydi, demak bosilganda matn maydonining fokusi ham, klaviaturasi
+  ham yopilmaydi.
+- **Xato banneri (T4 ishi)** — buzilmadi va **kamroq ishlaydi**: noto'g'ri miqdor endi
+  bannergacha yetmaydi (tugma o'chiq), sabab maydonning O'ZIDA turadi. `save`/`submit`/`send`
+  ichidagi qolgan `shell.error(...)` yo'llari joyida — bo'sh maydonda eski matn
+  (`count_qty_hint` / `place_qty_hint` / `cut_length_hint`), boshqa holatda `qty_invalid`.
+- **T4 ovoz/tebranishi** — tegilmadi (`Feedback.kt` diffda yo'q).
+- **Eski xulqning o'zgargan yagona joyi:** ilgari maydonga `12,5` yozib saqlansa server 400
+  berardi (banner), endi u **14.5 kabi to'g'ri songa aylanadi va SAQLANADI**. Bu tuzatish,
+  lekin xulq o'zgarishi — hisobotda ochiq turibdi.
+- **4" ekran balandligi** — ⚠️ har ifoda maydoni ~54dp uzaydi (tugmalar qatori 48dp + oraliq).
+  Sanash ekranida qoldiq qatorlari ko'p bo'lsa ro'yxat sezilarli uzayadi. Sanoqning asosiy
+  yo'li — skandan keyin ochiladigan YUQORIDAGI karta, u joyida qoladi; pastdagi ro'yxat esa
+  skrollda. Jonlida bezovta qilsa — «Ochiq qolganlar» 2-bandiga qara.
+- **Server bilan moslik** — bu faza serverga tegmagani uchun «eski ilova + yangi server» va
+  «yangi ilova + eski server» kombinatsiyalari o'zgarmaydi.
+
+**Rejadan chekinishlar (ikkita, ochiq aytiladi)**
+
+1. **`CutScreen` ning «qolgan uzunlik» maydoniga ham yoqildi** — reja faqat «kesim
+   uzunligi» degan. Sabab yuqorida: qo'shni ikki bir xil ko'rinishdagi maydondan biri
+   ifodani tushunib ikkinchisi tushunmasa chalkashlik tug'ilardi va `14,5` ikkinchi
+   maydondan jimgina serverga ketardi.
+2. **`CutScreen.needText()` `BigDecimal` ga ko'chirildi** — reja vazifalarida yo'q. Bu
+   T5 ning o'zi keltirib chiqaradigan yiqilishning to'g'ridan-to'g'ri oldini olish
+   (yuqorida `12.700000000000017` misoli); busiz faza kesim oqimini buzib qo'yardi.
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar**
+
+1. **Jonli qurilmada sinalmagan.** Qabul mezoni «kodda ko'rsatilsin» deydi va bajarildi;
+   haqiqiy iData 95W Pro sinovi — **T8**. README'ning G6 smoke ro'yxatiga **12-band** aynan
+   shu uchun yozildi (`12*24`, tugallanmagan ifoda, vergul, manfiy, `12 24`, bo'lish).
+2. **Tugmalar qatori har maydon ostida DOIM turadi** — fokusga bog'liq emas. Bu ataylab
+   (ko'rinmaydigan tugma topilmaydi; fokus bilan paydo bo'lsa layout sakrardi), lekin narxi
+   bor: 4" ekranda sanash ro'yxati uzayadi. **T6** (sanash progressi va ro'yxat) shu ekranni
+   baribir qayta ko'radi — uzunlik muammo bo'lsa o'sha yerda hal qilinsin (T1 hisobotining
+   5-bandi va T3 hisobotining 6-bandi ham shu ro'yxat haqida).
+3. **Belgi matnning OXIRIGA qo'shiladi**, kursor joyiga emas — maydon `String` ustida
+   ishlaydi (`TextFieldValue` emas) va kursorni bilmaydi. Kalkulyator oqimida bu sezilmaydi
+   (`12` → `×` → `24`), lekin omborchi o'rtaga qaytib tahrir qilsa tugma baribir oxiriga
+   yozadi. Tuzatish `TextFieldValue` ga o'tishni talab qiladi — hozir qilinmadi.
+4. **`ShortageScreen` («Topolmadim» miqdori) ifoda rejimisiz qoldi** — reja vazifasi 4 uni
+   sanamagan (§2 qoida 2: fazadan tashqariga chiqilmaydi). Ya'ni u yerda `14,5` hamon
+   xom holda serverga ketadi (bu T5 dan OLDINGI xulq, yangi nuqson emas). Bir qatorlik ish:
+   `expression = true` + `send()` da `QtyExpression.qty(...)`. Keyingi fazalardan biriga
+   qo'shib yuborilsin.
+5. **`PlaceScreen` da `0` yozilsa** server 400 beradi (`CellPlaceSchema` `> 0` talab qiladi) —
+   `QtyExpression` uni to'g'ri son deb o'tkazadi, chunki «musbat bo'lishi shart» qoidasi
+   **maydonga** emas, endpointga tegishli va u ekrandan ekranga farq qiladi (sanashda `0`
+   TO'G'RI qiymat). Bu T5 dan oldin ham shunday edi. Kerak bo'lsa `NumberField` ga
+   `min` parametri qo'shiladi — hozir qilinmadi.
+6. **Ilovada endi `app/src/test/` bor** — keyingi faza agenti yangi sof mantiqni SHU YERGA
+   test bilan qo'shsin; buyrug'i README'da va §2 qoida 4 ga qo'shimcha:
+   `gradle --no-daemon testDebugUnitTest`.
+7. **APK chiqarilmadi** (§2, qoida 9): `versionCode`/`versionName` **oshirilmadi**
+   (hamon `4`/`0.4.0`), `tools/publish.sh` chaqirilmadi. Egasi «chiqar» degandagina.
+8. **`apps/api` + `android/manager-app` hamon commit qilinmagan** (menejer-planshet rejasi) —
+   T5 da ham tegilmadi va commitga tushmadi. Keyingi T-faza agenti ham o'z commitiga
+   qo'shmasin. `docs/progress.json` esa `pre-commit` hook'i qo'shgan, begona ish emas.
