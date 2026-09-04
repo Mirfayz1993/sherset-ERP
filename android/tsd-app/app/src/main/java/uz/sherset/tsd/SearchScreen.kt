@@ -136,7 +136,7 @@ class SearchScreen(
                 // Xato holatida `busy` ALBATTA tushiriladi, aks holda ekran
                 // «Qidirilmoqda…» da qotib qolardi va tugma ham o'chiq turardi.
                 shell.main { busy = false }
-                shell.toast(e.message ?: "")
+                shell.error(e.message ?: "")
             }
         }
     }

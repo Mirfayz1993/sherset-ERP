@@ -2,10 +2,12 @@ package uz.sherset.tsd
 
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,13 +29,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.util.ArrayDeque
 import java.util.UUID
@@ -76,6 +81,14 @@ class MainActivity : ComponentActivity(), Shell {
     /** Navbat hisoblagichi — top-bar chipida jonli ko'rinadi. */
     private var queueCount by mutableStateOf(0)
 
+    /**
+     * T4 — ekran tepasidagi xato banneri matni (`null` = banner yo'q).
+     * `errorSeq` esa HAR xatoda o'sadi: aynan bir xil matnli xato ketma-ket
+     * kelganda ham avto-yopish taymeri boshidan boshlansin.
+     */
+    private var errorText by mutableStateOf<String?>(null)
+    private var errorSeq by mutableStateOf(0)
+
     // ── Yangilanish (qurilmadan) ────────────────────────────────────────────
     private lateinit var updater: Updater
     private var updateState by mutableStateOf<UpdateState>(UpdateState.None)
@@ -87,6 +100,13 @@ class MainActivity : ComponentActivity(), Shell {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 🔴 T4 — EKRAN O'CHMASIN. Sanash o'rtasida ekran so'nsa sessiya
+        // yopilib PIN qayta so'ralardi va omborchi yacheykani boshidan
+        // ochardi. Sozlamada emas, DOIMIY: terminal smena davomida quvvat
+        // tokchasida turadi, ya'ni batareya dalili bu yerda ishlamaydi
+        // (ilova fonga ketganda bayroq o'z-o'zidan kuchdan qoladi).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Feedback.init(this)
         store = DeviceStore(this)
         queue = ActionQueue(this)
         api = ApiClient(getString(R.string.api_base_url))
@@ -106,21 +126,25 @@ class MainActivity : ComponentActivity(), Shell {
         setContent {
             SersetTsdTheme {
                 when (stage) {
-                    Stage.Pairing -> PairingScreen(
-                        onSave = { id, secret ->
-                            store.deviceId = id
-                            store.deviceSecret = secret
-                            toast(R.string.pair_done)
-                            stage = Stage.Login
-                        },
-                    )
-                    Stage.Login -> PinScreen(
-                        pin = pin,
-                        busy = pinBusy,
-                        onDigit = { d -> if (pin.length < 4) pin += d },
-                        onBackspace = { pin = pin.dropLast(1) },
-                        onSubmit = { submitPin() },
-                    )
+                    Stage.Pairing -> AuthStage {
+                        PairingScreen(
+                            onSave = { id, secret ->
+                                store.deviceId = id
+                                store.deviceSecret = secret
+                                success(str(R.string.pair_done))
+                                stage = Stage.Login
+                            },
+                        )
+                    }
+                    Stage.Login -> AuthStage {
+                        PinScreen(
+                            pin = pin,
+                            busy = pinBusy,
+                            onDigit = { d -> if (pin.length < 4) pin += d },
+                            onBackspace = { pin = pin.dropLast(1) },
+                            onSubmit = { submitPin() },
+                        )
+                    }
                     Stage.Work -> WorkRoot()
                 }
             }
@@ -140,6 +164,12 @@ class MainActivity : ComponentActivity(), Shell {
     override fun onStop() {
         scanner.stop()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        // `ToneGenerator` audio resursini ushlab turadi — qaytariladi.
+        Feedback.release()
+        super.onDestroy()
     }
 
     /**
@@ -238,6 +268,20 @@ class MainActivity : ComponentActivity(), Shell {
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
+                // 🔴 T4 — xato banneri AYNAN shu yerda: skan maydonining
+                // OSTIDA va ro'yxatning USTIDA.
+                //  · Skan maydonining USTIGA qo'yilsa, banner chiqqanda
+                //    maydon pastga sakrardi — omborchi aynan o'sha maydonga
+                //    yozadi/skanerlaydi va u qimirlamasligi kerak.
+                //  · Ro'yxat ICHIGA qo'yilsa u skroll bilan ketib qolardi,
+                //    ya'ni xato yana ko'rinmay qolardi.
+                // Yuqori panel ham to'silmaydi: «orqaga» va «chiqish»
+                // tugmalari banner turganda ham bosiladi.
+                ErrorHost(
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp)
+                        .padding(bottom = 10.dp),
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -257,6 +301,42 @@ class MainActivity : ComponentActivity(), Shell {
         }
     }
 
+    /**
+     * T4 — xato banneri joyi. Bannerni QAYERGA qo'yish chaqiruvchining ishi
+     * (`WorkRoot` da layout oqimida, `AuthStage` da ustiga qoplab) — bu
+     * yerda faqat matn, avto-yopish taymeri va bosib yopish jamlangan.
+     * `errorText` `null` bo'lsa bu joy umuman hech nima egallamaydi.
+     */
+    @Composable
+    private fun ErrorHost(modifier: Modifier = Modifier) {
+        val text = errorText ?: return
+        // Kalit `errorSeq`: aynan bir xil matnli xato ikkinchi marta kelsa
+        // ham taymer QAYTADAN boshlansin (aks holda ikkinchi banner
+        // birinchisidan qolgan vaqtda yo'q bo'lardi).
+        LaunchedEffect(errorSeq) {
+            delay(ERROR_BANNER_MS)
+            errorText = null
+        }
+        ErrorBanner(text = text, modifier = modifier) { errorText = null }
+    }
+
+    /**
+     * Juftlash va PIN bosqichlari — bu yerda yuqori panel ham, skan maydoni
+     * ham yo'q, shuning uchun banner USTIGA qoplanadi: oqimga qo'yilsa PIN
+     * klaviaturasi pastga surilib, oxirgi qatori ekrandan chiqib ketardi.
+     */
+    @Composable
+    private fun AuthStage(content: @Composable () -> Unit) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+            ErrorHost(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(12.dp),
+            )
+        }
+    }
+
     // ── Shell ───────────────────────────────────────────────────────────────
 
     override fun str(res: Int): String = getString(res)
@@ -267,6 +347,33 @@ class MainActivity : ComponentActivity(), Shell {
 
     override fun toast(text: String) = runOnUiThread {
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun success(res: Int) = success(getString(res))
+
+    /**
+     * T4 — amal o'tdi: toast QOLADI (u qisqa va yo'lni to'smaydi), ustiga
+     * ovoz va tebranish qo'shiladi. Muvaffaqiyat uchun banner ATAYLAB
+     * ishlatilmaydi: har saqlashda ekranning uchdan biri band bo'lardi.
+     */
+    override fun success(text: String) = runOnUiThread {
+        Feedback.ok()
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
+
+    override fun error(res: Int) = error(getString(res))
+
+    /**
+     * 🔴 T4 — amal o'tmadi: QIZIL BANNER + past ton va ikkita tebranish.
+     * Toast bu yerda ishlatilmaydi (`Shell.error` izohi: 4" ekranda u
+     * ko'zdan qochadi va xato jimgina yo'qolardi).
+     */
+    override fun error(text: String) = runOnUiThread {
+        // Matnsiz xato (masalan tanasiz 5xx) bannerda bo'sh qator bo'lardi —
+        // omborchi hech bo'lmasa amal O'TMAGANINI bilishi kerak.
+        errorText = text.ifBlank { getString(R.string.error_unknown) }
+        errorSeq++
+        Feedback.fail()
     }
 
     override fun go(screen: Screen) {
@@ -298,9 +405,13 @@ class MainActivity : ComponentActivity(), Shell {
             try {
                 work()
             } catch (e: ApiClient.ApiException) {
-                toast(e.message ?: "")
+                // T4 — HAR QANDAY ushlanmagan xato endi bannerga tushadi:
+                // bu yo'l ekranlar o'zi tutmagan hamma xatoning oxirgi
+                // to'ri, ya'ni u toast bo'lib qolsa banner qoidasida
+                // teshik qolardi.
+                error(e.message ?: "")
             } catch (e: Exception) {
-                toast(e.message ?: e.javaClass.simpleName)
+                error(e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -320,12 +431,16 @@ class MainActivity : ComponentActivity(), Shell {
             )
             main {
                 queueCount = queue.size()
-                toast(str(R.string.offline_queued, queue.size()))
+                // Navbatga tushish — amal YO'QOLMADI, keyinroq yuboriladi:
+                // ya'ni bu XATO emas (banner chiqarilmaydi), lekin omborchi
+                // «bo'ldi» degan javobni eshitishi kerak.
+                success(str(R.string.offline_queued, queue.size()))
             }
         } catch (e: ActionQueue.QueueFullException) {
             // Navbat to'lgan — YANGISI rad etiladi va bu BALAND aytiladi.
             // Eng eskisini tashlash jim yo'qotish bo'lardi (IS-5 klassi).
-            toast(e.message ?: "")
+            // T4: aynan shu sabab endi toast emas, BANNER.
+            error(e.message ?: "")
         }
     }
 
@@ -336,10 +451,16 @@ class MainActivity : ComponentActivity(), Shell {
             main {
                 queueCount = queue.size()
                 if (!silent || r.sent > 0 || r.rejected > 0) {
-                    toast(
-                        if (r.offline) str(R.string.queue_offline, r.left)
-                        else str(R.string.queue_sent, r.sent, r.rejected),
-                    )
+                    // T4: «aloqa yo'q» ham, «rad etilganlar bor» ham XATO
+                    // yo'li — omborchi ular haqida bilmasa amal jimgina
+                    // yo'qolgandek bo'lardi (IS-5). Toza yuborish esa
+                    // muvaffaqiyat.
+                    val report = str(R.string.queue_sent, r.sent, r.rejected)
+                    when {
+                        r.offline -> error(str(R.string.queue_offline, r.left))
+                        r.rejected > 0 -> error(report)
+                        else -> success(report)
+                    }
                 }
                 if (r.sent > 0 || r.rejected > 0) goHome()
             }
@@ -362,7 +483,7 @@ class MainActivity : ComponentActivity(), Shell {
             val r = updater.check()
             main {
                 when {
-                    r == null -> if (!silent) toast(R.string.update_check_failed)
+                    r == null -> if (!silent) error(R.string.update_check_failed)
                     updater.isNewer(r) -> updateState = UpdateState.Available(r)
                     else -> {
                         updateState = UpdateState.None
@@ -402,7 +523,7 @@ class MainActivity : ComponentActivity(), Shell {
         val f = updateFile ?: return
         // `false` — huquq yo'q edi va foydalanuvchi sozlama ekraniga ketdi;
         // qaytgach shu tugmani yana bosadi (fayl joyida turadi).
-        if (!updater.install(f)) toast(R.string.update_needs_permission)
+        if (!updater.install(f)) error(R.string.update_needs_permission)
     }
 
     // ── Skaner marshruti ────────────────────────────────────────────────────
@@ -417,8 +538,26 @@ class MainActivity : ComponentActivity(), Shell {
         if (screen != null && screen.onScan(code)) return
         io {
             val hit = api.scan(code)
+            // T4 — umumiy skan yo'lining OVOZLI javobi: omborchi ekranga
+            // qaramasdan ham kod tanilgan-tanilmaganini biladi. Bu yo'lda
+            // xabar (toast/banner) YO'Q — natijani `ScanInfoScreen` o'zi
+            // ko'rsatadi, shuning uchun signal ham to'g'ridan-to'g'ri
+            // `Feedback` dan olinadi.
+            if (isEmptyHit(hit)) Feedback.fail() else Feedback.ok()
             main { go(ScanInfoScreen(this, hit)) }
         }
+    }
+
+    /**
+     * Skan HECH NIMA topmadimi? `kind: "none"` — kod umuman tanilmadi;
+     * `piece` esa yorliq REYESTRDA yo'q bo'lsa ham `found: false` bilan
+     * qaytadi (`ScanInfoScreen.PieceCard` shu shoxni chizadi). Ikkalasi
+     * ham omborchi uchun «bo'lmadi».
+     */
+    private fun isEmptyHit(hit: JSONObject): Boolean = when (hit.optString("kind")) {
+        "none" -> true
+        "piece" -> hit.optJSONObject("piece")?.optBoolean("found") != true
+        else -> false
     }
 
     // ── PIN kirish ──────────────────────────────────────────────────────────
@@ -442,6 +581,9 @@ class MainActivity : ComponentActivity(), Shell {
                 main {
                     pin = ""
                     pinBusy = false
+                    // Kirishdan oldingi xato (masalan «PIN noto'g'ri»)
+                    // ish stoliga ergashib o'tmasin.
+                    errorText = null
                     stage = Stage.Work
                     goHome()
                     flushQueue(silent = true)
@@ -450,7 +592,7 @@ class MainActivity : ComponentActivity(), Shell {
                 main {
                     pin = ""
                     pinBusy = false
-                    toast(if (e.code == 401) str(R.string.login_failed) else (e.message ?: ""))
+                    error(if (e.code == 401) str(R.string.login_failed) else (e.message ?: ""))
                 }
             }
         }
@@ -464,10 +606,25 @@ class MainActivity : ComponentActivity(), Shell {
         history.clear()
         current = null
         pin = ""
+        // Ish ekranidagi xato PIN ekraniga ergashib o'tmasin. 401 sababli
+        // chiqarilganda bu banner YO'QOLMAYDI: `onSessionLost` avval,
+        // `io()` ning xato banneri esa KEYIN ishlaydi (ikkalasi ham UI
+        // thread'ga navbat bilan qo'yiladi).
+        errorText = null
         stage = Stage.Login
     }
 
     private fun appVersion(): String =
         runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
             .getOrNull().orEmpty()
+
+    private companion object {
+        /**
+         * T4 — xato banneri necha ms turadi. 6 s: omborchi tovardan boshini
+         * ko'tarib matnni o'qib ulgursin (toastning ~2 s i aynan shuning
+         * uchun yetmasdi). Undan uzunroq qilinsa keyingi skanning javobini
+         * to'sib qolardi. Bosilsa banner darhol yopiladi.
+         */
+        const val ERROR_BANNER_MS = 6_000L
+    }
 }

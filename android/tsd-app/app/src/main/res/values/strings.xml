@@ -53,6 +53,11 @@
     <string name="restart">Boshidan</string>
     <string name="loading">Yuklanmoqda…</string>
 
+    <!-- T4 — xato banneri. Server matnsiz xato qaytarsa (masalan tanasiz
+         5xx) bannerda bo'sh qator turmasin: sabab noma'lum bo'lsa ham
+         omborchi amal O'TMAGANINI bilishi kerak. -->
+    <string name="error_unknown">Xatolik — amal bajarilmadi</string>
+
     <!-- G6.1 — topshiriq ekrani -->
     <string name="task_title">Topshiriq</string>
     <string name="task_kind_picking">Yig\'ish</string>

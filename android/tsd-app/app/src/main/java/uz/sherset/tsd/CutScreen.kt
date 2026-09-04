@@ -171,11 +171,13 @@ class CutScreen(
         for (i in 0 until options.length()) {
             val p = options.optJSONObject(i) ?: continue
             if (p.optString("label").uppercase() == wanted) {
+                // T4 — bo'lak yorlig'i shu qatorda topildi.
+                Feedback.ok()
                 pick(p)
                 return true
             }
         }
-        shell.toast(R.string.cut_piece_not_in_line)
+        shell.error(R.string.cut_piece_not_in_line)
         return true
     }
 
@@ -204,7 +206,7 @@ class CutScreen(
     private fun send(cut: String, remainingInput: String) {
         val src = source ?: return
         if (cut.isEmpty()) {
-            shell.toast(R.string.cut_length_hint)
+            shell.error(R.string.cut_length_hint)
             return
         }
         val opId = UUID.randomUUID().toString()
@@ -227,7 +229,7 @@ class CutScreen(
                     // «yorliq bilan tugaydi» sharti shu bilan bajariladi:
                     // raqam BERILGAN va u bo'lakda yozilgan.
                     val text = (0 until labels.length()).joinToString(", ") { labels.optString(it) }
-                    shell.toast(
+                    shell.success(
                         if (text.isEmpty()) shell.str(R.string.cut_saved)
                         else shell.str(R.string.cut_saved_labels, text),
                     )
@@ -236,7 +238,7 @@ class CutScreen(
             } catch (e: ApiClient.ApiException) {
                 // Oflayn navbat YO'Q (sinf izohi): yorliq raqamini server
                 // beradi, ya'ni aloqasiz kesim yozib bo'lmaydi.
-                shell.toast(
+                shell.error(
                     if (e.retriable) shell.str(R.string.cut_offline) else (e.message ?: ""),
                 )
             }

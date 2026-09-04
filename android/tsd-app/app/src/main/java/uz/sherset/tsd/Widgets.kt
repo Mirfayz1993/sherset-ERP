@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -102,6 +103,46 @@ fun SectionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(14.dp), content = content)
+    }
+}
+
+/**
+ * 🔴 T4 — XATO BANNERI (toast o'rniga).
+ *
+ * Toast 4" terminal ekranida ko'zdan qochadi: omborchi tovarga qarab turadi
+ * va 2 soniyalik xabar u boshini ko'targanda allaqachon yo'q bo'ladi. Xato
+ * esa AYNAN ko'rinishi kerak — aks holda «saqlanmadi» jimgina yo'qoladi
+ * (IS-5 klassi). Banner ekran tepasida turadi, matn to'liq o'qiladi va
+ * bosilganda yopiladi; o'zi ham bir necha soniyadan keyin ketadi
+ * (`MainActivity.ERROR_BANNER_MS`).
+ *
+ * Butun banner bosiladigan: 4" ekranda kichkina ✕ ga tegish qiyin, shuning
+ * uchun ✕ — faqat KO'RSATKICH, tegish nishoni esa butun kartochka
+ * (`Ui.kt` dagi 56dp qoidasidan ham kattaroq).
+ */
+@Composable
+fun ErrorBanner(text: String, modifier: Modifier = Modifier, onDismiss: () -> Unit) {
+    SectionCard(
+        modifier = modifier.clickable { onDismiss() },
+        tint = Palette.DangerContainer,
+        border = Palette.Danger,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("⛔", fontSize = 20.sp)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text,
+                modifier = Modifier.weight(1f),
+                color = Palette.Danger,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text("✕", color = Palette.Danger, fontSize = 20.sp)
+        }
     }
 }
 

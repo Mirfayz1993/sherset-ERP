@@ -15,6 +15,19 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!--
+      T4 (2026-09-04) — TEBRANISH. Omborchi javon oldida turadi va ekranga
+      qaramaydi: skan qabul qilindimi yoki xato bo'ldimi — buni QO'LI bilan
+      bilishi kerak (`Feedback.kt`). Ombor shovqinida ovozning o'zi yetmaydi.
+      Bu ruxsat «normal» darajada — tizim uni o'rnatishda BERADI, omborchidan
+      hech nima so'ralmaydi va u hech qanday ma'lumotga yo'l ochmaydi.
+
+      🔴 T4 da manifestga qo'shilgan YAGONA yangi ruxsat shu. Ovoz uchun
+      ruxsat KERAK EMAS (`ToneGenerator` — chiqish qurilmasi), ya'ni
+      RECORD_AUDIO ham YO'Q.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
       🔴 KAMERA RUXSATI ATAYLAB YO'Q. TSD — apparat skanerli terminal:
       kod klaviatura-wedge yoki DataWedge broadcast bilan keladi. Kamera
       ruxsati so'ralsa u ombor xodimining qurilmasida ortiqcha huquq bo'lardi.
@@ -22,6 +35,9 @@
 
       Lokatsiya/fon-servis ham YO'Q (`driver-app` dan asosiy farq): terminal
       ekran ochiq turganda ishlaydi, kuzatuv qilmaydi.
+
+      MIKROFON (RECORD_AUDIO) ham YO'Q: T4 ovozni faqat CHIQARADI
+      (`ToneGenerator`), yozmaydi.
     -->
 
     <application

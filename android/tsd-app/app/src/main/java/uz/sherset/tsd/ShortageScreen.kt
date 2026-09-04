@@ -93,7 +93,7 @@ class ShortageScreen(
 
     private fun send(qty: String, note: String) {
         if (qty.isEmpty()) {
-            shell.toast(R.string.shortage_qty_hint)
+            shell.error(R.string.shortage_qty_hint)
             return
         }
         val lineId = line.optString("id")
@@ -106,7 +106,7 @@ class ShortageScreen(
             try {
                 shell.api.send("POST", path, payload)
                 shell.main {
-                    shell.toast(R.string.shortage_saved)
+                    shell.success(shell.str(R.string.shortage_saved))
                     shell.back()
                 }
             } catch (e: ApiClient.ApiException) {
@@ -114,7 +114,7 @@ class ShortageScreen(
                     shell.enqueue("POST", path, payload, shell.str(R.string.op_shortage))
                     shell.main { shell.back() }
                 } else {
-                    shell.toast(e.message ?: "")
+                    shell.error(e.message ?: "")
                 }
             }
         }

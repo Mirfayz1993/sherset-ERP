@@ -20,13 +20,41 @@ interface Shell {
 
     fun str(res: Int): String
     fun str(res: Int, vararg args: Any): String
+
+    /**
+     * BETARAF xabar (toast): «Qidirilmoqda…», navbat hisoboti, yangilanish
+     * holati. Ovoz/tebranish YO'Q — bu na muvaffaqiyat, na xato.
+     */
     fun toast(res: Int)
     fun toast(text: String)
+
+    /**
+     * T4 — AMAL O'TDI: toast + qisqa yuqori ton va bitta tebranish
+     * ([Feedback.ok]). Sanoq saqlandi, qator tasdiqlandi, navbat bo'shadi.
+     */
+    fun success(res: Int)
+    fun success(text: String)
+
+    /**
+     * 🔴 T4 — AMAL O'TMADI: ekran tepasida QIZIL BANNER + past ton va
+     * ikkita tebranish ([Feedback.fail]).
+     *
+     * Toast EMAS, chunki 4" terminal ekranida u ko'zdan qochadi va omborchi
+     * xatoni ko'rmasdan keyingi tovarga o'tib ketardi — bu IS-5 («jim
+     * yo'qotish») klassiga yaqin. Banner bir necha soniya turadi va bosilsa
+     * yopiladi.
+     *
+     * Skan TANILDI/TANILMADI kabi matnsiz javob uchun ekranlar
+     * [Feedback.ok]/[Feedback.fail] ni to'g'ridan-to'g'ri chaqiradi —
+     * `Feedback` `Diagnostics` kabi global obyekt, `Activity` ni ochmaydi.
+     */
+    fun error(res: Int)
+    fun error(text: String)
 
     fun go(screen: Screen)
     fun back()
 
-    /** Ish IO thread'da; `ApiException` va boshqa xatolar toast bilan aytiladi. */
+    /** Ish IO thread'da; `ApiException` va boshqa xatolar BANNER bilan aytiladi (T4). */
     fun io(work: () -> Unit)
 
     /** UI thread'da bajarish — Compose state FAQAT shu yerda o'zgartiriladi. */

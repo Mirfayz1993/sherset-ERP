@@ -39,4 +39,17 @@
       raqamdan yuqori qilinadi. Qurilma almashsa KOD o'zgarmaydi.
     -->
     <integer name="scan_human_gap_ms">50</integer>
+
+    <!--
+      T4 — OVOZLI JAVOB YOQILGANMI (`Feedback.kt`).
+
+      `true` — muvaffaqiyatda qisqa yuqori ton, xatoda past ton.
+      `false` — ovoz umuman chalinmaydi, TEBRANISH esa ISHLAYVERADI
+      (u ovozsiz kanal va uni o'chirishning sababi yo'q).
+
+      Bayroq shu yerda, kodda emas: agar biror joyda (masalan savdo zali
+      yonidagi omborda) ovoz xalaqit bersa — kod qayta yig'ilmasdan,
+      faqat shu qator o'zgaradi.
+    -->
+    <bool name="feedback_sound">true</bool>
 </resources>

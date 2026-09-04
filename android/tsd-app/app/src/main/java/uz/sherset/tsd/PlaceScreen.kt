@@ -209,6 +209,11 @@ class PlaceScreen(private val shell: Shell) : Screen {
                 product == null && kind == "product" -> {
                     val products = hit.optJSONArray("products") ?: JSONArray()
                     shell.main {
+                        // T4 — tovar tanildi (bittami, ko'pmi): qisqa signal.
+                        // Xabar YO'Q, chunki natija ekranning O'ZIDA
+                        // ko'rinadi (bosqich oldinga siljiydi yoki tanlov
+                        // ro'yxati ochiladi).
+                        Feedback.ok()
                         if (products.length() == 1) {
                             product = products.getJSONObject(0)
                         } else {
@@ -221,23 +226,27 @@ class PlaceScreen(private val shell: Shell) : Screen {
                         }
                     }
                 }
-                product == null && kind == "piece" -> shell.toast(R.string.scan_piece)
-                product == null -> shell.toast(R.string.place_need_product)
+                product == null && kind == "piece" -> shell.error(R.string.scan_piece)
+                product == null -> shell.error(R.string.place_need_product)
                 kind == "cell" -> {
                     val resp = shell.api.cellByBarcode(code)
                     val cells = resp.optJSONArray("cells") ?: JSONArray()
                     shell.main {
                         when (cells.length()) {
-                            0 -> shell.toast(R.string.cell_not_found)
+                            0 -> shell.error(R.string.cell_not_found)
                             // Bir yorliq ikki javonda bo'lsa ilova TANLAMAYDI —
                             // yacheyka aralashishi qoldiqni noto'g'ri joyga
                             // yozardi va uni keyin topib bo'lmasdi.
-                            1 -> toCell = cells.getJSONObject(0)
-                            else -> shell.toast(R.string.cell_ambiguous)
+                            1 -> {
+                                // T4 — maqsad yacheyka qabul qilindi.
+                                Feedback.ok()
+                                toCell = cells.getJSONObject(0)
+                            }
+                            else -> shell.error(R.string.cell_ambiguous)
                         }
                     }
                 }
-                else -> shell.toast(R.string.place_need_cell)
+                else -> shell.error(R.string.place_need_cell)
             }
         }
         return true
@@ -247,7 +256,7 @@ class PlaceScreen(private val shell: Shell) : Screen {
         val p = product ?: return
         val target = toCell ?: return
         if (qty.isEmpty()) {
-            shell.toast(R.string.place_qty_hint)
+            shell.error(R.string.place_qty_hint)
             return
         }
         val productId = p.optString("id")
@@ -279,7 +288,7 @@ class PlaceScreen(private val shell: Shell) : Screen {
             try {
                 shell.api.send("POST", path, payload)
                 shell.main {
-                    shell.toast(R.string.place_saved)
+                    shell.success(shell.str(R.string.place_saved))
                     reset()
                 }
             } catch (e: ApiClient.ApiException) {
@@ -287,7 +296,7 @@ class PlaceScreen(private val shell: Shell) : Screen {
                     shell.enqueue("POST", path, payload, label)
                     shell.main { reset() }
                 } else {
-                    shell.toast(e.message ?: "")
+                    shell.error(e.message ?: "")
                 }
             }
         }

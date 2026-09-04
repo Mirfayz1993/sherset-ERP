@@ -325,30 +325,38 @@ class CountScreen(private val shell: Shell) : Screen {
                     if (cell == null) {
                         // Yacheykasiz sanoq ma'nosiz: son QAYSI yacheykaga
                         // yozilishi noma'lum bo'lardi.
-                        shell.toast(R.string.count_need_cell_first)
+                        shell.error(R.string.count_need_cell_first)
                     } else {
                         val products = hit.optJSONArray("products") ?: JSONArray()
                         shell.main {
                             when (products.length()) {
-                                0 -> shell.toast(R.string.scan_none)
+                                0 -> shell.error(R.string.scan_none)
                                 1 -> {
                                     val pr = products.getJSONObject(0)
+                                    // T4 — tovar tanildi: qisqa signal.
+                                    // Xabar YO'Q, chunki tanlangan tovar
+                                    // kartochkasi ekranda o'zi ochiladi.
+                                    Feedback.ok()
                                     pick(pr.optString("name"), pr.optString("id"))
                                 }
                                 // Multi-hit: TANLOVNI ODAM qiladi (G-reja
                                 // majburiy qoidasi) — shtrixlar unikal emas.
-                                else -> shell.go(
-                                    PickProductScreen(shell, products) { pr ->
-                                        pick(pr.optString("name"), pr.optString("id"))
-                                        shell.back()
-                                    },
-                                )
+                                // T4 signali bu yerda ham «tanildi» degani.
+                                else -> {
+                                    Feedback.ok()
+                                    shell.go(
+                                        PickProductScreen(shell, products) { pr ->
+                                            pick(pr.optString("name"), pr.optString("id"))
+                                            shell.back()
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                "piece" -> shell.toast(R.string.scan_piece)
-                else -> shell.toast(R.string.scan_none)
+                "piece" -> shell.error(R.string.scan_piece)
+                else -> shell.error(R.string.scan_none)
             }
         }
         return true
@@ -360,8 +368,11 @@ class CountScreen(private val shell: Shell) : Screen {
         val cells = resp.optJSONArray("cells") ?: JSONArray()
         shell.main {
             when (cells.length()) {
-                0 -> shell.toast(R.string.cell_not_found)
+                0 -> shell.error(R.string.cell_not_found)
                 1 -> {
+                    // T4 — yacheyka ochildi: omborchi yorliqni skanerlab,
+                    // ekranga qaramasdan keyingi tovarga qo'l uzatadi.
+                    Feedback.ok()
                     cell = cells.getJSONObject(0)
                     items = resp.optJSONArray("stock") ?: JSONArray()
                     // Qo'shimcha SO'ROV YO'Q — `products` shu javobning ichida.
@@ -372,14 +383,14 @@ class CountScreen(private val shell: Shell) : Screen {
                 }
                 // Ikki javonda bir xil yorliq — ilova TANLAMAYDI, aks holda
                 // sanoq noto'g'ri yacheykaga yozilardi.
-                else -> shell.toast(R.string.cell_ambiguous)
+                else -> shell.error(R.string.cell_ambiguous)
             }
         }
     }
 
     private fun save(c: JSONObject, assortmentId: String, qty: String) {
         if (qty.isEmpty()) {
-            shell.toast(R.string.count_qty_hint)
+            shell.error(R.string.count_qty_hint)
             return
         }
         shell.io {
@@ -396,10 +407,10 @@ class CountScreen(private val shell: Shell) : Screen {
                         picked = null
                         pickedQty = ""
                     }
-                    shell.toast(R.string.count_saved)
+                    shell.success(shell.str(R.string.count_saved))
                 }
             } catch (e: ApiClient.ApiException) {
-                shell.toast(
+                shell.error(
                     if (e.retriable) shell.str(R.string.count_offline) else (e.message ?: ""),
                 )
             }

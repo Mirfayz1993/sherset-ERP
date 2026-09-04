@@ -52,6 +52,9 @@ class TaskDetailScreen(
      * bo'lsa ilova O'ZI birortasini tanlamaydi.
      */
     override fun onScan(code: String): Boolean {
+        // BETARAF xabar (T4): bu na muvaffaqiyat, na xato — shunchaki
+        // «so'rov ketdi». Shuning uchun toast QOLADI va signal berilmaydi;
+        // natija kelganda `onScanResult` o'zi ok/fail ni aytadi.
         shell.toast(R.string.scan_working)
         shell.io {
             val hit = shell.api.scan(code)
@@ -63,11 +66,16 @@ class TaskDetailScreen(
     private fun onScanResult(hit: JSONObject) {
         val products = hit.optJSONArray("products") ?: JSONArray()
         when {
-            hit.optString("kind") == "piece" -> shell.toast(R.string.scan_piece)
-            products.length() == 0 -> shell.toast(R.string.scan_none)
+            hit.optString("kind") == "piece" -> shell.error(R.string.scan_piece)
+            products.length() == 0 -> shell.error(R.string.scan_none)
+            // Bitta topilgan holatda signal BERILMAYDI: darhol `confirm-scan`
+            // ketadi va uning javobi (tasdiqlandi / xato) o'z signalini
+            // beradi — aks holda bitta skanga ikkita ovoz chiqardi.
             products.length() == 1 -> confirmByProduct(products.getJSONObject(0).optString("id"))
             else -> {
                 // Multi-hit: TANLOVNI ODAM qiladi (G-reja majburiy qoidasi).
+                // T4 — tovar tanildi, tanlov ro'yxati ochilmoqda.
+                Feedback.ok()
                 shell.go(
                     PickProductScreen(shell, products) { p ->
                         shell.back()
@@ -236,7 +244,7 @@ class TaskDetailScreen(
             try {
                 shell.api.confirmScan(taskId, productId, opId)
                 shell.main {
-                    shell.toast(R.string.line_confirmed)
+                    shell.success(shell.str(R.string.line_confirmed))
                     load()
                 }
             } catch (e: ApiClient.ApiException) {
@@ -248,7 +256,7 @@ class TaskDetailScreen(
                         shell.str(R.string.op_confirm_scan),
                     )
                 } else {
-                    shell.toast(e.message ?: "")
+                    shell.error(e.message ?: "")
                 }
             }
         }
@@ -262,14 +270,14 @@ class TaskDetailScreen(
             try {
                 shell.api.send("POST", path, payload)
                 shell.main {
-                    shell.toast(R.string.line_confirmed)
+                    shell.success(shell.str(R.string.line_confirmed))
                     load()
                 }
             } catch (e: ApiClient.ApiException) {
                 if (e.retriable) {
                     shell.enqueue("POST", path, payload, shell.str(R.string.op_confirm_line))
                 } else {
-                    shell.toast(e.message ?: "")
+                    shell.error(e.message ?: "")
                 }
             }
         }

@@ -136,6 +136,37 @@ orasidagi **o'rtacha intervalni** o'lchab ajratadi:
   shoxdan **mustaqil**: `ScannerBridge` fokusdan ham, tezlikdan ham qat'i
   nazar ishlayveradi.
 
+## Skan javobi — ovoz, tebranish, banner (T4)
+
+Omborchi javon oldida turadi va ekranga qaramaydi. T4 gacha amal o'tgan-o'tmagani
+FAQAT toast bilan aytilardi, ya'ni 4" ekranda u ko'pincha umuman ko'rilmasdi.
+Endi har javobning **uchta darajasi** bor:
+
+| Daraja | Nima ko'rinadi | Nima eshitiladi | Qachon |
+|---|---|---|---|
+| **muvaffaqiyat** (`Shell.success`) | toast (qisqa) | qisqa **yuqori** ton + 1 tebranish | sanoq saqlandi, qator tasdiqlandi, kesim yozildi, navbat bo'shadi |
+| **xato** (`Shell.error`) | **QIZIL BANNER** ekran tepasida | **past** ton + 2 tebranish | «Topilmadi», 4xx/5xx, «avval yacheykani skanerlang», yacheyka topilmadi/ikkilamchi, navbat to'ldi, aloqa yo'q, rad etilganlar bor |
+| **betaraf** (`Shell.toast`) | toast | — | «Qidirilmoqda…», «eng so'nggi versiya» |
+
+Matnsiz javob ham bor: skan TANILDI/TANILMADI ni ekranlar to'g'ridan-to'g'ri
+`Feedback.ok()` / `Feedback.fail()` bilan aytadi (yacheyka ochildi, tovar
+tanildi, bo'lak yorlig'i topildi) — bu yerda ovoz xabarning O'RNIGA emas,
+natijaning O'ZI ekranda ko'rinadi.
+
+- **Banner** (`Widgets.ErrorBanner`) — 6 soniya turadi (`MainActivity.ERROR_BANNER_MS`),
+  bosilsa darhol yopiladi; ish ekranlarida u **skan maydonining ostida** chiziladi
+  (maydon qimirlamasin), juftlash/PIN ekranlarida esa ustiga qoplanadi.
+- **Ovoz** (`Feedback.kt`) — `ToneGenerator`, oqim **`STREAM_NOTIFICATION`**
+  (media EMAS: media oqimi terminalda odatda past turadi). Butunlay o'chirish
+  kerak bo'lsa — `config.xml` dagi **`feedback_sound`** bayrog'i; tebranish
+  o'z holicha ishlayveradi.
+- **Tebranish** — manifestdagi yagona yangi ruxsat **`VIBRATE`** («normal»
+  darajada, o'rnatishda beriladi, omborchidan hech nima so'ralmaydi).
+  Kamera/lokatsiya/mikrofon ruxsati **hamon YO'Q**.
+- **Ekran o'chmaydi** — `MainActivity` da `FLAG_KEEP_SCREEN_ON` (doimiy,
+  sozlamada emas): sanash o'rtasida ekran so'nsa sessiya yopilib PIN qayta
+  so'ralardi. Ilova fonga ketganda bayroq o'z-o'zidan kuchdan qoladi.
+
 ## Yangilanish (qurilmadan) — 0.3.0
 
 Terminal Play Store'da emas, shuning uchun ilova o'zi yangilanadi
@@ -262,7 +293,24 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
     «🔍 Tovar qidirish» → tovar tanlangach oqim 2-bosqichga o'tsin.
     ⚠️ Maydon **o'zi yubormaydi** (T2 qoidasi) — «Qidirish» tugmasi yoki
     klaviaturaning tasdiq tugmasi bosilishi kerak.
-11. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+11. **Skan javobi (T4):** terminal ovozini o'rtacha darajaga qo'ying va
+    **ekranga qaramasdan** ishlab ko'ring.
+    - Yacheyka yorlig'ini skanerlang → **qisqa yuqori** signal + bitta turtki;
+      noma'lum kodni skanerlang → **past** signal + ikkita turtki va ekran
+      tepasida **qizil banner** («Yacheyka topilmadi») chiqsin.
+    - Bannerni **bosing** → darhol yopilsin; boshqasini tegmasdan qoldiring →
+      ~6 soniyada o'zi ketsin. Banner turganda yuqori paneldagi «orqaga» va
+      «chiqish» tugmalari **bosilishi** kerak (banner ularni to'smaydi).
+    - Sanoqni saqlang → yuqori signal + «Saqlandi» toasti.
+    - Wi-Fi'ni o'chiring va sanoqni saqlang → past signal + **banner**
+      («aloqa yo'q»), son maydonda TURSIN.
+    - Terminalni **5 daqiqa tegmasdan** qoldiring → ekran **o'chmasin** va PIN
+      qayta so'ralmasin.
+    - `config.xml` da `feedback_sound` ni `false` qilib qayta yig'ing →
+      ovoz yo'qolsin, **tebranish qolsin**.
+    - Sozlamalar → Ilovalar → Sherset TSD → Ruxsatlar: ro'yxatda **kamera,
+      lokatsiya, mikrofon YO'Q**.
+12. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
     Terminal tokeni bilan `GET /api/v1/products?search=…` → **403**;
     `GET /api/v1/tsd/search?q=…` → **200** va javobda narx maydoni **yo'q**.
 
@@ -328,9 +376,9 @@ ilova bir-birini «ko'ryaptimi» degan savolga javob beradi.
 ## Fayl xaritasi
 
 ```
-app/src/main/AndroidManifest.xml           — ruxsatlar (kamera/lokatsiya YO'Q)
+app/src/main/AndroidManifest.xml           — ruxsatlar (VIBRATE bor; kamera/lokatsiya/mikrofon YO'Q)
 app/src/main/res/values/
-   config.xml                              — api_base_url + skaner broadcast aksiyasi
+   config.xml                              — api_base_url + skaner broadcast aksiyasi + T2/T4 bayroqlari
    strings.xml                             — matnlar (uz; ru kerak bo'lsa values-ru)
 app/src/main/java/uz/sherset/tsd/
    — o'zgarmagan qatlam (G5/G6, server bilan muloqot) —
@@ -339,10 +387,11 @@ app/src/main/java/uz/sherset/tsd/
    ActionQueue.kt                          — oflayn FIFO amal navbati
    QueueSender.kt                          — navbatni bo'shatish
    ScannerBridge.kt                        — broadcast skaner ko'prigi (ko'p vendor)
+   Feedback.kt                             — T4: ovoz (ToneGenerator) + tebranish (Vibrator)
    Updater.kt                              — qurilmadan yangilash (manifest+sha256+o'rnatish)
    — dizayn qatlami (0.2.0, Compose) —
    Theme.kt                                — ranglar, tipografika, shakllar
-   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar
+   Widgets.kt                              — tugmalar, kartalar, yacheyka plashkasi, maydonlar, xato banneri
    Shell.kt                                — `Shell`/`Screen` shartnomasi
    ScanBar.kt                              — doim fokusdagi klaviatura-wedge maydoni
    AuthScreens.kt                          — juftlash + PIN (raqamlagich)

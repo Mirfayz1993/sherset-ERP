@@ -107,10 +107,15 @@ class QueueScreen(private val shell: Shell) : Screen {
             shell.main {
                 busy = false
                 reload()
-                shell.toast(
-                    if (r.offline) shell.str(R.string.queue_offline, r.left)
-                    else shell.str(R.string.queue_sent, r.sent, r.rejected),
-                )
+                // T4 — «aloqa yo'q» va «rad etilganlar bor» XATO yo'li:
+                // omborchi ular haqida bilmasa amal jimgina yo'qolgandek
+                // bo'lardi (IS-5). Toza yuborish esa muvaffaqiyat.
+                val report = shell.str(R.string.queue_sent, r.sent, r.rejected)
+                when {
+                    r.offline -> shell.error(shell.str(R.string.queue_offline, r.left))
+                    r.rejected > 0 -> shell.error(report)
+                    else -> shell.success(report)
+                }
             }
         }
     }
