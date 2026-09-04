@@ -357,7 +357,30 @@ Javobgar: __________ · Sana/vaqt: __________ · APK versiyasi: __________
       bo'lishi kerak.
     - O'sha tekshiruvni **Joylashtirish** miqdorida va **✂ Kesish**
       uzunligida takrorlang.
-13. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
+13. **Sanash progressi va «0 qilib yopish» (T6):** kamida **3 ta** qatori bor
+    yacheykani Sanashda oching.
+    - Sarlavha-kartada **«0/3 sanaldi»** chiqsin; har qator oldida kulrang
+      **○** bo'lsin.
+    - Bitta qatorga son kiritib **Saqlang** → o'sha qator **✓ yashil** bo'lsin,
+      chegarasi yashil rangga o'tsin, sarlavhada **«1/3 sanaldi»** tursin.
+    - Pastda **«Qolganini 0 qilib yopish (2)»** tugmasi ko'rinsin → bosing →
+      QIZIL tasdiq kartasi ochilsin. Kartada: 🔴 **avtomatik CHIQIM
+      (Списание)** ogohlantirishi va **ikkala** qator nomi hozirgi qoldig'i
+      bilan ro'yxat bo'lib tursin (ro'yxat KESILMASIN).
+    - **Bekor qilish** → hech nima yuborilmasin, progress o'zgarmasin.
+    - Yana bosib **«Ha, 0 qilib yopish»** → «Yopilmoqda…» chiqsin → tugagach
+      «2 qator 0 qilib yopildi» toasti, sarlavhada **«3/3 sanaldi»** (yashil)
+      va tugmaning O'ZI yo'qolsin.
+    - ERP'da o'sha ombor hujjatlarini oching → har qator uchun avto
+      **Списание** («Sanash (yacheyka …) — avto-tenglash») yozilgan bo'lsin.
+    - **Aloqasiz xulq:** boshqa yacheykani oching, Wi-Fi'ni O'CHIRING va
+      «Qolganini 0 qilib yopish» ni tasdiqlang → past signal + qizil banner
+      «Aloqa yo'q — to'xtatildi. 0 qator yopildi, N qator yopilmadi», qatorlar
+      ekranda TURSIN (jim yo'qolmasin), navbatga HECH NIMA tushmasin
+      («Navbatda: N» hisobi o'zgarmasin).
+    - Boshqa yacheyka yorlig'ini skanerlang → progress **0/M** ga tushsin
+      (eski ✓ belgilar ergashib o'tmasin).
+14. **Narx tekshiruvi (yana):** har ekranda narx YO'Qligini ko'zdan kechiring.
     Terminal tokeni bilan `GET /api/v1/products?search=…` → **403**;
     `GET /api/v1/tsd/search?q=…` → **200** va javobda narx maydoni **yo'q**.
 

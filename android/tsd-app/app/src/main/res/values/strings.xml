@@ -114,6 +114,22 @@
     <string name="count_bound_zero">biriktirilgan · qoldiq 0</string>
     <string name="count_archived">⚠ arxivlangan</string>
 
+    <!-- T6 - sanash progressi va «qolganini 0 qilib yopish».
+         Chiqim ogohlantirishi OCHIQ yozilgan: `set 0` serverda avto
+         Списание hujjatini yozadi va omborchi buni tasdiqdan OLDIN
+         bilishi kerak (jim bajarish IS-5 klassi bo'lardi). -->
+    <string name="count_progress">%1$d/%2$d sanaldi</string>
+    <string name="count_row_failed">⛔ yopilmadi — qayta urinib ko\'ring</string>
+    <string name="count_close_rest">Qolganini 0 qilib yopish (%1$d)</string>
+    <string name="count_close_title">Qolgan qatorlarni 0 qilib yopasizmi?</string>
+    <string name="count_close_warning">🔴 Bu qatorlarning qoldig\'i 0 bo\'ladi. Qoldig\'i bor har bir qator uchun tizim avtomatik CHIQIM (Списание) hujjatini yozadi — tovar hisobdan yechiladi. Ilova orqali bekor qilib bo\'lmaydi: qaytarish uchun to\'g\'ri sonni qayta sanash kerak.</string>
+    <string name="count_close_list">%1$d ta qator 0 bo\'ladi (yonida hozirgi qoldiq):</string>
+    <string name="count_close_confirm">Ha, 0 qilib yopish</string>
+    <string name="count_closing">Yopilmoqda… kutib turing (aloqa uzilsa to\'xtaydi)</string>
+    <string name="count_close_done">%1$d qator 0 qilib yopildi</string>
+    <string name="count_close_partial">%1$d qator yopildi, %2$d qator YOPILMADI — qizil qatorlarga qarang</string>
+    <string name="count_close_stopped">Aloqa yo\'q — to\'xtatildi. %1$d qator yopildi, %2$d qator yopilmadi</string>
+
     <!-- T3 - nom/artikul bo'yicha qidiruv (`GET /tsd/search`, NARXSIZ) -->
     <string name="search_title">Tovar qidirish</string>
     <string name="search_open">🔍 Tovar qidirish</string>

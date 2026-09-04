@@ -1,8 +1,10 @@
 package uz.sherset.tsd
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -10,9 +12,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -54,6 +60,27 @@ import org.json.JSONObject
  * `ProductCellLink`) O'QILMASDAN tashlab yuborilardi. Endi ekran ikki
  * guruh chizadi: qoldig'i bor qatorlar va biriktirilgan-lekin-qoldiqsiz
  * qatorlar. Qo'shimcha tarmoq so'rovi YO'Q — ma'lumot o'sha javobda.
+ *
+ * 🔵 **PROGRESS VA «QOLGANINI 0 QILIB YOPISH» (T6, 2026-09-04).** Ilgari
+ * yacheyka sanog'i hech qachon TO'LIQ yopilmasdi: nechta qator sanalgani
+ * ko'rinmasdi va javonda YO'Q bo'lgan (lekin tizimda turgan) tovarni 0 ga
+ * tushirishning ommaviy yo'li yo'q edi. Endi:
+ *   · sarlavha-kartada «5/12 sanaldi» — hisob ILOVA ichida (server sanash
+ *     sessiyasini bilmaydi, u T11 ning ishi);
+ *   · har qatorda belgi: ✓ yashil = shu sessiyada saqlandi, ○ kulrang =
+ *     hali sanalmagan, ✕ qizil = yopishda XATO bergan;
+ *   · «Qolganini 0 qilib yopish» — sanalmagan qatorlarni BITTALAB `set 0`
+ *     bilan yuboradi.
+ *
+ * 🔴 «0 qilib yopish» — YO'QOTUVCHI amal: qoldig'i bor har qator uchun
+ * server avto **Списание** (chiqim) hujjatini yozadi. Shuning uchun u
+ * bitta tasdiqdan o'tadi va tasdiq oldidan QAYSI qatorlar, QAYSI son bilan
+ * 0 ga tushishi ro'yxat bo'lib ko'rsatiladi (ro'yxat KESILMAYDI). Jim
+ * bajarilmaydi.
+ *
+ * 🔴 Bu amal ham NAVBATGA QO'YILMAYDI (sanash qoidasi o'zgarmadi): aloqa
+ * yo'q bo'lsa halqa TO'XTAYDI va yopilmagan qatorlar ekranda kulrang/qizil
+ * bo'lib qoladi — jim yo'qotish yo'q (IS-5).
  */
 class CountScreen(private val shell: Shell) : Screen {
 
@@ -74,6 +101,32 @@ class CountScreen(private val shell: Shell) : Screen {
 
     /** Kiritilgan sonlar: `assortmentId → son`. Saqlashdan keyin ham TURADI. */
     private val counts = mutableStateMapOf<String, String>()
+
+    /**
+     * T6 — progressning MAXRAJI: shu yacheyka sessiyasida BIR MARTA bo'lsa
+     * ham ko'ringan har qator (`assortmentId → nom`).
+     *
+     * Nega alohida ro'yxat, nega `items.length()` emas: `set 0` dan keyin
+     * server qatorni `getCellStock` javobidan OLIB TASHLAYDI (`qty > 0`
+     * filtri, biriktirilmagan tovar uchun). Maxraj `items` dan olinsa
+     * «12 dan 5 tasi» sanalgach maxraj 9 ga tushib, progress ORQAGA ketardi.
+     * Bu ro'yxat esa faqat O'SADI va yacheyka almashganda tozalanadi.
+     */
+    private val roster = mutableStateMapOf<String, String>()
+
+    /**
+     * T6 — qator belgisi. Kalitda YO'Q = hali sanalmagan (kulrang ○).
+     * Belgi ILOVA ichida yashaydi: server «kim nimani sanadi» sessiyasini
+     * bilmaydi, shuning uchun boshqa terminal sanagan qator bu yerda
+     * kulrang qoladi (T11 sessiya tushunchasini serverga olib chiqadi).
+     */
+    private val marks = mutableStateMapOf<String, Mark>()
+
+    /** T6 — tasdiq kartasi ochiqmi (0 qilib yopish ro'yxati ko'rinadi). */
+    private var confirming by mutableStateOf(false)
+
+    /** T6 — yopish halqasi ketmoqda: tugma o'rniga holat matni chiqadi. */
+    private var closing by mutableStateOf(false)
 
     override fun title(shell: Shell): String = shell.str(R.string.count_title)
 
@@ -108,6 +161,18 @@ class CountScreen(private val shell: Shell) : Screen {
                 style = MaterialTheme.typography.bodyMedium,
                 color = Palette.TextMuted,
             )
+            // T6 — «5/12 sanaldi». Bo'sh yacheykada («0/0») chizilmaydi:
+            // sanaladigan qator yo'q joyda progress faqat joy yeydi.
+            val done = countedCount()
+            val total = roster.size
+            if (total > 0) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.count_progress, done, total),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (done >= total) Palette.Success else Palette.TextMuted,
+                )
+            }
         }
         Spacer(Modifier.height(10.dp))
 
@@ -135,9 +200,21 @@ class CountScreen(private val shell: Shell) : Screen {
             // Yuqorida ochilgan tovar ro'yxatda IKKINCHI marta chizilmaydi —
             // ikki maydon bir tovarga ikki xil son berishga yo'l ochardi.
             if (assortmentId == p?.optString("id")) continue
-            SectionCard(modifier = Modifier.clickable { pick(it.optString("name"), assortmentId) }) {
+            val mark = marks[assortmentId]
+            SectionCard(
+                modifier = Modifier.clickable { pick(it.optString("name"), assortmentId) },
+                border = markBorder(mark),
+            ) {
                 // NARX YO'Q: bu javob narx maydonini umuman qaytarmaydi.
-                Text(it.optString("name"), style = MaterialTheme.typography.titleMedium)
+                // T6 — nom oldida belgi: ✓ sanaldi · ○ sanalmadi · ✕ xato.
+                MarkedTitle(it.optString("name"), mark)
+                if (mark == Mark.FAILED) {
+                    Text(
+                        stringResource(R.string.count_row_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Palette.Danger,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 InfoRow(
                     label = stringResource(R.string.count_system_qty),
@@ -158,7 +235,7 @@ class CountScreen(private val shell: Shell) : Screen {
                 PrimaryButton(
                     text = stringResource(R.string.count_save),
                     enabled = QtyExpression.qty(typed) != null,
-                ) { save(c, assortmentId, typed) }
+                ) { save(c, assortmentId, it.optString("name"), typed) }
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -170,13 +247,22 @@ class CountScreen(private val shell: Shell) : Screen {
         for (b in extras) {
             val boundId = b.optString("id")
             if (boundId == p?.optString("id")) continue
+            val boundMark = marks[boundId]
             SectionCard(
                 modifier = Modifier.clickable { pick(b.optString("name"), boundId) },
                 tint = Palette.SurfaceMuted,
+                border = markBorder(boundMark),
             ) {
                 // NARX YO'Q: `getCellProducts` select'i — id, name, code,
                 // barcode, archived. Narx maydoni javobda umuman yo'q.
-                Text(b.optString("name"), style = MaterialTheme.typography.titleMedium)
+                MarkedTitle(b.optString("name"), boundMark)
+                if (boundMark == Mark.FAILED) {
+                    Text(
+                        stringResource(R.string.count_row_failed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Palette.Danger,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.count_bound_zero),
@@ -194,6 +280,10 @@ class CountScreen(private val shell: Shell) : Screen {
             }
             Spacer(Modifier.height(10.dp))
         }
+
+        // T6 — «qolganini 0 qilib yopish». Ro'yxatlardan KEYIN turadi:
+        // omborchi avval qatorlarni ko'radi, keyin «qolgani yo'q» deydi.
+        CloseRestBlock(c)
 
         // T3 — shtrixsiz tovarni NOMIDAN topish. Yacheyka ochiq bo'lgandagina
         // ko'rinadi: yacheykasiz sanoq ma'nosiz (son qaysi yacheykaga
@@ -234,7 +324,9 @@ class CountScreen(private val shell: Shell) : Screen {
                 color = Palette.TextMuted,
             )
             Spacer(Modifier.height(4.dp))
-            Text(p.optString("name"), style = MaterialTheme.typography.titleMedium)
+            // T6 — ro'yxatdagi kabi belgi: ochiq turgan qator ham «sanaldimi»
+            // savoliga javob bersin (ro'yxatda u chizilmaydi).
+            MarkedTitle(p.optString("name"), marks[assortmentId])
             Spacer(Modifier.height(6.dp))
             if (inCell != null) {
                 InfoRow(label = stringResource(R.string.count_system_qty), value = inCell)
@@ -261,7 +353,7 @@ class CountScreen(private val shell: Shell) : Screen {
                 // T5 — «bo'sh emas» o'rniga «hisoblanadi»: `12*` yozilgan
                 // holatda ham tugma o'chadi va sabab maydon ostida ko'rinadi.
                 enabled = QtyExpression.qty(pickedQty) != null,
-            ) { save(c, assortmentId, pickedQty) }
+            ) { save(c, assortmentId, p.optString("name"), pickedQty) }
             Spacer(Modifier.height(8.dp))
             SecondaryButton(
                 text = stringResource(R.string.count_cancel),
@@ -271,6 +363,110 @@ class CountScreen(private val shell: Shell) : Screen {
                 pickedQty = ""
             }
         }
+    }
+
+    /**
+     * T6 — qator sarlavhasi BELGI bilan: ✓ yashil (shu sessiyada sanaldi),
+     * ○ kulrang (hali sanalmagan), ✕ qizil (0 qilib yopishda xato bergan).
+     *
+     * Belgi nomdan CHAPDA: omborchi ro'yxatni yuqoridan pastga ko'z bilan
+     * kesib o'tadi va bir ustunda turgan belgilar «qayerda qoldim?»
+     * savoliga bir qarashda javob beradi (rang bilan birga SHAKL ham farq
+     * qiladi — 4" ekranda va qo'lqopda rang yolg'iz yetarli emas).
+     */
+    @Composable
+    private fun MarkedTitle(name: String, mark: Mark?) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                markGlyph(mark),
+                color = markColor(mark),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                name,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+    }
+
+    /**
+     * T6 — «Qolganini 0 qilib yopish» tugmasi, tasdiq kartasi va halqa
+     * holati.
+     *
+     * 🔴 TASDIQ **KARTA**, dialog (`AlertDialog`) EMAS — bu ataylab.
+     * `ScanBar` fokusni FAQAT ekran almashganda so'raydi (`ScanBar.kt`
+     * izohi); dialog oynasi fokusni tortib olsa, yopilgandan keyin uni
+     * hech kim qaytarmaydi va klaviatura-wedge skaner **jim o'lardi**.
+     * Karta esa oqim ichida turadi, skroll bilan ochiladi va fokusga
+     * umuman tegmaydi.
+     *
+     * 🔴 Ro'yxat KESILMAYDI («…va yana 20 ta» yo'q): bu yo'qotuvchi amal va
+     * omborchi AYNAN nima 0 bo'lishini ko'rishi kerak. Har qator yonida
+     * hozirgi tizim qoldig'i turadi — chiqim aynan shuncha bo'ladi.
+     */
+    @Composable
+    private fun CloseRestBlock(c: JSONObject) {
+        if (closing) {
+            SectionCard(tint = Palette.WarningContainer, border = Palette.Warning) {
+                Text(
+                    stringResource(R.string.count_closing),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Palette.Warning,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            return
+        }
+        val pending = pendingRows()
+        if (pending.isEmpty()) return
+
+        if (!confirming) {
+            SecondaryButton(
+                text = stringResource(R.string.count_close_rest, pending.size),
+                color = Palette.Danger,
+            ) { confirming = true }
+            Spacer(Modifier.height(10.dp))
+            return
+        }
+
+        SectionCard(tint = Palette.DangerContainer, border = Palette.Danger) {
+            Text(
+                stringResource(R.string.count_close_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = Palette.Danger,
+            )
+            Spacer(Modifier.height(6.dp))
+            // 🔴 Chiqim ogohlantirishi — jim bajarilmasin (reja T6, band 4).
+            Text(
+                stringResource(R.string.count_close_warning),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.Danger,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.count_close_list, pending.size),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.TextMuted,
+            )
+            Spacer(Modifier.height(4.dp))
+            for (row in pending) {
+                InfoRow(label = row.name, value = row.qty)
+            }
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton(
+                text = stringResource(R.string.count_close_confirm),
+                color = Palette.Danger,
+            ) { closeRest(c) }
+            Spacer(Modifier.height(8.dp))
+            SecondaryButton(
+                text = stringResource(R.string.count_cancel),
+                color = Palette.TextMuted,
+            ) { confirming = false }
+        }
+        Spacer(Modifier.height(10.dp))
     }
 
     /**
@@ -304,6 +500,148 @@ class CountScreen(private val shell: Shell) : Screen {
         return null
     }
 
+    /**
+     * T6 — progressning SURATI: shu sessiyada saqlangan qatorlar soni.
+     * `roster` dan mustaqil o'qiladi, chunki 0 ga tushirilgan qator server
+     * javobidan yo'qoladi — lekin u SANALGAN va hisobdan chiqmasligi kerak.
+     */
+    private fun countedCount(): Int = marks.count { it.value == Mark.COUNTED }
+
+    /**
+     * T6 — `roster` ni server ma'lumotidan to'ldiradi. FAQAT qo'shadi:
+     * yo'qolgan qator (0 ga tushgani uchun) maxrajda qoladi, aks holda
+     * «12/12 sanaldi» hech qachon chiqmasdi.
+     */
+    private fun rosterSync() {
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            roster[it.optString("assortmentId")] = it.optString("name")
+        }
+        for (i in 0 until bound.length()) {
+            val b = bound.optJSONObject(i) ?: continue
+            roster[b.optString("id")] = b.optString("name")
+        }
+    }
+
+    /**
+     * T6 — 0 ga tushiriladigan qatorlar: EKRANDA turgan va shu sessiyada
+     * SANALMAGAN hammasi, aynan ko'rinish tartibida (avval qoldiqlilar,
+     * keyin biriktirilganlar).
+     *
+     * `roster` dan emas, ekrandagi ikki ro'yxatdan yig'iladi va buning
+     * sababi bor: `roster` — hash-jadval, tartibi ixtiyoriy bo'lardi, va
+     * u ALLAQACHON 0 ga tushirilgan (ya'ni yo'qolgan) qatorlarni ham
+     * saqlaydi — ular qayta yuborilishi kerak emas.
+     *
+     * `Mark.FAILED` qatorlar QAYTA kiradi: ular sanalmagan, demak omborchi
+     * ikkinchi urinishni tugmani qayta bosib qila oladi.
+     */
+    private fun pendingRows(): List<Pending> {
+        val out = ArrayList<Pending>()
+        for (i in 0 until items.length()) {
+            val it = items.optJSONObject(i) ?: continue
+            val id = it.optString("assortmentId")
+            if (marks[id] == Mark.COUNTED) continue
+            out.add(Pending(id, it.optString("name"), it.optString("qty")))
+        }
+        for (b in boundOnly()) {
+            val id = b.optString("id")
+            if (marks[id] == Mark.COUNTED) continue
+            // Biriktirilgan qatorning qoldig'i ta'rifiga ko'ra 0 — bunda
+            // delta ham 0 bo'ladi va server hujjat YOZMAYDI, faqat qator
+            // «sanaldi» belgisini oladi.
+            out.add(Pending(id, b.optString("name"), "0"))
+        }
+        return out
+    }
+
+    /**
+     * 🔴 T6 — sanalmagan qatorlarni BITTALAB `set 0` bilan yopadi.
+     *
+     * Xulq (jonli xatoliklar ochiq ko'rinsin uchun):
+     *  · muvaffaqiyat → qator ✓ yashil bo'ladi;
+     *  · 4xx (masalan o'chirilgan tovar) → qator ✕ QIZIL bo'ladi va halqa
+     *    DAVOM etadi — bitta buzuq qator butun yacheykani ushlab qolmasin;
+     *  · aloqa yo'q / 5xx (`retriable`) → halqa TO'XTAYDI. Sabab sanash
+     *    qoidasi: bu amal navbatga QO'YILMAYDI, ya'ni «keyin yuboriladi»
+     *    degan va'da berib bo'lmaydi. Qolgan qatorlar kulrang turadi.
+     *
+     * Tarkib oxirida BIR MARTA qayta o'qiladi (har qatordan keyin emas):
+     * 30 qatorli yacheykada bu 30 ta ortiqcha so'rovni yo'q qiladi.
+     */
+    private fun closeRest(c: JSONObject) {
+        val targets = pendingRows()
+        if (targets.isEmpty()) return
+        val storeId = c.optString("storeId")
+        val cellId = c.optString("id")
+        confirming = false
+        closing = true
+        shell.io {
+            var ok = 0
+            var stopped = false
+            try {
+                for (row in targets) {
+                    try {
+                        shell.api.setCellStock(storeId, cellId, row.id, "0")
+                        ok++
+                        // Yacheyka almashib ketgan bo'lsa belgi YANGI
+                        // yacheykaning qatoriga tushib qolmasin.
+                        shell.main {
+                            if (cell?.optString("id") == cellId) {
+                                marks[row.id] = Mark.COUNTED
+                                roster[row.id] = row.name
+                                counts.remove(row.id)
+                                if (picked?.optString("id") == row.id) {
+                                    picked = null
+                                    pickedQty = ""
+                                }
+                            }
+                        }
+                    } catch (e: ApiClient.ApiException) {
+                        shell.main {
+                            if (cell?.optString("id") == cellId) marks[row.id] = Mark.FAILED
+                        }
+                        // 4xx — bu qatorda ish bitdi (qizil qoladi), halqa
+                        // davom etadi. Üstma-ust hisob «yopilmagan»
+                        // sifatida pastda chiqadi.
+                        if (e.retriable) {
+                            stopped = true
+                            break
+                        }
+                    }
+                }
+                // Qayta o'qish MUVAFFAQIYATSIZ bo'lsa ham yakuniy xabar
+                // AYNI qoladi: belgilar yozilgan amallardan olingan, ro'yxat
+                // esa faqat KO'RINISH. Shuning uchun bu yerdagi xato pastdagi
+                // hisobotni bosib ketmasligi kerak.
+                try {
+                    val fresh = shell.api.cellStock(storeId, cellId)
+                    shell.main {
+                        if (cell?.optString("id") == cellId) {
+                            items = fresh.optJSONArray("items") ?: items
+                            rosterSync()
+                        }
+                    }
+                } catch (e: ApiClient.ApiException) {
+                    Diagnostics.log("count: yopishdan keyin qayta o'qish xato — " + e.code)
+                }
+            } finally {
+                // Hisob YOPILGAN qatorlardan olinadi, `bad` dan emas: halqa
+                // kutilmagan xato bilan uzilsa ham «hammasi yopildi» degan
+                // yolg'on xabar chiqmasin (jim yo'qotish yo'q — IS-5).
+                val left = targets.size - ok
+                shell.main {
+                    closing = false
+                    when {
+                        stopped -> shell.error(shell.str(R.string.count_close_stopped, ok, left))
+                        left > 0 -> shell.error(shell.str(R.string.count_close_partial, ok, left))
+                        else -> shell.success(shell.str(R.string.count_close_done, ok))
+                    }
+                }
+            }
+        }
+    }
+
     private fun pick(name: String, assortmentId: String) {
         picked = JSONObject().put("id", assortmentId).put("name", name)
         // Ro'yxatdagi tovarda sukut — tizim qoldig'i (omborchi ko'pincha uni
@@ -319,6 +657,19 @@ class CountScreen(private val shell: Shell) : Screen {
         counts.clear()
         picked = null
         pickedQty = ""
+        clearProgress()
+    }
+
+    /**
+     * T6 — progress YACHEYKAGA bog'liq: yacheyka almashganda (yoki
+     * «Boshidan» bosilganda) u nolga tushadi. Aks holda oldingi javonning
+     * ✓ belgilari yangi javonning qatorlariga tushib qolardi (id'lar
+     * kesishishi mumkin: bir tovar ikki yacheykada turadi).
+     */
+    private fun clearProgress() {
+        roster.clear()
+        marks.clear()
+        confirming = false
     }
 
     /**
@@ -389,6 +740,9 @@ class CountScreen(private val shell: Shell) : Screen {
                     counts.clear()
                     picked = null
                     pickedQty = ""
+                    // T6 — yangi yacheyka = yangi sanoq sessiyasi.
+                    clearProgress()
+                    rosterSync()
                 }
                 // Ikki javonda bir xil yorliq — ilova TANLAMAYDI, aks holda
                 // sanoq noto'g'ri yacheykaga yozilardi.
@@ -397,7 +751,7 @@ class CountScreen(private val shell: Shell) : Screen {
         }
     }
 
-    private fun save(c: JSONObject, assortmentId: String, input: String) {
+    private fun save(c: JSONObject, assortmentId: String, name: String, input: String) {
         // 🔴 T5 — ifoda SHU YERDA songa aylanadi va serverga aynan shu son
         // ketadi (`12*24` emas, `288`). Tugma allaqachon o'chirilgan bo'lsa ham
         // ikkinchi qavat: jim 0 yoki ifoda MATNI hech qachon yuborilmasin.
@@ -416,6 +770,13 @@ class CountScreen(private val shell: Shell) : Screen {
                 shell.main {
                     items = fresh.optJSONArray("items") ?: items
                     counts.remove(assortmentId)
+                    // T6 — qator SANALDI (✓ yashil) va progressga kiradi.
+                    // `roster` ga ham yoziladi: 0 deb sanalgan yoki
+                    // yacheykada BO'LMAGAN tovar server javobidan
+                    // yo'qolishi mumkin, lekin sanalgani rost.
+                    marks[assortmentId] = Mark.COUNTED
+                    roster[assortmentId] = name
+                    rosterSync()
                     if (picked?.optString("id") == assortmentId) {
                         picked = null
                         pickedQty = ""
@@ -429,4 +790,43 @@ class CountScreen(private val shell: Shell) : Screen {
             }
         }
     }
+}
+
+/**
+ * T6 — qatorning SHU SESSIYADAGI holati. «Sanalmagan» uchun qiymat YO'Q
+ * (jadvalda kalit bo'lmasligi) — ya'ni sukut holat hech qayerda saqlanmaydi
+ * va yacheyka almashganda tozalanadigan bitta joy qoladi.
+ */
+private enum class Mark {
+    /** Shu sessiyada saqlandi (qo'lda yoki «0 qilib yopish» bilan). */
+    COUNTED,
+
+    /** «0 qilib yopish» da server rad etdi — qator QIZIL bo'lib qoladi. */
+    FAILED,
+}
+
+/** T6 — 0 ga tushiriladigan qator: tasdiq ro'yxati aynan shuni chizadi. */
+private data class Pending(val id: String, val name: String, val qty: String)
+
+/**
+ * Belgi RANGDAN tashqari SHAKL bilan ham farq qiladi: 4" ekranda, qo'lqopda
+ * va yorug' omborda rang yolg'iz ishonchli emas.
+ */
+private fun markGlyph(m: Mark?): String = when (m) {
+    Mark.COUNTED -> "✓"
+    Mark.FAILED -> "✕"
+    null -> "○"
+}
+
+private fun markColor(m: Mark?): Color = when (m) {
+    Mark.COUNTED -> Palette.Success
+    Mark.FAILED -> Palette.Danger
+    null -> Palette.TextMuted
+}
+
+/** Kartochka chegarasi — qatorni ro'yxatda uzoqdan ajratadi. */
+private fun markBorder(m: Mark?): Color = when (m) {
+    Mark.COUNTED -> Palette.Success
+    Mark.FAILED -> Palette.Danger
+    null -> Palette.Border
 }
