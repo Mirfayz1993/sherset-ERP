@@ -1293,10 +1293,13 @@ bilan modellashtiriladi.
   `Date` sarlavhasi server soatiga aynan teng. Jurnal:
   `docs/ops/2026-09-04-deploy-kassa-vaqti.md`.
 
-  🔴 **Qo'riqchi jonli kodda haqiqiy nuqson tutdi:** `zakazlar-mode.tsx:84` —
-  `isPickupOverdue(online.expiresAt, Date.now())` (marketplace `m7`), ya'ni sayt
-  buyurtmasining «muddati o'tdi» belgisi QURILMA soatida hisoblanadi. Tuzatish 2 qator, lekin
-  fayl marketplace sessiyasiniki — tegilmadi, `pos-clock-discipline` shu sababdan hozir qizil.
+  ✅ **Qo'riqchi jonli kodda haqiqiy nuqson tutdi — VA U TUZATILDI** (`d426b592`, egasining
+  ko'rsatmasi bilan, o'sha kuni ikkinchi flip bilan jonliga chiqdi): `zakazlar-mode.tsx:84` —
+  `isPickupOverdue(online.expiresAt, Date.now())` (marketplace `m7`), ya'ni sayt buyurtmasining
+  «muddati o'tdi» belgisi QURILMA soatida hisoblanardi. Aynan ikki qator o'zgardi (import +
+  `serverNow().getTime()`); `isPickupOverdue` sof funksiya bo'lib qoldi. Endi
+  `pos-clock-discipline` **yashil** (62/62), POS doirasi **154 fayl / 2336 test** yashil.
+  Bu S4 qo'riqchisining birinchi HAQIQIY o'ljasi — u yozilgan maqsadini bajardi.
 
   🔴 **S5 testida muhit-bog'liqlik topildi va tuzatildi** (`f1e6dbea` → `4bf9cee9`):
   «o'lchanmagan skew» testi `vi.resetModules()` + dinamik importga tayanardi — lokalda toza

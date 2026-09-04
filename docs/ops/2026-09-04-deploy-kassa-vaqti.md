@@ -48,7 +48,21 @@ flip → `pm2 restart sherset-v2-web`. **API va shop RESTART QILINMADI** — S-r
   **aynan bir xil**; serverning o'zi NTP bilan sinxron (`System clock synchronized: yes`).
 - `pm2 logs sherset-v2-web --err` — restartdan keyin **yangi xato yo'q**.
 
-## 🔴 Topilma — marketplace kodida qurilma soati qoldi
+## Ikkinchi flip — qo'riqchi tutgan nuqson tuzatildi (21:2x)
+
+Egasining ko'rsatmasi bilan quyidagi topilma **o'sha kuni tuzatildi va chiqarildi**:
+jonli HEAD `4bf9cee9` → **`d426b592`**, ikkinchi build (`rc=0`) → flip
+(`.next-old-zakazfix` — qaytarish nuqtasi) → `pm2 restart sherset-v2-web`.
+
+- `pos-clock-discipline` **yashil** (ilgari shu nuqson uchun qizil edi): 3 fayl / **62 test**.
+- POS doirasi to'liq: **154 fayl / 2336 o'tdi / 25 o'tkazib yuborildi / 0 yiqildi** — marketplace
+  komponentining o'z testlari ham yashil.
+- typecheck 0 xato · `biome check` o'zgargan faylda 0 xato · 4 sahifa **200** · yangi xato logi yo'q.
+- ⚠️ Build ketayotganda parallel sessiya `c315f70a` («shop A-guruh») ni commit qildi — u
+  **faqat `apps/shop`** ga tegadi (`git diff --stat d426b592..HEAD -- apps/web` bo'sh), ya'ni
+  POS bundle'i aynan mo'ljallangan kod (`d426b592`) dan yig'ilgan.
+
+## 🔴 Topilma — marketplace kodida qurilma soati qoldi (✅ TUZATILDI)
 
 `pos-clock-discipline` qo'riqchisi (S4) jonli kodda **haqiqiy nuqson** tutdi:
 
@@ -57,18 +71,23 @@ app/(app)/sotuv/_components/zakazlar-mode.tsx:84  Date.now()  →  serverNow()
 ```
 
 `OnlineBadge` sayt buyurtmasining «muddati o'tdi» qizil belgisini
-`isPickupOverdue(online.expiresAt, Date.now())` bilan hisoblaydi — ya'ni **kassa
+`isPickupOverdue(online.expiresAt, Date.now())` bilan hisoblardi — ya'ni **kassa
 mashinasining soati** bo'yicha. Soati adashgan kassada muddati o'tmagan buyurtma qizil
-(yoki teskarisi) ko'rinadi. Tuzatish ikki qator (`serverNow().getTime()` + import), lekin
-bu **marketplace sessiyasining fayli**, shuning uchun tegilmadi — o'sha sessiya yopsin.
-Shu sababli qo'riqchi testi hozir **qizil** (kod ishlaydi, test rostini aytadi).
+(yoki teskarisi) ko'rinardi.
+
+**Tuzatildi** (`d426b592`, egasining ko'rsatmasi bilan) — aynan ikki qator: `@/lib/clock`
+importi va `Date.now()` → `serverNow().getTime()`. Boshqa hech nimaga tegilmadi:
+`isPickupOverdue` sof funksiya bo'lib qoldi (`nowMs` parametr), `formatPickupDate` va
+M7 ning ko'rinish qarorlari o'z joyida. Endi belgi server vaqtiga qarab chiziladi.
 
 ## Qaytarish nuqtasi
 
 ```bash
 cd /var/www/sherset-v2/apps/web
-mv .next .next-broken && mv .next-old-svaqt .next
-pm2 restart sherset-v2-web
+# 1-qadam orqaga (zakazlar tuzatishisiz, S-reja bilan):
+mv .next .next-broken && mv .next-old-zakazfix .next && pm2 restart sherset-v2-web
+# butunlay S-rejagacha (marketplace holati):
+mv .next .next-broken && mv .next-old-svaqt .next && pm2 restart sherset-v2-web
 # kod uchun: git reset --hard af38fa11   (S-reja commitlari olib tashlanadi)
 ```
 
@@ -78,4 +97,5 @@ pm2 restart sherset-v2-web
    kassa mashinasining soatini +3 soatga surib, header/CFD/chek/navbat/chip/bazani
    tekshirish. Endi kod jonlida, ya'ni smoke'ni **istalgan payt** bajarsa bo'ladi.
 2. 🔴 **NTP** hech bir kassada sozlanmagan — `docs/ops/kassa-vaqt-ntp.md` (admin PowerShell).
-3. `zakazlar-mode.tsx:84` — yuqoridagi topilma.
+3. ✅ `zakazlar-mode.tsx:84` — tuzatildi va chiqarildi (`d426b592`). Marketplace sessiyasi
+   o'z branch'ini jonli holat bilan birlashtirganda bu commit'ni saqlab qolsin.
