@@ -422,6 +422,9 @@ u h24 ga tushib yarim tunni «24:00» qilib yozadi.
 
 ### S2 — 🔴 Qog'oz: chek va proforma sanasi · **TUGADI** · 2026-09-04
 
+**Commit:** `988fb45c` — `feat(kassa): chek va proforma sanasi server vaqtida (S2)`
+(T3 (TSD) ning commit qilinmagan ishi tegilmadi va commitga kirmadi; commitda `apps/api` yo'q).
+
 **Nima qilindi** (faqat `apps/web` — 4 fayl, `apps/api` ga TEGILMADI)
 
 | Fayl | O'zgarish |
