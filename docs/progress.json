@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T17:33:05.625Z",
+  "generatedAt": "2026-09-04T17:34:28.904Z",
   "branch": "yacheyka-inventarizatsiya",
   "audit_pct_caveat": "Branch 'yacheyka-inventarizatsiya' != main. detail_pages.audited_pct, list_audits and phase2.pct are COMPUTED from docs/audits/* proof docs written against MAIN's pages. The climart adoption replaced most FE implementations, so these percentages are INHERITED, not re-verified here. Treat them as an upper bound. Re-audit = MASTER-TODO #36/#37. Also: docs/moysklad-reference is EMPTY (0 captured modules) — every capture-grounded audit is unreproducible until it is restored (MASTER-TODO #35).",
   "list_pages": {

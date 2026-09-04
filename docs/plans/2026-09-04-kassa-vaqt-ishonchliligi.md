@@ -137,7 +137,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 | **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | **TUGADI** |
 | **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | **TUGADI** |
 | **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | **TUGADI** |
-| **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | **QISMAN** — kod va yo'riqnomalar tayyor, **jonli smoke deploy'ni kutmoqda** |
+| **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | **QISMAN** — kod **JONLIDA** (2026-09-04, `4bf9cee9`); qolgani: fizik smoke + kassalarda NTP |
 
 **Tartib sababi:** S1 — poydevor, usiz qolganlari yo'q. S2 birinchi bo'lib bajariladi, chunki **qog'oz
 mijozning qo'lida qoladi** (eng qimmat xato). S3 — kassirni chalg'itadigan raqamlar. S4 — qolgan
@@ -1283,11 +1283,26 @@ bilan modellashtiriladi.
   klassifikatori tomonidan rad etildi, VPS esa commitlarni faqat `mirfayz` fork'i orqali oladi
   (Davlatbek'nikiga push huquqi yo'q).
 
-  **Keyingi deploy sessiyasi uchun tartib:** marketplace ishi push qilinib joyiga tushsin →
-  jonli HEAD ustiga S-reja cherry-pick (`2636a6d3` S1 · `988fb45c` S2 · `c1ed09b4` S3 ·
-  `5efe6430` S4 · `00dbee83` S5) → `docs/progress.json` to'qnashuvi kutiladi (avtogeneratsiya,
-  ahamiyatsiz) → gate'lar → `NEXT_DISTDIR=.next-new` + sentinel + flip + `pm2 restart` →
-  darhol `docs/ops/kassa-vaqt-jonli-smoke.md` bo'yicha smoke.
+  ✅ **2026-09-04 20:35 — DEPLOY BAJARILDI** (egasi «deploy qilsang bo'ladi» dedi). Jonli
+  HEAD `af38fa11` → **`4bf9cee9`**: S1–S5 jonli HEAD ustiga **cherry-pick** qilindi (branch
+  merge QILINMADI — TSD/menejer/J1 jonliga chiqmadi). To'qnashuv ikkitasi: `docs/progress.json`
+  (jonlidagisi qoldi) va `zakazlar-mode.tsx` (marketplace `m7` o'sha sana ko'rinishini
+  almashtirgan — **jonlining nusxasi qoldirildi**, S4 ning bitta `timeZone` qatori tushib
+  qoldi). Build `.next-new` ga (`rc=0`), flip, faqat `sherset-v2-web` restart. Tekshiruv:
+  typecheck 0 · `clock`+`pos-header` 41/41 · 4 sahifa 200 · bundle'da chip matni (uz+ru) ·
+  `Date` sarlavhasi server soatiga aynan teng. Jurnal:
+  `docs/ops/2026-09-04-deploy-kassa-vaqti.md`.
+
+  🔴 **Qo'riqchi jonli kodda haqiqiy nuqson tutdi:** `zakazlar-mode.tsx:84` —
+  `isPickupOverdue(online.expiresAt, Date.now())` (marketplace `m7`), ya'ni sayt
+  buyurtmasining «muddati o'tdi» belgisi QURILMA soatida hisoblanadi. Tuzatish 2 qator, lekin
+  fayl marketplace sessiyasiniki — tegilmadi, `pos-clock-discipline` shu sababdan hozir qizil.
+
+  🔴 **S5 testida muhit-bog'liqlik topildi va tuzatildi** (`f1e6dbea` → `4bf9cee9`):
+  «o'lchanmagan skew» testi `vi.resetModules()` + dinamik importga tayanardi — lokalda toza
+  nusxa berardi, JONLI SERVERDA esa oldingi testlarning 5 daqiqalik skew'i saqlanib qolib chip
+  `behind` chizardi (o'lchandi). Endi holat `vi.doMock('@/lib/clock')` bilan ATAYLAB beriladi;
+  anti-vacuity saqlanib qoldi (naive implementatsiyada chip umuman chizilmaydi ⇒ test qizaradi).
 - NTP qadamini `install-watchdog.ps1` naqshida **skriptga** aylantirish mumkin
   (`desktop/tools/` ga `install-ntp.ps1`, extraResources bilan yetkaziladi) — bu artefakt
   tarkibini o'zgartiradi (`check-build-assets.js` va installer testlari), shuning uchun S5

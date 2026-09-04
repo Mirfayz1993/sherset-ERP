@@ -1,7 +1,9 @@
 # Jonli smoke — kassa vaqti (S-reja S1–S5)
 
 > **Yaratilgan:** 2026-09-04 · **Faza:** S5 (`docs/plans/2026-09-04-kassa-vaqt-ishonchliligi.md` §5)
-> **Holat:** 🟡 **BAJARILMAGAN — deploy'ni kutmoqda.**
+> **Holat:** 🟡 **BAJARILMAGAN.** ✅ Deploy **2026-09-04 20:35 da BO'LDI** (jonli HEAD
+> `4bf9cee9`, jurnal `2026-09-04-deploy-kassa-vaqti.md`) — ya'ni 0-bo'limdagi to'siq YO'Q,
+> smoke'ni istalgan payt bajarsa bo'ladi.
 > **Kimga:** egasi + kassa mashinasiga admin bilan kira oladigan odam.
 > **Qancha vaqt:** ~15 daqiqa (soatni siljitish va qaytarish bilan birga).
 
