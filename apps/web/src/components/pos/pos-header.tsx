@@ -20,10 +20,14 @@
  * o'qilardi va kassa mashinasining vaqti adashsa ekranda ham xato chiqardi
  * (egasining shikoyati). Endi manba — `serverNow()`, mintaqa esa qat'iy
  * `POS_TZ`, ya'ni qurilmaning sozlamasi umuman so'ralmaydi.
+ *
+ * 🟡 S5 (2026-09-04): soat yonida OGOHLANTIRISH chipi — qurilma soati serverdan
+ * `SKEW_WARN_MS` dan ko'proq farq qilsa kassir buni KO'RADI (ilgari buzuq soatli
+ * mashina jim qolardi). Chip o'ziga taymer OCHMAYDI — o'sha 30 s pulsga minadi.
  */
 
 import { useServerClock } from '@/hooks/use-server-clock';
-import { POS_TZ } from '@/lib/clock';
+import { POS_TZ, SKEW_WARN_MS, clockSkewMeasured, clockSkewMs } from '@/lib/clock';
 import { useBcp47 } from '@/lib/i18n-format';
 import type { CurrentSession } from '@moysklad/contracts';
 import { formatMoney } from '@moysklad/ui';
@@ -43,35 +47,113 @@ export interface PosHeaderProps {
   children?: ReactNode;
 }
 
+interface ClockState {
+  /** «HH:MM» — server vaqti, `POS_TZ` mintaqasida. */
+  text: string;
+  /**
+   * Skew (ms) yoki `null` — hali O'LCHANMAGAN (server bilan taqqoslanmagan).
+   * `0` va `null` HAR XIL: birinchisi «soat to'g'ri», ikkinchisi «bilmaymiz».
+   */
+  skewMs: number | null;
+}
+
 /**
- * «HH:MM» — SERVER vaqti, `POS_TZ` mintaqasida.
+ * Soat + skew — BITTA pulsdan.
  *
- * Lokal `useBcp47()` dan olinadi (Faza 3 konvensiyasi, `pos-bcp47-guard`
- * qo'riqchisi shuni talab qiladi). Chiqish ikki tilda AYNI: soat/daqiqa —
- * o'sha qo'riqchi hujjatlagan yagona haqiqiy no-op (`i18n-format.ts` jadvali,
- * Node va Chromium'da o'lchangan), ya'ni bu ulanish ko'rinishni o'zgartirmaydi.
- *
+ * «HH:MM» SERVER vaqtida, `POS_TZ` mintaqasida. Lokal `useBcp47()` dan olinadi
+ * (Faza 3 konvensiyasi, `pos-bcp47-guard` qo'riqchisi shuni talab qiladi):
+ * chiqish ikki tilda AYNI — soat/daqiqa o'sha qo'riqchi hujjatlagan yagona
+ * haqiqiy no-op (`i18n-format.ts` jadvali, Node va Chromium'da o'lchangan).
  * `hour12` ATAYLAB berilmaydi: `false` ba'zi ICU nusxalarida h24 ga tushib
  * yarim tunni «24:00» qilib yozadi; ikkala lokalimiz ham sukut bo'yicha h23.
+ *
+ * 🔴 Yangi interval OCHILMAYDI (S3 saboqi: «puls BITTA»). Chip mavjud
+ * `useServerClock(30_000)` tick'iga minadi: `clockSkewMs()` sof funksiya,
+ * ya'ni o'zi qayta chizishni QO'ZG'AMAYDI — u shu tick paytida o'qiladi.
+ * Amaliy natija: qurilma soati siljisa chip eng ko'p 30 s ichida chiqadi.
+ *
+ * `null` qaytishi — mount'gacha (S1 qarori: soxta qiymat chizilmaydi).
  */
-function useMinuteClock(): string {
+function useServerMinuteClock(): ClockState | null {
   const bcp47 = useBcp47();
   // Minut boshiga tekislamaymiz — 30s qadam bilan eng ko'p yarim minut
   // kechikadi, kod esa sodda qoladi (drift-tekislash mantiqsiz murakkablik).
   const now = useServerClock(30_000);
-  return now
-    ? now.toLocaleTimeString(bcp47, {
-        hour: '2-digit',
-        minute: '2-digit',
-        // Qurilmaning mintaqa sozlamasi so'ralmaydi (S1).
-        timeZone: POS_TZ,
-      })
-    : '';
+  if (!now) return null;
+  return {
+    text: now.toLocaleTimeString(bcp47, {
+      hour: '2-digit',
+      minute: '2-digit',
+      // Qurilmaning mintaqa sozlamasi so'ralmaydi (S1).
+      timeZone: POS_TZ,
+    }),
+    skewMs: clockSkewMeasured() ? clockSkewMs() : null,
+  };
+}
+
+/**
+ * Qurilma soati adashganini KO'RSATADIGAN chip (S-reja S5).
+ *
+ * Dasturiy jihatdan kassa allaqachon immunitetli (S1–S4: soat, chek sanasi va
+ * «o'tgan vaqt» server vaqtidan), lekin buzuq soatli mashina shu tariqa YASHIRIN
+ * qolardi — hech kim uni tuzatmasdi. Chip uni ko'rinadigan qiladi.
+ *
+ * Uch holat:
+ *  · `skewMs === null` — o'lchanmagan: NEYTRAL «tekshirilmadi» yozuvi. Bu holatda
+ *    jim turish YOLG'ON YASHIL bo'lardi (skew `0` ko'rinadi, aslida noma'lum);
+ *  · `|skew| <= SKEW_WARN_MS` — hech nima chizilmaydi (soat ishonchli);
+ *  · undan katta — sariq ogohlantirish, YO'NALISHI bilan.
+ *
+ * 🔴 Yo'nalish ATAYLAB ko'rsatiladi («orqada»/«oldinda», «xato» emas):
+ * o'qigan odamning keyingi harakati — soatni TUZATISH, ya'ni qaysi tomonga
+ * surishni bilishi kerak; ustiga «3 soat oldinda» darhol mintaqa/RTC nosozligini
+ * anglatadi, «~3 soat xato» esa yana savol tug'dirardi.
+ */
+function ClockSkewChip({ skewMs }: { skewMs: number | null }) {
+  const t = useTranslations('pages.pos');
+
+  if (skewMs === null) {
+    return (
+      <span
+        data-test-id="pos-header-clock-chip"
+        data-state="unverified"
+        // Neytral — smena-chipning «stale emas» uslubi (yangi rang tizimi yo'q).
+        className="whitespace-nowrap rounded-full bg-white/15 px-3 py-1 text-[13px] text-[var(--pos-on-brand)]"
+      >
+        {t('header_clock_unverified')}
+      </span>
+    );
+  }
+
+  if (Math.abs(skewMs) <= SKEW_WARN_MS) return null;
+
+  // Musbat skew = server oldinda = QURILMA orqada (`lib/clock.ts` shartnomasi).
+  const behind = skewMs > 0;
+  const minutes = Math.round(Math.abs(skewMs) / 60_000);
+  // Soatlarda gapirish diagnostik: «3 soat» — mintaqa/RTC belgisi, «180 daqiqa»
+  // esa o'qilmaydi. Kalitlar STATIK — i18n gate dinamik kalitni ko'rmaydi.
+  const amount =
+    minutes < 60
+      ? t('header_clock_skew_minutes', { n: minutes })
+      : t('header_clock_skew_hours', { n: Math.round(minutes / 60) });
+
+  return (
+    <span
+      data-test-id="pos-header-clock-chip"
+      data-state={behind ? 'behind' : 'ahead'}
+      // Sariq — smena-chipning `stale` uslubi (spec §3.1 dagi tayyor namuna).
+      className="whitespace-nowrap rounded-full bg-amber-400 px-3 py-1 font-semibold text-[13px] text-amber-950"
+    >
+      {behind
+        ? t('header_clock_skew_behind', { amount })
+        : t('header_clock_skew_ahead', { amount })}
+    </span>
+  );
 }
 
 export function PosHeader({ session, shiftAge, connectionOk, children }: PosHeaderProps) {
   const t = useTranslations('pages.pos');
-  const now = useMinuteClock();
+  const clock = useServerMinuteClock();
 
   return (
     // 64px — px bilan ATAYLAB: ildiz font-size 12px (ERP zichligi), rem-asosli
@@ -135,12 +217,16 @@ export function PosHeader({ session, shiftAge, connectionOk, children }: PosHead
           )}
         </div>
 
+        {/* Vaqt ogohlantirishi (S5) — soatning O'ZIGA yopishib turadi, chunki
+            u aynan shu soat haqida. Mount'gacha umuman chizilmaydi. */}
+        {clock && <ClockSkewChip skewMs={clock.skewMs} />}
+
         {/* Soat — SERVER vaqtida (S1); testda skew bilan assert qilinadi. */}
         <span
           data-test-id="pos-header-clock"
           className="font-semibold text-[20px] tabular-nums tracking-wide"
         >
-          {now}
+          {clock?.text ?? ''}
         </span>
 
         {/* F9 — versiya-badge headerga singdirildi (spec §3.1; qobiqsiz null). */}

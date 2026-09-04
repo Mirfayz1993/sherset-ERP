@@ -174,3 +174,53 @@ describe('POS_TZ', () => {
     expect(clock.POS_TZ).toBe('Asia/Tashkent');
   });
 });
+
+// S5 — ogohlantirish chipi shu bayroqqa suyanadi: `clockSkewMs() === 0` ni
+// «hammasi joyida» deb o'qib bo'lmaydi (hech qachon ulanmagan mashinada ham 0).
+describe('clockSkewMeasured — «0» va «bilmayman» ajratiladi (S5)', () => {
+  it('hech qachon ulanmagan qurilmada FALSE (skew 0 bo`lsa ham)', async () => {
+    const clock = await freshClock();
+    expect(clock.clockSkewMs()).toBe(0);
+    expect(clock.clockSkewMeasured()).toBe(false);
+  });
+
+  it('server `Date` i kelgach TRUE', async () => {
+    const clock = await freshClock();
+    clock.noteServerDate(RES({ Date: httpDate(DEVICE.getTime() + 3_600_000) }));
+    expect(clock.clockSkewMeasured()).toBe(true);
+  });
+
+  it('🔴 soati IDEAL mashinada ham TRUE — jitter filtri qiymatni yozmasa ham', async () => {
+    const clock = await freshClock();
+
+    // Skew ~0: farq `MIN_UPDATE_MS` dan kichik, ya'ni `skewMs` YOZILMAYDI.
+    clock.noteServerDate(RES({ Date: httpDate(DEVICE.getTime()) }));
+
+    expect(clock.clockSkewMs()).toBe(0);
+    // Taqqoslash SODIR BO'LDI — aks holda to'g'ri soatli kassa abadiy
+    // «tekshirilmadi» chipi bilan yurardi.
+    expect(clock.clockSkewMeasured()).toBe(true);
+  });
+
+  it('ishonchsiz sarlavha bayroqni YOQMAYDI', async () => {
+    const clock = await freshClock();
+    clock.noteServerDate(RES({}));
+    clock.noteServerDate(RES({ Date: 'kecha kechqurun' }));
+    clock.noteServerDate(RES({ Date: httpDate(DEVICE.getTime()), Age: '600' }));
+    expect(clock.clockSkewMeasured()).toBe(false);
+  });
+
+  it('oflayn ko`tarilishda saqlangan skew ham «o`lchangan» hisoblanadi', async () => {
+    const first = await freshClock();
+    first.noteServerDate(RES({ Date: httpDate(DEVICE.getTime() + 3_600_000) }));
+
+    const afterReboot = await freshClock();
+
+    expect(afterReboot.clockSkewMeasured()).toBe(true);
+  });
+
+  it('ogohlantirish chegarasi jitter filtridan ANCHA katta (chip shovqin qilmasin)', async () => {
+    const clock = await freshClock();
+    expect(clock.SKEW_WARN_MS).toBe(120_000);
+  });
+});

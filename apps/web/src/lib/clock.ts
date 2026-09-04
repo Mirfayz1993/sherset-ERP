@@ -40,8 +40,36 @@ const MIN_UPDATE_MS = 1_500;
  */
 const MAX_SANE_SKEW_MS = 10 * 365 * 24 * 60 * 60 * 1_000;
 
+/**
+ * Kassirga OGOHLANTIRISH beriladigan chegara (S-reja S5).
+ *
+ * Bu yerda — `MIN_UPDATE_MS` bilan YONMA-YON — turishi ataylab: ikkala chegara
+ * ham skew semantikasiga tegishli va bir-biriga bog'liq. Jitter (~1.5 s) shovqin
+ * deb tashlanadi, ogohlantirish esa undan **80 barobar** kattaroqda boshlanadi,
+ * ya'ni chip `Date` sarlavhasining sekundlik yaxlitlanishidan yoki tarmoq
+ * kechikishidan HECH QACHON yonmaydi.
+ *
+ * Nega aynan 2 daqiqa: chek va smena hisobotlari daqiqa aniqligida o'qiladi;
+ * undan kichik farq qog'ozda ham, ekranda ham ko'rinmaydi (ko'rsatilsa —
+ * kassir o'rganib, chipga umuman qaramay qo'yardi). 2 daqiqadan kattasi esa
+ * qurilma soati «suzib ketgan» yoki mintaqasi/RTC'si adashgan demakdir —
+ * bu odam aralashuvini talab qiladi (`docs/ops/kassa-vaqt-ntp.md`).
+ */
+export const SKEW_WARN_MS = 2 * 60 * 1_000;
+
 let skewMs = 0;
 let restored = false;
+
+/**
+ * Skew HAQIQATAN o'lchanganmi (server bilan kamida bir marta taqqoslanganmi).
+ *
+ * 🔴 `skewMs === 0` ni «hammasi joyida» deb o'qib bo'LMAYDI: soati ideal
+ * mashinada ham, hech qachon serverga ulanmagan mashinada ham qiymat aynan `0`.
+ * Ogohlantirish chipi shu ikkisini ajratishi shart — aks holda o'lchanmagan
+ * holat ekranda «yashil» bo'lib ko'rinardi (S1/S3 dagi «soxta qiymat
+ * chizilmaydi» qaroriga zid).
+ */
+let measured = false;
 
 /**
  * Oxirgi ma'lum skew'ni `localStorage` dan bir marta tiklaydi — qurilma
@@ -56,7 +84,11 @@ function restoreOnce(): void {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw == null) return;
     const parsed = Number(raw);
-    if (Number.isFinite(parsed) && Math.abs(parsed) <= MAX_SANE_SKEW_MS) skewMs = parsed;
+    if (Number.isFinite(parsed) && Math.abs(parsed) <= MAX_SANE_SKEW_MS) {
+      skewMs = parsed;
+      // Saqlangan qiymat bor = bu qurilma serverni ALLAQACHON ko'rgan.
+      measured = true;
+    }
   } catch {
     // Maxfiy rejim / o'chirilgan saqlash — skew shunchaki 0 dan boshlanadi.
   }
@@ -66,6 +98,16 @@ function restoreOnce(): void {
 export function clockSkewMs(): number {
   restoreOnce();
   return skewMs;
+}
+
+/**
+ * Skew kamida bir marta o'lchanganmi. `clockSkewMs()` ning `0` i MA'NOLI
+ * («soat to'g'ri») ekanini shu funksiya tasdiqlaydi — `false` bo'lsa `0`
+ * shunchaki «bilmaymiz» degani.
+ */
+export function clockSkewMeasured(): boolean {
+  restoreOnce();
+  return measured;
 }
 
 /**
@@ -97,6 +139,10 @@ export function noteServerDate(res: Response): void {
     if (Math.abs(next) > MAX_SANE_SKEW_MS) return;
 
     restoreOnce();
+    // 🔴 Jitter filtridan OLDIN: taqqoslash SODIR BO'LDI, hatto natija eskisiga
+    // teng chiqib yozilmasa ham. Aks holda soati ideal mashinada (`next ≈ 0`)
+    // skew abadiy «o'lchanmagan» bo'lib qolardi.
+    measured = true;
     if (Math.abs(next - skewMs) < MIN_UPDATE_MS) return;
     skewMs = next;
 

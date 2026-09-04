@@ -16,6 +16,7 @@
  */
 
 import { noteServerDate } from '@/lib/clock';
+import ruMessages from '@/messages/ru.json' with { type: 'json' };
 import { renderWithProviders, screen, waitFor, within } from '@/test-utils';
 import type { CurrentSession } from '@moysklad/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -176,5 +177,148 @@ describe('PosHeader — soat SERVER vaqtida (S1)', () => {
     renderHeader();
 
     expect(screen.getByTestId('pos-header-clock')).toHaveTextContent('04:30');
+  });
+});
+
+// S5 (2026-09-04) — ogohlantirish chipi. S1–S4 dan keyin kassa buzuq soatga
+// dasturiy jihatdan immunitetli, LEKIN buzuq mashina jim qolardi: hech kim
+// uni tuzatmasdi. Chip uni ko'rinadigan qiladi.
+describe('PosHeader — qurilma soati ogohlantirishi (S5)', () => {
+  const DEVICE = new Date('2026-09-04T10:00:00.000Z');
+  const MIN = 60_000;
+
+  /** Skew'ni ANIQ qiymatga qo'yadi (musbat = qurilma orqada). */
+  function setSkew(ms: number) {
+    noteServerDate({
+      headers: new Headers({ Date: new Date(DEVICE.getTime() + ms).toUTCString() }),
+    } as Response);
+  }
+
+  afterEach(() => {
+    // Skew modul darajasida yashaydi — keyingi testlarga oqib ketmasin.
+    noteServerDate({ headers: new Headers({ Date: new Date().toUTCString() }) } as Response);
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it('chegara OSTIDA chip chizilmaydi (soat ishonchli — shovqin qilinmaydi)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(90_000); // 1,5 daqiqa — 2 daqiqalik chegaradan past
+
+    renderHeader();
+
+    expect(screen.queryByTestId('pos-header-clock-chip')).not.toBeInTheDocument();
+  });
+
+  it('soati IDEAL mashinada ham chip yo`q (o`lchandi, skew = 0)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(0);
+
+    renderHeader();
+
+    expect(screen.queryByTestId('pos-header-clock-chip')).not.toBeInTheDocument();
+    // Ammo soat baribir chiziladi — «o'lchandi» holati.
+    expect(screen.getByTestId('pos-header-clock')).toHaveTextContent('15:00');
+  });
+
+  it('chegara USTIDA sariq chip + YO`NALISH: qurilma orqada', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(5 * MIN);
+
+    renderHeader();
+
+    const chip = screen.getByTestId('pos-header-clock-chip');
+    expect(chip).toHaveAttribute('data-state', 'behind');
+    expect(chip).toHaveTextContent('Qurilma vaqti ~5 daqiqa orqada');
+    // Sariq — smena-chipning `stale` uslubi; yangi rang tizimi yo'q.
+    expect(chip.className).toContain('bg-amber-400');
+  });
+
+  it('qurilma OLDINDA bo`lsa yo`nalish teskari yoziladi', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(-7 * MIN);
+
+    renderHeader();
+
+    const chip = screen.getByTestId('pos-header-clock-chip');
+    expect(chip).toHaveAttribute('data-state', 'ahead');
+    expect(chip).toHaveTextContent('Qurilma vaqti ~7 daqiqa oldinda');
+  });
+
+  it('katta farq SOATLARDA yoziladi («180 daqiqa» emas — mintaqa/RTC belgisi)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(3 * 60 * MIN); // jonli smoke stsenariysi: soat 3 soatga siljitilgan
+
+    renderHeader();
+
+    const chip = screen.getByTestId('pos-header-clock-chip');
+    expect(chip).toHaveTextContent('Qurilma vaqti ~3 soat orqada');
+    expect(chip).not.toHaveTextContent('180');
+  });
+
+  it('ru tilida ham chiqadi (i18n ikki til — `pnpm i18n:gate` sharti)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEVICE);
+    setSkew(5 * MIN);
+
+    renderWithProviders(<PosHeader session={SESSION()} shiftAge="3 soat" connectionOk={true} />, {
+      messages: ruMessages as Record<string, unknown>,
+    });
+
+    expect(screen.getByTestId('pos-header-clock-chip')).toHaveTextContent(
+      'Время устройства отстаёт на ~5 мин',
+    );
+  });
+});
+
+// 🔴 O'LCHANMAGAN holat — S5 ning eng nozik qarori.
+// `clockSkewMs()` hech qachon ulanmagan mashinada ham `0` qaytaradi, ya'ni
+// «chegara ostida = jim» qoidasi uni «hammasi joyida» qilib ko'rsatardi
+// (YOLG'ON YASHIL). Chip S1/S3 tamoyiliga bo'ysunadi: o'lchanmagan qiymat
+// ishonchli deb chizilmaydi.
+//
+// Skew modul darajasida yashaydi, shuning uchun bu blok `vi.resetModules()`
+// bilan TOZA nusxa oladi (`lib/clock.test.ts` naqshi) — yuqoridagi testlar
+// modulni allaqachon «o'lchangan» holatga qo'ygan.
+describe('PosHeader — skew hali O`LCHANMAGAN (S5)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/hooks/use-server-clock');
+    vi.resetModules();
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  it('hech qachon ulanmagan mashinada NEYTRAL «tekshirilmadi» chizadi, sariq EMAS', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-04T10:00:00.000Z'));
+    window.localStorage.clear();
+    vi.resetModules();
+    const { PosHeader: FreshHeader } = await import('../pos-header');
+
+    renderWithProviders(<FreshHeader session={SESSION()} shiftAge="3 soat" connectionOk={false} />);
+
+    const chip = screen.getByTestId('pos-header-clock-chip');
+    expect(chip).toHaveAttribute('data-state', 'unverified');
+    expect(chip).toHaveTextContent('Vaqt tekshirilmadi');
+    expect(chip.className).not.toContain('bg-amber-400');
+  });
+
+  it('mount`gacha (soat hali yo`q) chip UMUMAN chizilmaydi', async () => {
+    vi.resetModules();
+    // `useServerClock` mount'gacha `null` qaytaradi (S1 qarori) — o'sha kadr.
+    vi.doMock('@/hooks/use-server-clock', () => ({ useServerClock: () => null }));
+    const { PosHeader: PendingHeader } = await import('../pos-header');
+
+    renderWithProviders(
+      <PendingHeader session={SESSION()} shiftAge="3 soat" connectionOk={true} />,
+    );
+
+    expect(screen.getByTestId('pos-header-clock')).toHaveTextContent('');
+    expect(screen.queryByTestId('pos-header-clock-chip')).not.toBeInTheDocument();
   });
 });
