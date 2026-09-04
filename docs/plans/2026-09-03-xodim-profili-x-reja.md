@@ -531,3 +531,79 @@ reja pastiga X9 hisobotini yoz va TO'XTA.
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x4 — yo'nalishlarim ekrani (smena, reyslar, qo'ldagi pul)`.
+
+---
+
+### X5 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi
+
+**O'zgargan/yangi fayllar:**
+
+*Server — `apps/api/src/modules/hr/hr-kpi/` (🔴 `manager/kpi` ga BITTA QATOR ham yozilmadi):*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `my-kpi.schema.ts` | **YANGI.** `MyKpiQuerySchema` — FAQAT `limit` (sukut 30, maksimum 90). 🔴 `employeeId` va `accountId` maydonlari ATAYLAB YO'Q (X2 `MyHistoryQuerySchema` / X3 `MyTasksQuerySchema` naqshi): zod obyekti notanish kalitlarni olib tashlaydi ⇒ `?employeeId=` kontrollergacha YETIB BORMAYDI. |
+| `my-kpi-view.util.ts` | **YANGI, SOF modul** (DB yo'q, soat yo'q): muhr qoidasi (`sealedTarget`/`sealedWeight` — KPI-03/KPI-05), `scoreMyDay` (ball formulasini QAYTA YOZMAYDI — `kpi-score.ts` dagi `scoreDay` ni chaqiradi), `myAttentionSignals`, `resolveScore` (muzlagan ball jonlisidan ustun). |
+| `my-kpi.service.ts` | **YANGI.** `listMine(accountId, employeeId, {limit})` — `EmployeeDailyKpi` + `EmployeeDailyKpiMetric` dan qat'iy self-scope bilan o'qiydi; katalogni (built-in + hisobning `manual` ko'rsatkichlari) o'zi yig'adi. |
+| `my-kpi.controller.ts` | **YANGI.** `GET /hr/kpi/my` — `@Controller('hr/kpi')` + `@UseGuards(JwtAuthGuard)`, `employeeId = user.sub`. Darvoza tanlovi va uning asosi izohda (pastda). |
+| `my-kpi-view.util.test.ts` | **YANGI** — 25 test (shundan biri menejer ro'yxati bilan MEXANIK solishtiruv). |
+| `my-kpi.service.test.ts` | **YANGI** — 15 test (5 tasi qamrov qulfi). |
+| `my-kpi.controller.test.ts` | **YANGI** — 7 ta own-only / darvoza qulfi. |
+| `hr-kpi.module.ts` | `MyKpiController` + `MyKpiService` ro'yxatga qo'shildi (yetim kontroller = jim 404; `app-boot.test.ts` qo'riqlaydi). |
+
+*Ilova — `android/manager-app/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/MyKpi.kt` | **YANGI.** Kun kartasining SOF funksiyalari (`HrAccess`/`Davomat`/`Tasks`/`Routes` naqshi — Android'siz, `org.json` siz ⇒ JVM testi): `dateOnly`, `dayLabel`, `percent`, `coveragePercent`, `weightLabel` (`Locale.ROOT`), `metricNumber` (BigInteger), `unitSuffix`, `stateTone`, `signalTone`, `skipTone`, `isProvisional`. |
+| `…/MyKpiScreen.kt` | **YANGI.** Kun kartalari (sana + holat plashkasi + ball + qamrov + ishlangan vaqt + signal plashkalari); karta bosilganda ko'rsatkichlar ro'yxati ochiladi (soddalashtirilgan drilldown: reja, bajarish %, og'irlik, soatiga, «menejer tuzatgan», ballga kirmagan bo'lsa SABABI). |
+| `…/ApiClient.kt` | `myKpi(limit)` — `GET /hr/kpi/my?limit=…`. |
+| `…/HomeScreen.kt` | «Mening KPI'im» plitkasi `ComingSoonScreen` o'rniga `MyKpiScreen` ga ulandi (X6 «Oyligim» plitkasi hamon kutmoqda). |
+| `…/res/values/strings.xml` | +33 satr. Holat plashkalari YANGIDAN YOZILMADI — `kpi_state_*` (v0.1) qayta ishlatildi. |
+| `…/test/…/MyKpiTest.kt` | **YANGI** — 27 ta JVM testi. |
+
+**Darvoza tanlovi (reja «asosla» degan band):** `@RequireHrPermission('oylik','own_only')` EMAS, **`JwtAuthGuard` + qat'iy self**. Sabablari:
+
+1. **`oylik` — OYLIK sahifasi, KPI emas.** `hr-permission-adapter.ts` `oylik` ni `hrsalary` entity'siga, `own_only` ni esa `view:OWN` ga xaritalaydi. KPI'ni shu darvoza ostiga qo'yish «o'z KPI'ingni ko'rish» huquqini «o'z OYLIGINGNI ko'rish» huquqiga bog'lab qo'yardi — kelajakda oylik ko'rinishi o'zgartirilsa KPI ham JIMGINA o'zgarardi. Menejer tomonda KPI `employees` sahifasi ostida turibdi, `oylik` ostida emas (`manager-kpi.controller.ts`).
+2. **HR sahifa-ruxsatlari oddiy xodimda YO'Q.** `seed-hr.ts` sahifa qatorlarini FAQAT egalarga/adminlarga yozadi; `hrEmployeePermission` boshqa hech qayerda avtomatik yaratilmaydi — faqat HR ekranidan qo'lda. `oylik:own_only` talab qilinsa, o'sha qator berilmagan har bir xodim o'z KPI'sini **403** bilan ko'rmasdi: plitka bor-u ekran o'lik bo'lardi.
+3. **Bu qaror shu domenda ALLAQACHON qabul qilingan.** `manager-kpi.controller.ts` da `POST days/:id/explain` da `@RequireHrPermission` ATAYLAB yo'q va izohda sababi yozilgan: «oddiy xodimda `employees:read` bo'lmaydi, lekin u o'z kuniga tushuntirish bera olishi SHART». O'z kunini O'QISH undan ham yumshoqroq amal.
+4. **Naqsh:** `hr/attendance/my/*` (X2) va `driver-tracking`/`driver-cash` self-yo'llari (X4) — hammasi `JwtAuthGuard` + `user.sub`.
+
+Xavfsizlik bundan zaiflashmaydi: himoyani **darvoza emas, QAMROV** beradi — `employeeId` so'rovdan olinmaydi (sxemada bunday maydon yo'q) va prisma `where` i `accountId` + `employeeId` bilan qat'iy yopilgan. Ikkalasi ham testlar bilan qulflangan.
+
+⚠️ **X6 ga eslatma:** rejada `GET /hr/payroll/my/:yearMonth` uchun `oylik:own_only` YOZILGAN va bu o'rinli (oylik — aynan o'sha sahifa), lekin 2-band o'sha yerda ham amal qiladi: `oylik` qatori berilmagan xodim o'z oyligini ko'rmaydi. Buni egasi bilan aniqlashtirish kerak — HR ekranidan hamma xodimga `oylik:own_only` beriladimi, yoki endpoint darvozasi yumshatiladimi.
+
+**Testlar:**
+
+- `vitest run src/modules/hr/hr-kpi` → **4 fayl, 62 test, 62 o'tdi, 0 yiqildi** (shundan 47 tasi yangi).
+  - Kontroller (7): `employeeId` token'dan · **🔴 `?employeeId=<o'zga>` e'tiborsiz** · **🔴 `?accountId=` ham e'tiborsiz** · **sxemada `employeeId` maydoni UMUMAN yo'q** (uzatilgan obyekt kalitlari qat'iy: `['limit']`) · sukut limit 30 · noto'g'ri limit (0, −1, 91, matn) rad etiladi · **🔴 manba matni bo'yicha `@UseGuards(JwtAuthGuard)` bor va kontrollerda `employeeId` so'zi umuman yo'q** (2026-08-10 dagi «dekorator bezakka aylandi» klassi).
+  - Servis (15): **🔴 prisma `where` da FAQAT `accountId`+`employeeId`** (kalitlar ro'yxati qat'iy — kelajakda `OR`/`in` qo'shilsa yiqiladi) · **🔴 `select` da `employee`/`acceptedById`/`events`/`corrections`/`bonusFineLogs`/`account` YO'Q** · **🔴 javob obyektida boshqa xodim maydonlari yo'q** · begona xodim → bo'sh ro'yxat · katalog ham faqat o'z akkauntidan · `score: null ≠ 0` · o'lchanmagan ko'rsatkich `null` bo'lib qoladi · **muzlagan ball jonlisidan USTUN** · `workedMinutes: null` da soatlik qiymat `null` · soatlik qiymat faqat `perHour` ko'rsatkichda · signallar · hisobning O'Z ko'rsatkichi yorlig'i · katalogda yo'q kalit tushib qolmaydi · tartib qat'iy.
+  - Sof modul (25): muhr qoidasining har bir holati · **muhrlangan «maqsad/og'irlik yo'q» profilga QAYTMAYDI** · tuzatma g'olib, avtomat saqlanadi · `null ≠ 0` · signal lug'ati · **🔴 menejer `ALERT_METRICS` ro'yxati bilan mexanik solishtiruv** · muzlagan/jonli ball tanlovi.
+  - 🔴 **Solishtiruv qulfi O'LCHAB TEKSHIRILDI:** `MY_KPI_ALERT_METRICS` dan bitta kalit vaqtincha olib tashlandi → o'sha test YIQILDI, qaytarilgach yana 62/62. Ya'ni test haqiqatan divergensiyani tutadi, shunchaki yashil turmaydi.
+- `vitest run src/modules/hr src/modules/manager/kpi src/app-boot.test.ts` → **121 fayl, 1576 test, hammasi o'tdi** (marshrut to'qnashuvi qo'riqchisi ham yashil: `hr/kpi/my` ≠ `hr/kpi/daily`).
+- `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato.**
+- `no-mojibake.test.ts` → 4 test, o'tdi. Barcha yangi/o'zgargan 14 fayl qo'lda ham tekshirildi: **BOM'siz UTF-8, mojibake imzosi 0 marta.**
+- `gradle testDebugUnitTest` → **109 test, 109 o'tdi** (27 yangi `MyKpiTest` + 27 `RoutesTest` + 17 `TasksTest` + 22 `DavomatTest` + 16 `HrAccessTest`).
+- `gradle assembleDebug` (JDK 17, Gradle 8.7) → **BUILD SUCCESSFUL.** APK 13 729 812 bayt (~13,1 MiB; X4 dan +14 072 bayt — yangi bog'liqlik qo'shilmadi).
+- `gradle :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --rerun-tasks` → **BUILD SUCCESSFUL, bitta ham `warning:` yo'q.**
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **MUHR QOIDASI ENDI UCH JOYDA — ro'yxatga olindi.** `targetSource`/`weightSource` muhrini o'qish `daily-kpi-acceptance.service.ts` da (xususiy `effectiveTarget`/`effectiveWeight`), `kpi-config.service.ts:211` da (CHALA nusxa — u FAQAT maqsad muhrini biladi, og'irlik muhrini bilmaydi) va endi `my-kpi-view.util.ts` da. X5 sharti «`manager/kpi` kodiga TEGMA» bo'lgani uchun xususiy funksiyalarni eksport qilib bo'lmadi. **BALL FORMULASI takrorlanmadi** — u `kpi-score.ts` dan chaqiriladi (1.4 dagi «yetti joyda uch xil foiz» hodisasi shundan boshlangan edi), signallar ro'yxati esa mexanik qulf bilan bog'landi. **X7 ga eslatma:** bu uch nusxani bitta sof modulga (`kpi-seal.util.ts`) chiqarish kerak.
+2. 🔴 **`date` — INSTANT EMAS, YORLIQ; X2/X3 dagi UTC tuzog'i bu maydonda TESKARI ishlaydi.** `EmployeeDailyKpi.date` — `@db.Date` va u MAHALLIY kunni nomlaydi (`tz.util.localDateOnly` izohi), JSON'da `2026-09-03T00:00:00.000Z` bo'lib keladi. Uni `Tasks.dateTime` bilan Toshkentga o'girish kunni SURIB yuborardi. Shuning uchun `MyKpi.dateOnly` matndan kesib oladi va buning testi bor (1-yanvar / 31-dekabr chegaralari). **X6 ga eslatma:** oylik davri ham yorliq — o'girishdan oldin ustun turini tekshiring.
+3. 🔴 **BALLGA «YAXSHI/YOMON» RANG BANDLARI O'YLAB TOPILMADI.** Server ball uchun xodim ekraniga mo'ljallangan chegara bilmaydi, shuning uchun ekran ballni neytral ko'rsatadi. Kartani sariq qiladigan yagona narsa — SERVER bergan `attentionSignals`. Aks holda ilova o'zi o'ylab topgan «60% dan past = qizil» qoidasi jonlida rasmiy mezonga aylanib qolardi.
+4. 🔴 **«Yakuniy emas» ball OCHIQ aytiladi.** Kun qabul qilinmaguncha `scorePercent` bazada `null` bo'ladi va ekranda JONLI hisoblangan ball chiqadi (menejer navbati ham shunday). Xodim buni yakuniy deb o'ylamasligi uchun karta «Kun hali qabul qilinmagan — ball o'zgarishi mumkin» deb turadi; qabul qilingach «ball muzlatilgan». Aks holda oylikdagi raqam ekrandagidan boshqacha chiqib, tushuntirib bo'lmaydigan nizo tug'ilardi.
+5. ⚠️ **Menejer izohlari/jurnal (`events`) ATAYLAB javobga tushmadi.** Rad etilgan kunda xodim SABABINI ko'rmaydi — faqat «Rad etildi» plashkasini. Ikki sabab: (a) X5 qamrovi «ball, holat, signallar, metrikalar» deb yozilgan; (b) jurnal qatorlarida menejerning izohi va `actorId` si bor, ularni xodim ekraniga chiqarish alohida qaror. **Ammo bu FSM'dagi «rad etish → tushuntirish» halqasini ilovada UZIB qo'yadi** (`POST manager/kpi/days/:id/explain` allaqachon xodimga ochiq). **Egasidan so'raladi:** xodim rad sababini va tushuntirish yozish imkonini ilovada olsinmi? Kerak bo'lsa bu alohida faza (server tayyor, ilova qismi kerak).
+6. ⚠️ **`GET /hr/kpi/daily` (eski endpoint) BOSHQA JADVALDAN o'qiydi.** `hr-kpi.service.ts` `HrKpiDailyLog` bilan ishlaydi (uchta qat'iy ustun), X5 esa `EmployeeDailyKpi` dan — bular IKKI BOSHQA o'lchov tizimi. Bir modulda ikkalasi turgani chalkash, lekin eskisiga TEGILMADI (X5 qamrovidan tashqarida). **X7 ga eslatma:** `HrKpiDailyLog` ni oylik dvigateli 4M.3 da o'qishni to'xtatgan — u endi faqat eski web ekranini boqadi.
+7. ⚠️ **KPI profili biriktirilmagan xodimda ekran deyarli bo'sh bo'ladi.** `hasProfile: false` bo'lsa hech narsa ballanmaydi (`score: null`) va karta «KPI profili biriktirilmagan — ball hisoblanmaydi» deb turadi. Bu HALOL, lekin foydasiz. **Egasidan tekshirish so'raladi:** jonlida nechta xodimga `KpiProfileVersion`/`EmployeeKpiTarget` biriktirilgan? Hech kimga biriktirilmagan bo'lsa, plitka hamma uchun bo'sh ekran ochadi (X2 ning 5-topilmasi bilan bir sinfda).
+8. **`KpiMetricCatalogService` in'yeksiya QILINMADI.** U `ManagerModule` da va `exports` da yo'q; uni eksportga chiqarish `manager/kpi` wiring'iga tegish bo'lardi. O'rniga servis `kpiMetricDef` ni o'zi o'qiydi (bitta `findMany`, `accountId` bilan chegaralangan, testi bor). Natijada hisobning O'Z ko'rsatkichi ham xodim ekranida yorlig'i bilan ko'rinadi — `detail()` da tuzatilgan hodisa (egasining KPI'si ekranda umuman ko'rinmasligi) bu yerda takrorlanmadi.
+9. **`Fmt.group` MINGLIKLARNI UZILMAYDIGAN PROBEL (U+00A0) bilan ajratadi.** Testning birinchi varianti oddiy probel bilan yozilgan edi va «`1 234` ≠ `1 234`» degan o'qib bo'lmaydigan `ComparisonFailure` berdi. `MyKpiTest` da ko'rinmas belgi FAQAT bitta konstantada (`NBSP`) turadi va izohi bor. **X6 ga eslatma:** oylik summasi ham `Fmt` orqali chiqadi — ayni tuzoq qaytadi.
+10. **`Locale.ROOT` tuzog'i (X4 ning 7-topilmasi) X5 da ham qaytdi va oldi olindi.** Foizlar butun songa yaxlitlanadi (kasr ajratgich umuman ishlatilmaydi), og'irlik esa `String.format(Locale.ROOT, "%.2f")` bilan — testi lokalni ataylab `ru-RU` ga o'girib tekshiradi.
+11. **Biome commitdan OLDIN yuritildi** (`biome check --write`) — 4 ta fayl formatlandi (import tartibi, qator uzunligi), keyin testlar va typecheck QAYTA yuritildi. X2 ning 11-topilmasidagi «lint-staged testlardan keyin fayllarni o'zgartirib qo'yadi» holatining oldi shu bilan olindi. Qolgan 3 ta biome ogohlantirishi `hr-kpi.service.test.ts` da (v0.1 qoldig'i) va MENGA tegishli emas — tegilmadi.
+12. **X1 ning 4-topilmasi HAMON KUCHDA:** `android/manager-app/` ning katta qismi (`BriefingScreen.kt`, `Widgets.kt`, `Theme.kt`, `Fmt.kt`, `Updater.kt`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` …) hamon KUZATILMAGAN — X1…X5 commitlari yolg'iz o'zi yig'ilmaydi. Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 ga shu vazifa berilsin). Bu commit `Widgets.kt`/`Fmt.kt`/`Theme.kt` ga TEGMADI (`SectionCard`, `InfoRow`, `Pill`, `EmptyState`, `SecondaryButton`, `Fmt.minor`, `Fmt.group` xuddi borligicha ishlatildi).
+13. Daraxtda boshqa sessiyalarning commit qilinmagan ishi turibdi (`apps/api/src/modules/auth`, `permissions`, `packages/db/scripts/`, `apps/api/src/scripts/`, yangi `docs/plans/` fayllari). Ularga TEGILMADI, commitga ham kirmadi. `docs/progress.json` ni repo'ning O'Z pre-commit ilgagi qo'shishi mumkin (X2 ning 11-topilmasi).
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x5 — mening kpi'im ekrani va hr/kpi/my endpointi`.

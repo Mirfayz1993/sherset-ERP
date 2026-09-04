@@ -239,6 +239,19 @@ class ApiClient(private val baseUrl: String) {
     /** O'z naqd yozuvlari (oxirgi 50) — «qo'limdagi pul» shu yerdan sanaladi. */
     fun driverCashMine(): JSONArray = getArray("/driver-cash/mine")
 
+    // ── Xodimning O'ZI: KPI (X5) ────────────────────────────────────────────
+    //
+    // `GET /hr/kpi/my` — FAQAT `JwtAuthGuard`, `employeeId = user.sub`.
+    // HR sahifa-ruxsati ATAYLAB talab qilinmaydi (`my-kpi.controller.ts`
+    // izohiga qara: `oylik` — OYLIK sahifasi, KPI emas; oddiy xodimda HR
+    // sahifa qatorlari umuman bo'lmaydi). Qamrovni darvoza emas, SO'ROV
+    // himoya qiladi: bu yo'lda `employeeId` parametri UMUMAN yo'q va server
+    // sxemasi notanish kalitni tashlab yuboradi ⇒ ilova KIMNI so'rashini
+    // TANLAY OLMAYDI.
+
+    /** «Mening KPI'im»: `{limit, total, days[]}` — yangi kun tepada. */
+    fun myKpi(limit: Int): JSONObject = get("/hr/kpi/my?limit=$limit")
+
     // -- ichki ---------------------------------------------------------------
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path

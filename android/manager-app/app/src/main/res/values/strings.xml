@@ -216,6 +216,42 @@
     <string name="kpi_state_force_accepted">Majburiy yopildi</string>
     <string name="kpi_state_stale">Qayta ko\'rik kerak</string>
 
+    <!-- Mening KPI'im (X5) — holat plashkalari kpi_state_* dan qayta ishlatiladi -->
+    <string name="mykpi_empty">Hali KPI kuni hisoblanmagan</string>
+    <string name="mykpi_count">Oxirgi %1$d kun</string>
+    <string name="mykpi_score">Kun balli</string>
+    <string name="mykpi_no_score">hisoblanmadi</string>
+    <string name="mykpi_provisional">Kun hali qabul qilinmagan — ball o\'zgarishi mumkin</string>
+    <string name="mykpi_final">Kun qabul qilingan — ball muzlatilgan</string>
+    <string name="mykpi_coverage">Ball qamrovi</string>
+    <string name="mykpi_worked">Ishlangan vaqt</string>
+    <string name="mykpi_unit_minutes">%1$s daq</string>
+    <string name="mykpi_not_measured">o\'lchanmadi</string>
+    <string name="mykpi_no_target_dash">reja yo\'q</string>
+    <string name="mykpi_profile_missing">KPI profili biriktirilmagan — ball hisoblanmaydi</string>
+    <string name="mykpi_open">Ko\'rsatkichlarni ochish</string>
+    <string name="mykpi_close">Yopish</string>
+    <string name="mykpi_no_metrics">Bu kunda ko\'rsatkich yozilmagan</string>
+    <string name="mykpi_metric_target">Reja</string>
+    <string name="mykpi_metric_result">Bajarish</string>
+    <string name="mykpi_metric_weight">Og\'irlik</string>
+    <string name="mykpi_metric_per_hour">Soatiga</string>
+    <string name="mykpi_adjusted">Menejer tuzatgan</string>
+    <string name="mykpi_skip_unmeasured">Ballga kirmadi: o\'lchanmagan</string>
+    <string name="mykpi_skip_no_target">Ballga kirmadi: reja qo\'yilmagan</string>
+    <string name="mykpi_skip_no_weight">Ballanmaydi — faqat kuzatiladi</string>
+    <string name="mykpi_skip_neutral">Ballga kirmaydi: yo\'nalishsiz ko\'rsatkich</string>
+    <string name="mykpi_skip_unknown_metric">Ballga kirmadi: ko\'rsatkich katalogda yo\'q</string>
+    <string name="mykpi_sig_stale">Qayta ko\'rik kerak</string>
+    <string name="mykpi_sig_escalated">Egaga chiqdi</string>
+    <string name="mykpi_sig_rejected">Rad etildi</string>
+    <string name="mykpi_sig_data_incomplete">Ma\'lumot chala</string>
+    <string name="mykpi_sig_till_variance">Kassa farqi</string>
+    <string name="mykpi_sig_below_cost">Zararga sotuv</string>
+    <string name="mykpi_sig_cancel">Bekor qilingan chek</string>
+    <string name="mykpi_sig_refund">Qaytarish</string>
+    <string name="mykpi_sig_late">Kechikish</string>
+
     <!-- Undirish -->
     <string name="collection_title">Qarz undirish</string>
     <string name="collection_empty">Undiriladigan qarz yo\'q</string>

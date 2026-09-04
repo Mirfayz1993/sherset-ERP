@@ -138,7 +138,8 @@ class HomeScreen(private val shell: Shell) : Screen {
                 icon = Icons.Filled.Star,
                 label = stringResource(R.string.tile_my_kpi),
                 tint = Palette.MoneyText,
-            ) { shell.go(ComingSoonScreen(shell, R.string.tile_my_kpi)) },
+                // X5 — «Tez orada» o'rniga haqiqiy ekran ulandi.
+            ) { shell.go(MyKpiScreen(shell)) },
             TileSpec(
                 icon = Icons.Filled.AccountBox,
                 label = stringResource(R.string.tile_my_payroll),
