@@ -491,7 +491,7 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
 
 ## 5. HISOBOTLAR (har faza o'z hisobotini SHU YERGA yozadi)
 
-### J2 — Bayroq gigienasi + pilot doirasini o'lchash · ⚠️ QISMAN (qoida 11) · 2026-09-04
+### J2 — Bayroq gigienasi + pilot doirasini o'lchash · ⚠️ QISMAN (qoida 11) · 2026-09-04 · `2fc81625`
 
 **Holat: QISMAN.** Qabul mezonining **uchtadan ikkitasi** bajarildi: jonlida
 `piece_tracked = true` tovarlar soni **0** (o'lchandi, bashorat emas) va audit
@@ -737,6 +737,10 @@ qo'shiladi.
 | Yangi `j2-pilot-audit-core.test.ts` | **20** ✅ |
 | Yangi `j2-pilot-audit-guard.test.ts` | **11** ✅ |
 | `apps/api/src/scripts/` to'plami | 14 fayl · **354 test** ✅ (J1 da 323 edi) |
+| `stock-piece` + `retail-sale` + `scripts` (tegilgan doira) | 79 fayl · **1 416 test** ✅ |
+| `apps/api` vitest **TO'LIQ** | 701 fayl · **10 252 passed** · 1 skipped · **1 FAILED** ⚠️ |
+| ⚠️ o'sha yiqilgan test | `mutation-guard-coverage.test.ts` → «haydovchi magic-link faqat dispecherga» — **5 000 ms timeout**, parallel yuk ostida. **YAKKA yugurtirilganda 48/48 ✅ (989 ms).** `driver-tracking` J2 ga umuman aloqador emas va J2 mavjud birorta KOD faylini o'zgartirmagan (tegilgani — 4 ta YANGI fayl + 2 ta hujjat) ⇒ regressiya EMAS, beqaror test. |
+| `apps/web` vitest | 95 fayl · **1 558 passed** · 25 skipped ✅ |
 | `tsc --noEmit` — `apps/api` | ✅ 0 xato |
 | biome (tegilgan 4 fayl) | ✅ 0 **error** (mavjud `noConsole` OGOHLANTIRISHLARI CLI skriptlarida avvaldan bor) |
 | Fayl kodlashi (2026-09-01 hodisasi qo'riqchisi) | 4 fayl ham **UTF-8, BOM yo'q, mojibake yo'q** |
@@ -761,8 +765,14 @@ qo'shiladi.
   hisobi yuritilsin» (yoki `POST /stock-pieces/flag` `pieceTracked: true`).
   Migratsiya ham, deploy ham, skript ham kerak emas. Reyestr bo'sh bo'lgani
   uchun qaytarish hech qanday ma'lumotni tiklashni talab qilmaydi.
-- **Kod:** `git revert <commit>` — repoga faqat yangi fayllar qo'shildi,
-  mavjud birorta fayl o'zgartirilmadi.
+- **Kod:** `git revert 2fc81625` — repoga faqat YANGI fayllar qo'shildi,
+  mavjud birorta KOD fayli o'zgartirilmadi (o'zgargani — shu hujjat,
+  `docs/ops/jonli-holat.md` va pre-commit hook qayta yozadigan
+  `docs/progress.json` ning vaqt tamg'asi).
+  ⚠️ Commit **faqat J2 fayllari bilan** qilindi (`git commit --only -- …`):
+  ishchi daraxtda o'sha paytda PARALLEL sessiyaning stage'langan ishi bor edi
+  (manager-app / hr-salary / X-reja) va unga tegilmadi — commit'dan keyin ham
+  joyida (15 stage'langan fayl).
 
 **Qoida 14:** VPS'da yozilgan skript YO'Q — ikkita fayl repodagi (commit
 qilingan) nusxalari edi va yugurishdan keyin katalog bilan birga o'chirildi.
