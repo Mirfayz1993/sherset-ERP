@@ -1,7 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application") version "8.5.0"
     id("org.jetbrains.kotlin.android") version "1.9.24"
 }
+
+// 🔴 RELEASE IMZO (T9). Kalit ham, parol ham REPODAN TASHQARIDA — repo public
+// (§2 qoida 11). Bu yerda faqat fayl NOMI turadi, sirning o'zi emas:
+//   ~/.sherset/sherset-tsd-release.properties  → storeFile/storePassword/keyAlias/keyPassword
+// Fayl bo'lmasa `assembleDebug` ishlayveradi (kundalik ish to'xtamaydi), lekin
+// `assembleRelease` ANIQ XABAR bilan yiqiladi — imzosiz APK jimgina chiqib
+// ketib, keyin terminalda «paket buzilgan» bo'lib ko'rinmasin.
+val signPropsFile = file(
+    System.getenv("SHERSET_TSD_KEYSTORE_PROPS")
+        ?: "${System.getProperty("user.home")}/.sherset/sherset-tsd-release.properties",
+)
+val signProps = Properties().apply {
+    if (signPropsFile.isFile) signPropsFile.inputStream().use { load(it) }
+}
+val signKeystore = signProps.getProperty("storeFile")?.let { file(it) }
+val hasReleaseSigning = signKeystore?.isFile == true
 
 android {
     namespace = "uz.sherset.tsd"
@@ -17,8 +35,8 @@ android {
         // (`Updater.isNewer`). Har chiqarishda BIRGA oshiriladi va hech qachon
         // kamaymaydi; `versionName` esa odam o'qiydigan yorliq va u
         // `latest.json` dagi nom hamda APK fayl nomi bilan MOS bo'lishi kerak.
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.6.0"
     }
 
     compileOptions {
@@ -34,9 +52,27 @@ android {
     // Kotlin 1.9.24 bilan MOS versiya — ko'tarishda ikkalasini birga ko'taring.
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = signKeystore
+                storePassword = signProps.getProperty("storePassword")
+                keyAlias = signProps.getProperty("keyAlias")
+                keyPassword = signProps.getProperty("keyPassword")
+                // v1 (JAR) ATAYLAB yoqilmaydi: `minSdk = 26` ⇒ eng eski
+                // qurilma ham Android 8, v2 esa 7.0+ da o'qiladi. Tekshirildi:
+                // `apksigner verify` → «v2 scheme: true».
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Topilmasa `null` — quyidagi tekshiruv `assembleRelease` ni
+            // to'xtatadi. AGP o'zi bunday holatda IMZOSIZ APK yasab beradi.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 }
@@ -68,4 +104,20 @@ dependencies {
     // YO'Q (U-reja «Ochiq qolganlar») — bu bog'liqlik FAQAT `src/test` uchun
     // va APK'ga tushmaydi (`testImplementation`).
     testImplementation("junit:junit:4.13.2")
+}
+
+// Imzosiz release APK'ni O'RNATIB BO'LMAYDI, lekin build muvaffaqiyatli
+// ko'rinadi — bu tuzoq `publish.sh` ga yetib borishidan oldin uzilsin.
+if (!hasReleaseSigning) {
+    tasks.configureEach {
+        if (name == "assembleRelease" || name == "bundleRelease") {
+            doFirst {
+                throw GradleException(
+                    "Release kaliti topilmadi: $signPropsFile" +
+                        "\nBir marta yaratish: bash android/tsd-app/tools/imzo-yarat.sh" +
+                        "\nZaxiradan tiklash: docs/ops/tsd-release-imzo.md",
+                )
+            }
+        }
+    }
 }

@@ -252,16 +252,34 @@ o'sha yerdan qo'lda tekshirish ham mumkin.
 
 ```sh
 # 1) app/build.gradle.kts — versionCode +1 VA versionName oshiriladi
-# 2) bitta buyruq: build → APK → latest.json → tekshiruv
+# 2) bitta buyruq: release build → imzo izi tekshiruvi → APK → latest.json → tekshiruv
 bash android/tsd-app/tools/publish.sh "nima o'zgardi"
 ```
 
 🔴 **IMZO — eng muhim shart.** Yangilanish faqat **ayni kalit** bilan
-imzolangan APK ustiga tushadi. Hozir debug-kalit ishlatiladi
-(`~/.android/debug.keystore`, sertifikat `b8ae71fd…`, **2056** gacha), ya'ni
-**build doim shu mashinada** qilinishi kerak va **kalit zaxiralanishi shart**.
+imzolangan APK ustiga tushadi. **0.6.0 dan boshlab release-kalit** ishlatiladi
+(`~/.sherset/sherset-tsd-release.jks`, alias `sherset-tsd`, sertifikat
+`7bd90f53…`, **2056** gacha). Parol repoda YO'Q — Gradle uni
+`~/.sherset/sherset-tsd-release.properties` dan o'qiydi; kalit topilmasa
+`assembleRelease` aniq xabar bilan yiqiladi (`assembleDebug` ishlayveradi).
+Tartib, zaxira va tiklash: **`docs/ops/tsd-release-imzo.md`**.
+
 Kalit yo'qolsa har terminalda ilovani o'chirib qayta o'rnatish kerak bo'ladi —
-va **juftlash yo'qoladi** (qurilma qayta juftlanadi).
+va **juftlash yo'qoladi** (qurilma qayta juftlanadi). Shuning uchun kalit
+**ikkita joyda zaxiralanadi** (ops hujjati §3).
+
+### 🔴 Debug → release o'tishi (bir martalik, 0.5.0 → 0.6.0)
+
+0.5.0 gacha APK **debug-kalit** bilan imzolangan edi (`b8ae71fd…`). Ikki kalit
+har xil ⇒ **release APK eski ilova ustiga TUSHMAYDI**: terminal APK'ni yuklab
+oladi-yu, o'rnatishda «App not installed» deydi. Bu kutilgan xulq, nosozlik
+emas.
+
+Shuning uchun o'tish **qo'lda** qilinadi: eski juftlash ma'lumotini tayyorlab →
+navbat bo'shligini tekshirib → brauzerdan APK'ni yuklab → eski ilovani
+**o'chirib** → yangisini o'rnatib → **qayta juftlab**. Band-band yo'riqnoma:
+`docs/ops/tsd-release-imzo.md` §5. Terminal hozircha bitta — shuning uchun
+o'tish AYNI PAYTDA arzon.
 
 ## Build
 
@@ -284,7 +302,19 @@ ogohlantirishsiz, `app-debug.apk` ≈ 12,9 MB — Compose bilan 7,1 MB dan o'sdi
    ```
 
    → `app/build/outputs/apk/debug/app-debug.apk`.
-5. Terminalda «Noma'lum manbalar» ni yoqib APK'ni o'rnating.
+5. **Release** (tarqatiladigan APK) — `assembleRelease`, release-kalit talab
+   qilinadi (yuqoridagi «IMZO» bandi):
+
+   ```sh
+   JAVA_HOME=D:/dev/java/jdk-17 ANDROID_HOME=D:/dev/android-sdk \
+     <gradle-8.7>/bin/gradle --no-daemon assembleRelease
+   ```
+
+   → `app/build/outputs/apk/release/app-release.apk`.
+   **2026-09-04 da shu mashinada o'tdi:** `BUILD SUCCESSFUL`, ogohlantirishsiz,
+   0.6.0 (code 6), APK ≈ **10,1 MB** (debug 13,0 MB), `apksigner verify` →
+   «v2 scheme: true», iz `7bd90f53…`.
+6. Terminalda «Noma'lum manbalar» ni yoqib APK'ni o'rnating.
 
 ## Qo'lda smoke (G5 qabul mezoni)
 
@@ -534,5 +564,8 @@ app/src/main/java/uz/sherset/tsd/
 app/src/test/java/uz/sherset/tsd/
    QtyExpressionTest.kt                    — T5: JVM unit-test (17 ta) — `gradle testDebugUnitTest`
    CountUndoTest.kt                        — T7: JVM unit-test (8 ta) — qaytarish nishoni server regexidan o'tadi
-app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose)
+app/build.gradle.kts · settings.gradle.kts — build konfiguratsiyasi (Compose + T9 release-imzo)
+tools/
+   imzo-yarat.sh                           — T9: release-kalitni BIR MARTA yaratish (mavjud bo'lsa to'xtaydi)
+   publish.sh                              — chiqarish: assembleRelease → imzo izi tekshiruvi → APK → latest.json
 ```

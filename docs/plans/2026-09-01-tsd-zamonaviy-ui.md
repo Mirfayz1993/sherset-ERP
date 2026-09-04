@@ -224,6 +224,12 @@ kalit **zaxiralanishi** shart. Kalit yo'qolsa har terminalda o'chirib qayta
 o'rnatish kerak va **juftlash yo'qoladi**. Alohida release-kalitga o'tish
 hozir arzon (bitta terminal), keyinroq qimmat bo'ladi.
 
+✅ **2026-09-04 — QARZ YOPILDI (kod tomondan).** T-rejaning **T9** fazasi release-kalit yaratdi
+(`~/.sherset/`, alias `sherset-tsd`, iz `7bd90f53…`), `signingConfigs` va `publish.sh` ni release'ga
+o'tkazdi va zaxira/o'tish tartibini yozdi: `docs/ops/tsd-release-imzo.md`,
+`docs/plans/2026-09-03-tsd-omborchi-qulayligi.md` §5 «T9». Ochiq qolgani — **jonli o'tish**
+(terminalni o'chirib qayta o'rnatish + qayta juftlash) va egasining **zaxira tasdig'i**.
+
 ### U7 — 🔴 SESSIYA 401 (G5 dan qolgan nuqson) · 2026-09-02 · `0.4.0`
 
 **Belgi:** terminalda skanerlaganda «401» xatosi. **Aslida bu YAXSHI xabar
@@ -273,8 +279,9 @@ tasdiqlandi. ⚠️ Skriptdagi `grep -oP` Git Bash (Windows) lokalida yiqilardi 
 - **Skaner broadcast nomi TAXMINIY** — `config.xml` da iData'ning odatiy
   `android.intent.action.SCANRESULT`/`value` turibdi; qurilmada tasdiqlanishi
   kerak (noto'g'ri bo'lsa wedge ishlayveradi, zarar yo'q).
-- **Release-build va imzolash yo'q** — hozircha `app-debug.apk`. Tarqatish
-  kanali (kassa .exe kabi `/downloads/…`) haqida qaror kerak.
+- ~~**Release-build va imzolash yo'q** — hozircha `app-debug.apk`.~~ **YOPILDI**
+  2026-09-04, T-reja **T9**: `assembleRelease` + alohida release-kalit,
+  kanal `/downloads/tsd/` da qoldi. Tafsilot: `docs/ops/tsd-release-imzo.md`.
 - **Web boshqaruv ekrani yo'q** (egasi qarori) — juftlash/bekor qilish API
   orqali; endpointlar tayyor.
 - **Ruscha matnlar yo'q** (`values-ru/strings.xml`) — G5 qarori kuchda.

@@ -6,10 +6,16 @@
 # APK va manifest DOIM BIRGA yangilanadi: manifest yangi, APK eski bo'lsa
 # omborchining terminali 404 oladi va yangilanish yiqiladi.
 #
-# 🔴 IMZO. Yangilanish faqat AYNI kalit bilan imzolangan APK ustiga tushadi.
-# Hozir debug-kalit ishlatiladi (`~/.android/debug.keystore`, 2056 gacha) —
-# ya'ni build DOIM SHU MASHINADA qilinishi kerak. Kalit yo'qolsa har terminalda
-# ilovani o'chirib qayta o'rnatish kerak bo'ladi VA JUFTLASH YO'QOLADI.
+# 🔴 IMZO (T9). Yangilanish faqat AYNI kalit bilan imzolangan APK ustiga
+# tushadi. 0.6.0 dan boshlab RELEASE kalit ishlatiladi
+# (`~/.sherset/sherset-tsd-release.jks`, 2056 gacha) — parol repoda YO'Q,
+# `app/build.gradle.kts` uni `~/.sherset/*.properties` dan o'qiydi.
+# Kalit yo'qolsa har terminalda ilovani o'chirib qayta o'rnatish kerak bo'ladi
+# VA JUFTLASH YO'QOLADI ⇒ zaxira tartibi: `docs/ops/tsd-release-imzo.md`.
+#
+# ⚠️ 0.5.0 gacha APK debug-kalit bilan imzolangan edi. Debug-imzoli ilova
+# USTIGA bu APK tushmaydi — bir martalik o'tish yo'riqnomasi README dagi
+# «Debug → release o'tishi» bo'limida.
 #
 # Ishlatish:
 #   bash android/tsd-app/tools/publish.sh "nima o'zgardi"
@@ -25,6 +31,10 @@ GRADLE="${GRADLE_BIN:-/d/dev/_downloads/g87/gradle-8.7/bin/gradle}"
 JAVA="${JAVA_HOME_17:-/d/dev/java/jdk-17}"
 SDK="${ANDROID_SDK:-/d/dev/android-sdk}"
 SSH_KEY="${SHERSET_KEY:-$HOME/.ssh/sherset_key}"
+APKSIGNER="${APKSIGNER_BIN:-/d/dev/android-sdk/build-tools/34.0.0/apksigner.bat}"
+# Sertifikat izi SIR EMAS (har APK ichida bor) — u shu yerda ATAYLAB turadi:
+# xato bilan debug-kalitli APK chiqarilsa, kanal buzilishidan OLDIN uziladi.
+EXPECTED_SIGNER="7bd90f5358091d95d0e6ac053ee835fe291da78d61fbf984ddef6b83306678ec"
 HOST="${SHERSET_HOST:-root@13.140.157.10}"
 REMOTE_DIR="/var/www/kassa-downloads/tsd"
 BASE_URL="https://erp.sherset.uz/downloads/tsd"
@@ -47,10 +57,26 @@ if curl -sfI --max-time 20 "$BASE_URL/$APK_NAME" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "→ build"
-( cd "$APP_DIR" && JAVA_HOME="$JAVA" ANDROID_HOME="$SDK" "$GRADLE" --no-daemon assembleDebug )
+echo "→ build (release)"
+( cd "$APP_DIR" && JAVA_HOME="$JAVA" ANDROID_HOME="$SDK" "$GRADLE" --no-daemon assembleRelease )
 
-APK="$APP_DIR/app/build/outputs/apk/debug/app-debug.apk"
+APK="$APP_DIR/app/build/outputs/apk/release/app-release.apk"
+[ -f "$APK" ] || { echo "🔴 release APK topilmadi: $APK" >&2; exit 1; }
+
+# Imzo tekshiruvi build'dan KEYIN, yuklashdan OLDIN. AGP kalit topilmasa
+# imzosiz APK yasab beradi va u terminalda «paket buzilgan» bo'lib chiqadi —
+# bu yerda to'xtatiladi.
+echo "→ imzo tekshiruvi"
+SIGNER=$(JAVA_HOME="$JAVA" "$APKSIGNER" verify --print-certs "$APK" |
+  sed -n 's/.*certificate SHA-256 digest:[[:space:]]*\([0-9a-f]\{64\}\).*/\1/p' | head -1)
+if [ "$SIGNER" != "$EXPECTED_SIGNER" ]; then
+  echo "🔴 APK KUTILGAN kalit bilan imzolanmagan." >&2
+  echo "   kutilgan: $EXPECTED_SIGNER" >&2
+  echo "   topilgan: ${SIGNER:-<imzo yo'q>}" >&2
+  echo "   docs/ops/tsd-release-imzo.md" >&2
+  exit 1
+fi
+
 SHA=$(sha256sum "$APK" | cut -d' ' -f1)
 echo "→ sha256 $SHA"
 

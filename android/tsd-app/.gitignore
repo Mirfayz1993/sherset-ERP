@@ -8,3 +8,11 @@ local.properties
 .idea/
 captures/
 .cxx/
+
+# 🔴 Imzo kaliti va parollar (T9) — repo public. Kalit aslida repodan
+# TASHQARIDA (`~/.sherset/`) turadi; bular xato bilan ko'chirilgan nusxadan
+# himoya.
+*.jks
+*.keystore
+*keystore*.properties
+sherset-tsd-release.properties

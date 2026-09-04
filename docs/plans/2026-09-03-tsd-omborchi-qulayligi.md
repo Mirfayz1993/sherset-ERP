@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04 — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -126,7 +126,7 @@ o'qib tasdiqlangan (taxmin emas):**
 | **T6** | Sanash progressi + «qolgan qatorlarni 0 qilib yopish» | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T7** | «Oxirgi sanoq» — bir bosishda qaytarish (undo) | yo'q | 🟡 qulaylik | **TUGADI** |
 | **T8** | Jonli qurilma smoke — U4 qarzini yopish (kod yozilmaydi) | yo'q | 🔴 qarz | REJA |
-| **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | REJA |
+| **T9** | Release-imzo va tarqatish kanali (imzo qarzi) | yo'q | 🟠 xavf | **QISMAN** |
 | **T10** | Oflayn o'quv keshi | yo'q | 🔵 keyin | REJA |
 | **T11** | Inventarizatsiya sessiyasi va farqlar hisoboti | **ha** (katta) | 🔵 keyin | REJA |
 
@@ -468,6 +468,12 @@ U-rejaning U4/G5/G6 «QISMAN» statuslari yopilsin.
 
 **Shart.** Bu faza **egasi bilan birga**, qo'lida terminal bo'lganda bajariladi. Agent APK'ni chiqaradi
 (`versionCode` +1 → `tools/publish.sh`), ro'yxat bo'yicha yuritadi va natijani yozadi.
+
+> 🔴 **T9 dan keyin tartib O'ZGARDI** (T9 hisoboti, 2-eslatma). Versiya allaqachon **0.6.0 (code 6)**
+> ga ko'tarilgan — yana oshirish SHART EMAS. APK endi **release-kalit** bilan imzolanadi, ya'ni
+> terminaldagi 0.5.0 ustiga yangilanish **tushmaydi**: birinchi o'rnatish `docs/ops/tsd-release-imzo.md`
+> §5 dagi qo'l tartibida (o'chirish + qayta o'rnatish + **qayta juftlash**) bo'ladi. T8 ni T9 o'tishi
+> bilan **bir sessiyada** qilish arzon — aks holda terminal ikki marta qayta juftlanadi.
 
 **Ro'yxat (README dagi bandlar + yangi):**
 1. Juftlash → PIN → bosh menyu; versiya raqami to'g'ri.
@@ -1998,3 +2004,114 @@ va narx tushunchasini bilmaydi.
    tushmadi (`git show --stat 53001842` — 5 ta `android/tsd-app` fayli +
    `pre-commit` hook'i qo'shgan `docs/progress.json`). Keyingi faza agenti ham
    o'z commitiga qo'shmasin.
+
+### T9 — Release-imzo va tarqatish kanali · **QISMAN — jonli o'tish va zaxira egasidan kutilmoqda** · 2026-09-04
+
+**Nima qilindi.**
+
+1. **Kalit yaratildi — repodan TASHQARIDA.** `android/tsd-app/tools/imzo-yarat.sh` (yangi):
+   PKCS12, **RSA 4096**, alias `sherset-tsd`, muddat **10 950 kun (2056-08-27 gacha)**.
+   Kalit `~/.sherset/sherset-tsd-release.jks`, parol+alias esa `~/.sherset/sherset-tsd-release.properties`
+   (`chmod 600`). Parol `openssl rand -hex 24` bilan **skript ichida** yaratiladi — hech qayerda
+   terilmaydi, chatga ham chiqmaydi (skript faqat sertifikat izini bosib chiqaradi).
+   Skript ikkita tuzoqni yopadi: kalit **mavjud bo'lsa TO'XTAYDI** (tasodifan «yangisini yasab qo'yish»
+   butun kanalni o'ldiradi) va kalit katalogi repo ichida bo'lsa ham to'xtaydi.
+2. **Gradle imzosi** (`app/build.gradle.kts`): `signingConfigs.release` `.properties` faylidan o'qiladi
+   (yo'lni `SHERSET_TSD_KEYSTORE_PROPS` bilan ko'chirish mumkin). **Repoda parol ham, kalitning o'zi ham
+   yo'q** — faqat fayl NOMI. Kalit topilmasa `assembleRelease`/`bundleRelease` **aniq xabar bilan
+   yiqiladi** (AGP aks holda jimgina **imzosiz** APK yasaydi va u terminalda «paket buzilgan» bo'lib
+   chiqardi); `assembleDebug` esa kalitsiz ham ishlayveradi.
+   v1 (JAR) imzo ATAYLAB yoqilmadi: `minSdk = 26` ⇒ v2 yetarli.
+3. **`tools/publish.sh` release'ga o'tkazildi:** `assembleDebug` → **`assembleRelease`**, APK yo'li
+   `outputs/apk/release/app-release.apk`, va yuklashdan OLDIN **`apksigner verify` bilan sertifikat izi
+   `EXPECTED_SIGNER` ga solishtiriladi**. Iz repoda ochiq turadi — u **sir emas** (har APK ichida bor),
+   lekin xato bilan debug-kalitli APK chiqarilsa kanal buzilishidan oldin uziladi.
+4. **`.gitignore`** ga `*.jks`, `*.keystore`, `*keystore*.properties` — kalit repoga tushmasin (kalit
+   allaqachon tashqarida, bu ikkinchi qavat).
+5. **Hujjat:** `docs/ops/tsd-release-imzo.md` (yangi, 7 bo'lim) — nega kerak, kalit qayerda (NOMI),
+   **zaxira tartibi va uni tekshirish**, chiqarish, **debug→release o'tishi (8 band)**, kalit yo'qolsa
+   nima bo'ladi, boshqa mashinada build. README ning «IMZO» bloki qayta yozildi, «Debug → release
+   o'tishi» bo'limi, `assembleRelease` bandi va fayl xaritasi qo'shildi.
+6. **Versiya 0.6.0 (code 6)** ga ko'tarildi — chiqarishga tayyor, lekin **CHIQARILMADI** (§2 qoida 9:
+   faqat egasi «chiqar» desa; ustiga T9 da chiqarish jonli terminalga «o'rnatilmadi» xatosini
+   ko'rsatadi — quyidagi 🔴 bandga qarang).
+
+**O'lchandi (raqam bilan).**
+
+| Nima | Natija |
+|---|---|
+| `gradle --no-daemon assembleDebug assembleRelease` | `BUILD SUCCESSFUL in 4m`, **ogohlantirishsiz** |
+| Release APK | `0.6.0` (code 6), **10 134 029 bayt ≈ 10,1 MB** (debug 13,0 MB) |
+| `apksigner verify --print-certs -v` | `Verifies`, `v2 scheme: true`, 1 imzolovchi, RSA **4096** |
+| Release sertifikat izi | `7bd90f5358091d95d0e6ac053ee835fe291da78d61fbf984ddef6b83306678ec` |
+| Debug sertifikat izi (taqqoslash) | `b8ae71fdb8c33b2f99589d161ad12e141484ac67ffc0c7f207c37dc4a068ac71` — **boshqa** ⇒ o'tish qo'lda |
+| `publish.sh` dagi iz ajratish (`sed`) | APK'da sinaldi → `EXPECTED_SIGNER` bilan **mos** |
+| Kalitsiz `assembleRelease` (`SHERSET_TSD_KEYSTORE_PROPS=…/yoq.properties`) | **yiqildi**: «Release kaliti topilmadi: …» + ikkita yo'riqnoma satri |
+| Parol repoda bormi (`grep -rI` butun repo bo'ylab) | **0 ta moslik** |
+| Fayl kodlashi (5 ta tegilgan fayl) | BOM yo'q, `utf-8` o'qiladi (kodlash hodisasi saboqi) |
+
+Server tegilmadi ⇒ vitest/typecheck/`tsd-policy.test.ts` **kerak emas** (§2 qoida 4). TSD allowlist'iga
+qator qo'shilmadi, javob maydoni qo'shilmadi ⇒ **narx qoidasi** (qoida 3) daxlsiz: bu faza umuman
+API sirtiga tegmaydi.
+
+**Qabul mezoni.**
+
+- ✔ **Release APK build bo'ladi** — `BUILD SUCCESSFUL`, ogohlantirishsiz, release kalit bilan imzolangan
+  (`apksigner` tasdiqladi).
+- ✘ **…va o'rnatiladi** — terminal qo'lda yo'q; o'rnatish **egasi bilan** qilinadi. Yo'riqnoma yozilgan
+  (ops hujjati §5). Bu band **T8** bilan birga yopiladi.
+- ✘ **`latest.json` zanjiri release bilan ishlaydi** — `publish.sh` release'ga o'tkazildi va imzo
+  tekshiruvi qo'shildi, lekin **chaqirilmadi** (qoida 9). Kanalda hamon `0.5.0` (debug) turibdi
+  (`curl …/latest.json` → `versionCode: 5`).
+- ✔ **Zaxira tartibi yozilgan** — ops hujjati §3: ikkita joy, nusxa olish buyruqlari va **nusxani
+  tekshirish** (`keytool -list -v` izi §2 dagi bilan mos kelishi shart).
+- ✘ **Egasi kalit zaxirasini olganini tasdiqladi** — hali tasdiqlanmagan. **Faza shu bandsiz
+  «TUGADI» bo'lmaydi** (§2 qoida 7).
+
+**Qaysi oqimni buzishi mumkin? (qoida 8)**
+
+- **Jonli terminal (0.5.0, debug-imzo) — hozircha HECH NARSA o'zgarmadi.** Kanalda hamon 0.5.0
+  turibdi, ilova ichidagi yangilash oqimi tegilmagan (`Updater.kt` ga qo'l urilmadi).
+- 🔴 **Xavf — 0.6.0 ni kanalga chiqarish paytida.** Chiqarilishi bilan terminaldagi 0.5.0
+  «yangilanish bor» kartasini ko'rsatadi, APK'ni yuklaydi, SHA-256 dan o'tadi va **o'rnatishda
+  to'xtaydi** («App not installed»): Android imzoni solishtiradi, izlar esa har xil. Bu
+  **kutilgan** xulq — lekin omborchi uchun u «nosozlik» bo'lib ko'rinadi. Shuning uchun chiqarish
+  **egasi terminalni qo'liga olgan paytda** qilinadi va darhol ops hujjati §5 dagi 8 band bajariladi
+  (brauzerdan yuklab olish → **o'chirish** → o'rnatish → **qayta juftlash**).
+- **Juftlash yo'qoladi — bu qaytarib bo'lmaydigan qadam.** `deviceSecret` bazada **argon2 xeshi**
+  holida yotadi (`tsd-device.service.ts: pair` — «Kalit FAQAT shu javobda ko'rinadi»), ya'ni eski
+  kalit qog'ozda saqlanmagan bo'lsa **yangi juftlash** ochiladi va eskisi `revoke` qilinadi.
+  Ilova o'chirilganda `DeviceStore` (EncryptedSharedPreferences) ham, `ActionQueue`
+  (`tsd_action_queue`) ham o'chadi ⇒ **navbat bo'sh bo'lishi shart**, aks holda yuborilmagan
+  amallar yo'qoladi (IS-5 «jim yo'qotish yo'q» qoidasining qo'l bilan bajariladigan qismi).
+- **Sanash semantikasi, oflayn navbat, multi-hit va narx qoidalari** — bu faza Kotlin **kodiga**
+  umuman tegmadi (faqat `build.gradle.kts`, skriptlar va hujjat). Commit tarkibida `app/src/**`
+  dan bitta ham fayl yo'q.
+- **Debug oqimi buzilmadi:** `assembleDebug` kalitsiz mashinada ham ishlaydi (shart `isFile`
+  tekshiruvida, `signingConfig` faqat `release` build turiga qo'yiladi).
+
+**Ochiq qolganlar / keyingi fazaga eslatmalar.**
+
+1. 🔴 **EGASIGA — ikki ish.** (a) `~/.sherset/` dagi **ikkala faylni** ops hujjati §3 bo'yicha
+   **ikkita joyga** zaxiralash va nusxani `keytool -list -v` bilan tekshirish; (b) 0.6.0 ni chiqarish
+   **qachon** qilinishini aytish — chiqarish bilan qo'lda o'tish **bir paytda** bo'lishi kerak.
+   Zaxirasiz chiqarish eng yomon holat: kalit ham zaxirasiz, kanal ham yangi kalitda.
+2. 🔴 **T8 uchun tartib o'zgardi.** T8 «`versionCode` +1 → `publish.sh`» deydi; endi versiya
+   **allaqachon 0.6.0/6** (bu fazada ko'tarildi, chiqarilmadi) va birinchi o'rnatish **yangilanish
+   kartasi orqali EMAS**, ops hujjati §5 dagi qo'l tartibida bo'ladi. T8 ro'yxatining 1-bandi
+   («juftlash → PIN → versiya») shu o'tishning o'zi bilan bajariladi. **T8 ni T9 o'tishi bilan BIR
+   SESSIYADA qilish arzon** — aks holda terminal ikki marta qayta juftlanadi.
+3. **`android/manager-app` da AYNI qarz bor** — uning `tools/publish.sh` i hamon debug-kalitni
+   ta'riflaydi va `app/build.gradle.kts` da `signingConfigs` yo'q. Unga **tegilmadi** (§2 qoida 2:
+   boshqa reja ishi, ustiga u hali commit qilinmagan). X-rejaga o'z imzo fazasi kerak — naqsh
+   shu yerda tayyor (`imzo-yarat.sh` ni `SHERSET_KEY_DIR`/`SHERSET_KEY_ALIAS` bilan qayta ishlatsa
+   bo'ladi, lekin **alohida kalit** bilan: ikki ilova bitta kalitga bog'lanmasin).
+4. **`EXPECTED_SIGNER` qo'lda yozilgan konstanta.** Kalit bir kun almashsa `publish.sh` ni ham
+   tahrirlash kerak. Ataylab shunday: «qaysi kalit bo'lsa shuni qabul qilaman» tekshiruvning
+   ma'nosini yo'qotardi.
+5. **Kalit muddati 2056** — o'shanda ilova hali tirik bo'lsa yangi kalitga o'tish **yana** qo'lda
+   o'tish bo'ladi (Android'da imzo rotatsiyasi v3 sxemasi bilan mumkin, lekin u alohida ish).
+6. **Oldingi fazalardan qolgan ochiqlar hamon ochiq** (T7 hisoboti): `ShortageScreen` da ifoda rejimi
+   yo'q, `getCellProducts` da `deletedAt: null` filtri yo'q, T6 dagi 7 ta Списание. T9 ularga tegmadi.
+7. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T9 commitiga ham
+   qo'shilmadi. Keyingi faza agenti ham o'z commitiga qo'shmasin.
