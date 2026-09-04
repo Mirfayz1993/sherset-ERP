@@ -1,11 +1,17 @@
 # Bo'lak hisobini JONLI ISHGA TUSHIRISH (J-reja)
 
 > **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) ·
-> **Holat:** **J1 ✅ TUGADI** (2026-09-04) — ombor skriptlari endi bo'lak
-> reyestrini ko'radi (T1 qarzi yopildi). Migratsiya ham, deploy ham bo'lmadi;
-> jonli bazaga faqat DRY (O'QISH) so'rovlar ketdi. **J2 boshlanmagan.**
-> 🔴 J1 yo'l-yo'lakay o'lchadi: bayroqli tovar §1 dagi **4 emas, 6 ta**
-> (ikkitasi 2026-09-04 da yoqilgan) ⇒ **J2 ning doirasi kattaroq**, §5 ga qarang.
+> **Holat:** **J1 ✅ TUGADI** · **J2 ⚠️ QISMAN** (ikkalasi ham 2026-09-04).
+> J1 — ombor skriptlari endi bo'lak reyestrini ko'radi (T1 qarzi yopildi),
+> jonli bazaga faqat DRY (O'QISH) so'rovlar ketdi.
+> J2 — **oltala `piece_tracked` bayrog'i JONLIDA O'CHIRILDI** (15:38 UTC,
+> egasining tasdig'i bilan, `POST /stock-pieces/flag` orqali — SQL emas) va
+> pilot doirasi o'lchandi. Qabul mezonining 3 tadan 2 tasi bajarildi;
+> **ochiq qolgani — egasi 5–8 tovarlik pilot ro'yxatini tanlashi** (§5 → J2
+> → 7-band). 🔴 **J3 shu ro'yxatsiz BOSHLANMAYDI.**
+> Migratsiya ham, deploy ham hech bir fazada bo'lmadi.
+> 🔴 J2 ikki o'lchovni tuzatdi: metrli tovar §1 dagi **632 emas, 634**
+> (547 tirik + 87 o'chirilgan) va kabel doirasi **73 emas, 94** — §5 ga qarang.
 >
 > **Manba reja:** `docs/plans/2026-08-25-bolinadigan-tovar-bolak-hisobi.md`
 > (K-reja). **K1…K6 ning KODI 2026-08-29 kechasi jonliga chiqdi**
@@ -485,6 +491,314 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
 
 ## 5. HISOBOTLAR (har faza o'z hisobotini SHU YERGA yozadi)
 
+### J2 — Bayroq gigienasi + pilot doirasini o'lchash · ⚠️ QISMAN (qoida 11) · 2026-09-04
+
+**Holat: QISMAN.** Qabul mezonining **uchtadan ikkitasi** bajarildi: jonlida
+`piece_tracked = true` tovarlar soni **0** (o'lchandi, bashorat emas) va audit
+skripti nomzodlarni manba soni bilan ko'rsatdi. Uchinchi band — **egasi 5–8
+tovarlik pilot ro'yxatini ISM bilan tasdiqlashi** — hali bajarilmagan: egasi
+bayroqlarni o'chirishga ruxsat berdi va J-S1 ga javob qaytardi, lekin pilot
+ro'yxatini tanlamadi. **Faza «TUGADI» deb yopilmaydi** (rule 11 — hukm
+yumshatilmaydi). Ro'yxat kelgan zahoti shu hisobotning 7-bandi to'ldiriladi va
+holat ✅ ga o'zgaradi. **J3 shu ro'yxatsiz boshlanmaydi** — uning butun ishi
+o'sha 5–8 tovarni sanashdan iborat.
+
+Migratsiya YO'Q, deploy YO'Q. Jonli bazada o'zgargan YAGONA jadval —
+`products` (6 qator, 3 ustun). `stock_pieces`, `stocks`, `stock_by_cell`,
+`store_cells` — **bir bayt ham tegilmadi**.
+
+---
+
+**0. Birinchi navbatda: HOLAT QAYTA O'LCHANDI (J2 vazifasining talabi).**
+
+J1 hisoboti «bayroq yoqish DAVOM ETAYOTGANI uchun J2 avval HOLATNI QAYTA
+O'LCHASIN — ro'yxat yana o'sgan bo'lishi mumkin» degan edi. O'lchandi
+(2026-09-04 15:32 UTC): **ro'yxat o'smadi, hamon 6 ta.**
+
+| Tovar | Birlik | Qoldiq | Manba | Faol bo'lak | 30 kunda chek | Qaror |
+|---|---|---|---|---|---|---|
+| Azia Avvg 3x25 1X16 | м | 10 586 | **1** | 0 | 6 | 2026-09-02 12:06 · Admin User |
+| Azia Avvg 3x50 1X25 | м | 10 789 | **1** | 0 | 4 | 2026-09-02 12:07 · Admin User |
+| Uz kg 1x25 1 | м | 11 000 | **1** | 0 | 0 | 2026-09-04 10:53 · Admin User |
+| Uz vvgng  5x25 | м | **100** ⚠️ | **1** | 0 | 0 | 2026-09-04 11:25 · Admin User |
+| Vayr vvg 3x1.5 | м | 11 000 | **1** | 0 | 0 | 2026-09-03 08:41 · Admin User |
+| Vesta ramka 2X | **шт** 🔴 | 10 976 | **1** | 0 | 3 | 2026-09-02 09:56 · Admin User |
+
+`stock_pieces` — **0 qator** (J1 dagidek).
+
+Ikki o'zgarish J1 dan beri: `Uz vvgng  5x25` qoldig'i **0 → 100** (priyomka
+bo'lgan; J1 uni «butunlay zararsiz» degan edi, endi u ham qoldiqli tovar), va
+oltala tovarning **qaror muhri allaqachon qo'yilgan** (`decidedAt` to'lgan) —
+ya'ni ular «Hal qilinmagan» ro'yxatida turmagan, kimdir ataylab bosgan.
+
+🟢 **Eng muhim o'lchov: oltalasining ham manbasi AYNAN 1 ta.** Ya'ni J-reja
+3.2 dagi «hozircha hech qanday chek yiqilmaydi» xulosasi **6 tovar uchun ham,
+bugungi kunga ham kuchda edi** — bayroq yoqilgan uch kun ichida 7.1 istisnosi
+birorta chekni yiqitmagan. Bu taxmin emas: manba sanog'i taqsimot dvigateli
+(`retail-allocation.ts` → `buildSources`) bilan AYNI semantikada hisoblanadi.
+
+---
+
+**1. Ikki tomonlama bog'liqlik javobi (qoida 10 — «bu o'zgarish qaysi mavjud
+oqimni buzishi mumkin?»).**
+
+| Oqim | Ta'sir | Dalil |
+|---|---|---|
+| **Kassa sotuvi / taqsimot** | 🔴 **ATAYLAB O'ZGARDI — TESKARI yo'nalishda** | Bayroq o'chgani uchun oltala tovarda avto-taqsimotning **3-holati (bo'lish) QAYTA YOQILDI**, ya'ni kassa 2026-09-02 dan oldingi xulqiga qaytdi. Bu **kengaytirish**, torayish emas: ilgari o'tmaydigan chek endi o'tadi, o'tadigani o'taveradi. Yangi rad etish sinfi paydo bo'lmaydi. |
+| **Qoldiq (`Stock` / `StockByCell`)** | **YO'Q** | Yagona chaqirilgan marshrut — `POST /stock-pieces/flag`, uning servisi (`stock-piece-registry.service.ts:275-297`) faqat `product.findFirst` + `product.update` qiladi. Amaldan KEYIN `warehouse-state.ts` jonlida yuritildi: **EXIT=0**, split «bajarilgan» (mos **1456**, mos emas **0**), **«POS yeta olmaydigan qoldiq: 0»**, «✅ Reyestrga MOS — farq yo'q». |
+| **Bo'lak reyestri (`stock_pieces`)** | **YO'Q** | Amaldan oldin ham, keyin ham **0 qator** (skript o'zi o'lchaydi va hisobotning boshida chiqaradi). |
+| **«Hal qilinmagan» ro'yxati (K6/3)** | ⚠️ **O'ZGARDI, lekin qisqardi emas** | Oltala tovarning qaror muhri J2 dan OLDIN ham to'lgan edi ⇒ ular ro'yxatda turmagan. Marshrut muhrni YANGILADI (sana 2026-09-04 15:38), ro'yxatga esa hech kim qo'shilmadi va chiqmadi. |
+| **Qaror muhri semantikasi** | ⚠️ **ONGLI CHEGARA** | `POST /stock-pieces/flag` «yo'q» ni ham QAROR deb muhrlaydi (`buildFlagDecisionPatch`). Ya'ni «vaqtincha o'chirdik, J4 da qaytaramiz» degan holat DB'da «bo'lak hisobi kerak emas deb qaror qilindi» ko'rinishida yotadi. Muhrni chetlab o'tish SQL talab qilardi (J2 prompti taqiqlagan) va UI tugmasi ham AYNAN shunday ishlaydi ⇒ ataylab shu yo'l tanlandi. J4 bayroqni qaytarganda muhr yana yangilanadi. Bu farq **faqat hujjatda** yashaydi — shu sabab jonli holat reyestriga ham, shu bandga ham ochiq yozildi. |
+| **Ruxsat matritsasi / rollar** | **YO'Q** | Yangi entity ham, marshrut ham qo'shilmadi. Skript mavjud `piecetracking.update` ruxsati bilan, mavjud xodim (`Admin User`) tokeni ostida ishladi. |
+| **`packages/db` skriptlari (J1)** | **YO'Q** | Tegilmadi. |
+| **TSD / kiosk / i18n** | **YO'Q** | Yangi sirt yo'q; skript CLI, matni o'zbekcha. Web i18n darvozalari baribir yugurtirildi — yashil. |
+| **Eng yomon holat** | Marshrut yarim yo'lda yiqiladi | Har tovar ALOHIDA `POST` — atomar `product.update`. Yarim bajarilgan holatda ham hech nima buzilmaydi: bir qism tovarda bayroq o'chgan, qolganida yoqiq — ikkalasi ham to'g'ri ishlaydigan holat. Skript qayta yuritilsa qolganini tugatadi (idempotent). |
+
+---
+
+**2. Nima qurildi (4 fayl, migratsiya YO'Q).**
+
+**`apps/api/src/scripts/j2-pilot-audit-core.ts`** — sof yadro (Prisma yo'q,
+SQL yo'q, HTTP yo'q):
+
+- `buildPieceSources` — 🔴 **J2 ning yuragi.** Manbani `retail-allocation.ts`
+  ning `buildSources` bilan AYNI sanoqda quradi: har yacheyka bitta manba,
+  ombordagi YACHEYKASIZ qoldiq esa alohida psevdo-manba. BRAK va kaskaddan
+  tashqari ombor manba sanalmaydi, lekin qoldig'i **ko'rinadi**
+  (`unreachableQty`) — jim yo'qolmaydi. Yacheykalar yig'indisi ombor
+  qoldig'idan katta bo'lsa `overCelledStores` bilan qichqiradi.
+  ⚠️ Manba ATAYLAB `qty` bo'yicha sanaladi, `qty − reserved` bo'yicha emas:
+  rezerv soatlab o'zgaradi, tovarning JISMONIY tarqoqligi esa yo'q.
+- `planFlagOff` — o'chirish sababini ISM bilan beradi (`birlik-metr-emas` ·
+  `reyestr-bosh` · `reyestr-tolgan`). 🔴 **`reyestr-tolgan` ataylab «xavfsiz
+  emas»**: reyestri to'lgan tovarda bayroqni skript O'ZI o'chirmaydi,
+  `--force` talab qiladi — bu QAROR odamniki (bugun 0 ta shunday tovar bor
+  edi, lekin J3 dan keyin bo'ladi).
+- `evaluateCandidate` / `rankCandidates` / `summarizeGroups` — nomzodlarni
+  BAHOLAYDI, lekin **tanlamaydi**: faqat qat'iy to'siqlarni sanaydi
+  (`manba-1-dan-kop` · `qoldiq-yoq` · `birlik-metr-emas`).
+
+**`apps/api/src/scripts/ops-j2-piece-pilot-audit.ts`** — DRY sukut, `--apply`
+bilan **faqat `POST /stock-pieces/flag`**. Hisoboti besh bo'lim: hozirgi holat
+· gigiena rejasi · pilot nomzodlari · yozish · qabul mezoni. 🔴 **Yoqish yo'li
+ATAYLAB YO'Q** — skript bayroqni faqat O'CHIRA oladi (yoqish J4 ning ishi va u
+ko'z bilan ko'rilib, bittalab bosiladi).
+
+**Testlar (+31):** `j2-pilot-audit-core.test.ts` **20** (manba sanog'i,
+gigiena sabablari, to'siqlar, saralash, guruh kesimi) + yangi
+`j2-pilot-audit-guard.test.ts` **11** — skriptning SHAKLINI matndan qulflaydi
+(`q5-backfill-scripts-guard` naqshi, izohlar olib tashlanadi):
+
+- `--apply` siz yozish shoxi ochilmasligi;
+- **birorta yozadigan Prisma chaqirig'i yo'qligi** (`prisma.*` faqat
+  `findMany`/`findFirst`/`groupBy`/`count` — mexanik ro'yxat, yangi metod
+  qo'shilsa test yiqiladi);
+- bayroq FAQAT marshrut orqali o'zgarishi;
+- `/stock-pieces/flag` ga `pieceTracked: true` yuboradigan yo'l yo'qligi;
+- yadroda Prisma ham, `fetch` ham yo'qligi.
+
+---
+
+**3. JONLI DRY natijalari (`sherset_v2` @ 13.140.157.10, faqat O'QISH).**
+
+J1 naqshi: skript jonli daraxtga MERGE QILINMADI — ikki fayl izolyatsiyalangan
+`apps/api/src/scripts-j2/` katalogiga qo'yildi (nisbiy importlar AYNAN bir xil
+chuqurlikda ishlaydi), yugurtirildi va **katalog o'chirildi**. Yugurishdan
+keyin `git status apps/api/src` — bizning bir ham faylimiz yo'q.
+
+DRY **EXIT=0**, hisobot 0-banddagi jadvalni chiqardi va yozish shoxida oltala
+`POST` ning tanasini AYNAN bosib ko'rsatdi («hech nima yozilmadi»).
+
+---
+
+**4. APPLY natijalari (2026-09-04 15:38:05 UTC, egasining tasdig'i bilan).**
+
+Oldshart tekshirildi: `pm2` da `sherset-v2-api` **online**, marshrut
+`POST /api/v1/stock-pieces/flag` **401** qaytardi (mavjud va himoyalangan).
+
+```
+Token: Admin User (admin@demo.local)
+OK   Azia Avvg 3x25 1X16        pieceTracked=false · qaror muhri 2026-09-04T15:38:05.354Z
+OK   Vayr vvg 3x1.5             pieceTracked=false · qaror muhri 2026-09-04T15:38:05.414Z
+OK   Uz vvgng  5x25             pieceTracked=false · qaror muhri 2026-09-04T15:38:05.442Z
+OK   Azia Avvg 3x50 1X25        pieceTracked=false · qaror muhri 2026-09-04T15:38:05.475Z
+OK   Uz kg 1x25 1               pieceTracked=false · qaror muhri 2026-09-04T15:38:05.520Z
+OK   Vesta ramka 2X             pieceTracked=false · qaror muhri 2026-09-04T15:38:05.545Z
+```
+
+Oltala `POST` ham 2xx — birortasi ham 4xx/5xx olmadi.
+
+**Mustaqil tekshiruv (amaldan keyin, alohida yugurish):**
+
+| O'lchov | Natija |
+|---|---|
+| `piece_tracked = true` soni | **0** («yo'q — bayroq hech qayerda yoqilmagan») |
+| `stock_pieces` | **0 qator · faol 0** (o'zgarmadi) |
+| `warehouse-state.ts` (serverdagi versiya) | **EXIT=0** · split «bajarilgan» (mos **1456**, mos emas 0) · **POS yeta olmaydigan qoldiq 0** · «✅ Reyestrga MOS» |
+
+⚠️ **Halol qayd:** `warehouse-state` ning JAMI qoldig'i J1 dagidan farq qiladi
+(50 469 774,884557 → **50 514 463,784557**; yacheykalarda 506 634,6 →
+506 563,6). Bu **bizning ishimiz emas** — oradan bir kunlik jonli savdo o'tdi.
+Bizning amalimiz qoldiqqa tega olmasligining dalili qoldiq raqamida emas,
+**marshrut kodida** (`setFlag` faqat `product.update` qiladi) va **qo'riqchi
+testida** (skriptda yozadigan Prisma chaqirig'i yo'qligi mexanik tekshiriladi).
+
+---
+
+**5. 🔴 IKKI O'LCHOV REJADAGIDAN FARQ QILDI.**
+
+**(a) Metrli tovar — 632 emas, 634; tiriklari esa 547.**
+J-reja §1 «birligi «м» tovarlar — **632 ta**» deb yozadi. Bugungi o'lchov:
+**547 tirik + 87 o'chirilgan = 634**. Ya'ni rejadagi son `deleted_at` filtri
+BO'LMAGAN so'rovdan olingan. Skript «м/m» bilan boshlanadigan, lekin metr deb
+TANILMAGAN birliklarni ham alohida sanadi — **bittasi ham yo'q**, ya'ni farq
+`isMeterUom` ning tor ro'yxatidan emas, aynan o'chirilgan tovarlardan.
+
+> **Nima o'zgaradi:** pilot va **J6 ning «hal qilinmagan» navbati faqat 547
+> tirik tovarga** tegishli — 629 emas. J6 ni bajaradigan agent o'z sonini
+> QAYTA o'lchasin (bugun o'lchanmadi: J6 ning ro'yxati `decidedAt IS NULL`
+> shartiga ham qaraydi).
+
+**(b) Kabel doirasi — 73 emas, 94.**
+J1 papka bo'yicha 73 ta deb o'lchagan (Uz 35 · Vayr 23 · Azia 15) va bu
+**AYNAN tasdiqlandi**. Lekin nomida «kabel» bo'lgan, papkasi boshqa tovarlar
+ham bor — ular ilgari sanalmagan:
+
+| Papka | Tovar | Manbasi 1 | 30 kunda sotilgan | Jami qoldiq |
+|---|---|---|---|---|
+| Uz kabel | 35 | 33 | 23 | 454 100,885 |
+| Vayr kabel | 23 | 23 | 8 | 222 284,5 |
+| **(papkasiz)** | **20** | 19 | 11 | 213 016,3 |
+| Azia kabel | 15 | 14 | 13 | 397 184,2 |
+| Andijon | 1 | 1 | 0 | 11 000 |
+| **JAMI** | **94** | **90** | **55** | — |
+
+🟢 **90 tasi kiritilishi mumkin** (manbasi aynan 1 va qoldig'i bor) — ya'ni
+7.1 istisnosi kabel qatlamida deyarli hech kimni to'smaydi. Sababi J-reja
+§1 da yozilgan: metrli qoldiqning deyarli hammasi «Taqsimlanmagan» hovuzida,
+yacheykasiz ⇒ har tovarda bitta psevdo-manba.
+
+---
+
+**6. PILOT NOMZODLARI — o'lchov (eng ko'p sotilgan 15 tasi).**
+
+Saralash: 30 kunda nechta CHEKda sotilgani (J2 mezoni «eng ko'p
+sotiladigan»). Hammasining manbasi **1**, ya'ni hammasi kiritilishi mumkin.
+
+| # | Tovar | Papka | Qoldiq | Eng katta manba | 30k chek | 30k miqdor |
+|---|---|---|---|---|---|---|
+| 1 | Uz apunp 2x4 | Uz kabel | 5 854,5 | 5 854,5 | **54** | 6 220,5 |
+| 2 | Uz punp 2x2.5 | Uz kabel | 9 068 | 9 068 | **51** | 4 432 |
+| 3 | Uz apunp 2x2.5 | Uz kabel | 101 858 | 101 858 | **42** | 13 705 |
+| 4 | Uz punp 2x1.5 | Uz kabel | 9 588 | 9 588 | **38** | 3 662 |
+| 5 | Skoba kabEl 2*2.5 | (papkasiz) | 10 954,5 | 10 954,5 | **38** | 1 545,5 |
+| 6 | Uz pugnp 2x1 | Uz kabel | 10 276 | 10 276 | **37** | 3 724 |
+| 7 | Azia apunp 2x6 | Azia kabel | 7 632 | 7 632 | **35** | 3 397 |
+| 8 | Azia pugnp 2x1.5 | Azia kabel | 103 796 | 103 796 | **33** | 12 707 |
+| 9 | Azia pugnp 2x2.5 | Azia kabel | 2 065,7 | 2 065,7 | **27** | 8 934,3 |
+| 10 | Azia apunp 2x4 | Azia kabel | 103 526 | 103 526 | **27** | 7 474 |
+| 11 | Azia apunp 2x2.5 | Azia kabel | 4 850 | 4 850 | **22** | 6 150 |
+| 12 | Uz apunp 2x10 | Uz kabel | 10 382 | 10 382 | **22** | 618 |
+| 13 | Uz pugnp 3x2.5 | Uz kabel | 9 064 | 9 064 | **21** | 1 936 |
+| 14 | Azia pugnp 2x4 | Azia kabel | 9 777,5 | 9 777,5 | **20** | 1 222,5 |
+| 15 | Uz pvs 2x2.5 | Uz kabel | 11 534 | 11 534 | **19** | 466 |
+
+⚠️ **Bu jadval TAVSIYA EMAS, O'LCHOV.** J2 vazifa 4 uch mezonni qo'yadi:
+«eng ko'p sotiladigan» (jadvaldagi ustun), «manbasi bitta» (hammasi ✔) va
+**«omborchi jismonan sanay oladigan»** — uchinchisini skript o'lchay olmaydi
+va aynan u J3 ning ish hajmini belgilaydi (masalan `Azia pugnp 2x1.5` ning
+103 796 m i necha rulon? Uni bir kunda sanab bo'ladimi?). Shuning uchun
+**tanlov egasiniki**.
+
+🔴 **Ogohlantirish (J-reja 3.3 ning ayni o'zi):** 3, 8, 10-qatorlardagi
+~100 000 m lik qoldiqlar va 4-, 6-, 12–15-qatorlardagi «yumaloq» 9 000–11 500
+sonlar jismoniy sanoq bilan tasdiqlanmagan. Pilotga aynan shular kiritilsa
+J3 ning birinchi kuni katta farq chiqishi kutiladi — bu **topilma**, nosozlik
+emas (J-S5 shu haqda).
+
+---
+
+**7. TANLANGAN PILOT RO'YXATI — ⏳ KUTILMOQDA**
+
+| # | Tovar | Kim tanladi | Sana |
+|---|---|---|---|
+| — | *(egasi hali tanlamadi)* | — | — |
+
+🔴 **J3 shu jadval to'lmaguncha boshlanmaydi.** To'lgach: shu hisobotning
+holati ✅ TUGADI ga o'zgaradi va `docs/ops/jonli-holat.md` ga ro'yxat qatori
+qo'shiladi.
+
+---
+
+**8. Testlar / darvozalar.**
+
+| Gate | Natija |
+|---|---|
+| Yangi `j2-pilot-audit-core.test.ts` | **20** ✅ |
+| Yangi `j2-pilot-audit-guard.test.ts` | **11** ✅ |
+| `apps/api/src/scripts/` to'plami | 14 fayl · **354 test** ✅ (J1 da 323 edi) |
+| `tsc --noEmit` — `apps/api` | ✅ 0 xato |
+| biome (tegilgan 4 fayl) | ✅ 0 **error** (mavjud `noConsole` OGOHLANTIRISHLARI CLI skriptlarida avvaldan bor) |
+| Fayl kodlashi (2026-09-01 hodisasi qo'riqchisi) | 4 fayl ham **UTF-8, BOM yo'q, mojibake yo'q** |
+
+---
+
+**9. Qabul mezoni — bandma-band (qoida 11).**
+
+| # | Mezon | Holat |
+|---|---|---|
+| 1 | Jonlida `piece_tracked = true` tovarlar soni **0** | ✔ **o'lchandi** (amaldan keyin alohida yugurish, «bashorat» emas) |
+| 2 | Audit skripti pilot nomzodlarini **manba soni bilan** ko'rsatgan | ✔ 94 qator, har birida manba soni + eng katta manba + 30 kunlik savdo |
+| 3 | Egasi **5–8 tovarlik ro'yxatni tasdiqlagan** (ism + sana hisobotda) | ✘ **BAJARILMAGAN** — 7-band bo'sh |
+
+**Uchtadan ikkitasi ⇒ J2 «QISMAN».**
+
+---
+
+**10. Qaytarish yo'li (qoida 12).**
+
+- **Jonli o'zgarish:** har tovarda bitta tugma — tovar kartochkasidagi «Bo'lak
+  hisobi yuritilsin» (yoki `POST /stock-pieces/flag` `pieceTracked: true`).
+  Migratsiya ham, deploy ham, skript ham kerak emas. Reyestr bo'sh bo'lgani
+  uchun qaytarish hech qanday ma'lumotni tiklashni talab qilmaydi.
+- **Kod:** `git revert <commit>` — repoga faqat yangi fayllar qo'shildi,
+  mavjud birorta fayl o'zgartirilmadi.
+
+**Qoida 14:** VPS'da yozilgan skript YO'Q — ikkita fayl repodagi (commit
+qilingan) nusxalari edi va yugurishdan keyin katalog bilan birga o'chirildi.
+
+**Qoida 13 (uchma-uch smoke):** J2 kassa xulqini KENGAYTIRDI (bo'lish qayta
+yoqildi), ya'ni yangi rad etish sinfi ochmadi ⇒ to'liq smoke QO'LLANMAYDI.
+Uning o'rniga `warehouse-state.ts` qo'riqchisi yuritildi (EXIT=0, POS yeta
+olmaydigan qoldiq 0). To'liq smoke — J4 ning ishi.
+
+---
+
+**11. Ochiq qolganlar / keyingi fazalarga.**
+
+- 🔴 **EGASIGA:** pilot ro'yxati (5–8 tovar) — 7-band. **J3 ni bloklaydi.**
+- 🟢 **J-S1 YOPILDI (egasi, 2026-09-04):** `Vesta ramka 2X` da bayroq **xato**
+  qo'yilgan edi. Bayroq o'chirildi, §6 yangilandi.
+- ⚠️ **Qaror muhri semantikasi** (1-banddagi «ONGLI CHEGARA»): DB'da beshala
+  kabel «bo'lak hisobi kerak emas» deb turibdi, holbuki niyat «vaqtincha».
+  J4 buni qaytaradi; oraliqda kimdir `/omborchi/hal-qilinmagan` ekraniga
+  qarasa ularni ko'rmaydi. Agar bu chalkashlik jiddiy bo'lsa — «vaqtincha
+  o'chirildi» holati ALOHIDA ish (K6 ga uchinchi holat qo'shish).
+- ⚠️ **J6 ning soni QAYTA o'lchansin** — 5(a) bandi: 629 emas, tirik metrli
+  tovar 547 (undan ham `decidedAt` to'lganlari ayriladi).
+- ⚠️ **Nomzodlar ro'yxatidagi «(papkasiz) 20 ta»** — `Skoba kabEl 2*2.5`,
+  `Kabel 1x6  qora qizil`, `tv kabel 1700` kabi tovarlar papkasiz. Bular
+  kabel guruhiga tegishlimi yoki katalog tartibsizligimi — pilotga kiritishdan
+  oldin egasi qarasin (`Skoba kabEl` 30 kunda **38 chek** bilan 5-o'rinda).
+- ℹ️ **Jonli VPS holati (yo'l-yo'lakay):** `/var/www/sherset-v2` HEAD
+  J1 dagi `ef99ecb1` dan **`af38fa11`** ga o'zgargan — oradan yana bir deploy
+  o'tgan. Ombor tuzilmasiga ta'siri yo'q (`warehouse-state` EXIT=0).
+- ℹ️ **SSH beqaror:** jonliga ulanish har uchinchi-to'rtinchi urinishda
+  «Software caused connection abort» beradi (fail2ban tezlik chegarasi
+  ko'rinadi). Keyingi fazalar ulanishni takrorlash halqasi bilan qilsin.
+
+---
+
 ### J1 — T1 qarzi: `packages/db` skriptlari bo'lak reyestrini bilsin · ✅ TUGADI · 2026-09-04
 
 **Holat: TUGADI** (qoida 11 — qabul mezonining TO'RTALA bandi ham bajarildi).
@@ -753,8 +1067,9 @@ o'zgartirmagani uchun QO'LLANMAYDI — smoke J4 ning ishi.
 
 ## 6. OCHIQ SAVOLLAR (egasidan)
 
-- **J-S1:** `Vesta ramka 2X` (birligi «шт») da bayroq ataylab qo'yilganmi?
-  Reja uni **xato** deb hisoblaydi va J2 da o'chiradi.
+- **J-S1 ✅ JAVOB OLINDI (egasi, 2026-09-04):** `Vesta ramka 2X` (birligi
+  «шт») da bayroq **XATO** qo'yilgan edi — ataylab emas. J2 uni o'chirdi
+  (15:38 UTC). Boshqa qadam kerak emas.
 - **J-S2 (= K-S1):** Bir yacheykada bir nechta bo'lak yotadimi, yoki har bo'lak
   alohida o'ringa qo'yiladimi? Jonlida metrli qoldiqning deyarli hammasi
   **yacheykasiz hovuzda** ⇒ amalda savol «bo'lakni omborchi qanday topadi?»

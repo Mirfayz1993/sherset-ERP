@@ -398,6 +398,15 @@ Reja va to'liq retsept: `docs/plans/2026-08-25-kassa-qarzi-undirish-reyestri.md`
 > 0). Ya'ni yig'ish oqimi ADMIN huquqi bilan yuryapti va «oddiy omborchida
 > `/omborchi/kontrol` → 403» assimetriyasi hamon sinalmagan.
 
+| **2026-09-04 15:38 UTC** | 🟢 **J2 — BO'LAK BAYROG'I GIGIENASI: OLTALA `piece_tracked` O'CHIRILDI** (egasining o'sha kundagi tasdig'i bilan). Oldin: `Azia Avvg 3x25 1X16` · `Azia Avvg 3x50 1X25` · `Uz kg 1x25 1` · `Uz vvgng  5x25` · `Vayr vvg 3x1.5` (birligi «м») + `Vesta ramka 2X` (birligi **«шт»** — bayroq XATO qo'yilgan edi; egasi J-S1 ga «yo'q, xato bo'lgan» deb javob berdi). Keyin: **0**. Oltalasining ham `piece_tracked_decided_at` muhri yangilandi (qaror egasi «Admin User»), ya'ni ular «Hal qilinmagan» ro'yxatidan chiqdi. **Reyestr (`stock_pieces`) TEGILMADI — oldin ham, keyin ham 0 qator.** Qoldiqqa, yacheykaga, ombor tuzilmasiga bir bayt ham yozilmadi: yagona tegilgan jadval — `products`. Yo'l-yo'lakay o'lchandi: oltalasining ham manbasi **1 ta** edi ⇒ 7.1 istisnosi hozirgacha birorta chekni yiqitmagan; kabel doirasi **94 tovar** (Uz 35 · Vayr 23 · Azia 15 · papkasiz 20 · Andijon 1), shundan **90 tasi** pilotga kiritilishi mumkin; metrli tovar **634** (547 tirik + 87 o'chirilgan — J-rejadagi «632» o'chirilganlarni ham sanagan edi) | Claude, `ops-j2-piece-pilot-audit.ts --apply` (UI bosadigan `POST /stock-pieces/flag` marshruti, **SQL YO'Q**); DRY oldin yuritilib egasiga ko'rsatildi; skript serverda vaqtinchalik `apps/api/src/scripts-j2/` da yugurtirilib **o'chirildi**; qaytarish — tovar kartochkasidagi bitta tugma (yoki `POST /stock-pieces/flag` `pieceTracked: true`) | — (ombor tuzilmasiga tegmaydi; `warehouse-state.ts` amaldan KEYIN: **EXIT=0**, split «bajarilgan» mos 1456 / mos emas 0, «POS yeta olmaydigan qoldiq **0**», «Reyestrga MOS») |
+
+> **J2 dan keyingi holat (2026-09-04):** jonlida bo'lak hisobi **hech bir
+> tovarda yoqilmagan** va reyestr **bo'sh**. Ya'ni K1…K6 kodi serverda turibdi,
+> lekin kassa xulqi bo'lak hisobisiz — 2026-09-02 dan beri birinchi marta
+> ATAYLAB shunday. Keyingi yoqish **J4** ning ishi va u J3 (reyestrni jismoniy
+> sanoq bilan to'ldirish) tugagandan KEYIN, egasi tanlagan 5–8 tovarda bo'ladi.
+> O'lchov va nomzodlar jadvali: J-rejaning §5 → J2 hisoboti.
+
 > Yangi qator qo'shganda: sana, nima, kim/nima bilan, va reyestr (1-bo'lim JSON +
 > 2-bo'lim jadval) yangilanganini belgilang.
 
