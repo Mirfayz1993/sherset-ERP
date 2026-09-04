@@ -1,6 +1,7 @@
 # Kassa vaqt ishonchliligi — qurilma soatidan qutulish (S-reja)
 
-> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — S1, S2, S3, S4 TUGADI (2026-09-04); qoldi: S5
+> **Yaratilgan:** 2026-09-04 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** S1–S4 TUGADI, S5 **QISMAN**
+> (2026-09-04) — kod tugadi, **jonli smoke egasining deploy qaroriga bog'liq**
 > **Boshlang'ich nuqta:** `yacheyka-inventarizatsiya` branch, HEAD `8e698b11`. Jonli: `erp.sherset.uz`.
 > **Sabab (egasining xabari, 2026-09-04):** «kassada vaqt qurilma vaqti bilan ishlayapti va qurilmada vaqt
 > xato bo'lsa xato ko'rsatmoqda».
@@ -136,7 +137,7 @@ ikki xil bo'lardi»*. Vaqt uchun ham **yagona manba = server**.
 | **S2** | 🔴 Qog'oz: proforma sanasi + chek sanasi `Asia/Tashkent` da | yo'q | 🔴 eng muhim | **TUGADI** |
 | **S3** | «O'tgan vaqt» hisoblari: navbat, qarz kunlari, qoralama vaqti | yo'q | 🟠 xato ko'rsatish | **TUGADI** |
 | **S4** | TZ qotirish — qolgan barcha POS/print formatlari + guard test | yo'q | 🟡 to'liqlik | **TUGADI** |
-| **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | REJA |
+| **S5** | Ogohlantirish chipi + qurilmada NTP (ops) + jonli smoke | yo'q | 🟡 immunitet | **QISMAN** — kod va yo'riqnomalar tayyor, **jonli smoke deploy'ni kutmoqda** |
 
 **Tartib sababi:** S1 — poydevor, usiz qolganlari yo'q. S2 birinchi bo'lib bajariladi, chunki **qog'oz
 mijozning qo'lida qoladi** (eng qimmat xato). S3 — kassirni chalg'itadigan raqamlar. S4 — qolgan
@@ -1022,3 +1023,253 @@ Bu parallel sessiyaning fayli EMAS, shuning uchun `reset --soft` qilinmadi. `app
   sinfi haqida; birlashtirilsa ikkalasining hisoboti ham tushunarsiz bo'lardi.
 - **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda, egasi «chiqar» desa
   chiqariladi.
+
+---
+
+### S5 — Ogohlantirish chipi + qurilma NTP (ops) + jonli smoke · **QISMAN — jonli smoke egasining deploy qaroriga bog'liq** · 2026-09-04
+
+**Commit:** `00dbee83` — `feat(kassa): qurilma soati ogohlantirish chipi + ntp/smoke yo'riqnomalari (S5)`
+
+**🔴 Avval SEQUENCING (buni birinchi hal qildim).** Smoke S1–S5 ning **jonlida** ishlashini
+tekshiradi, lekin S1–S5 **deploy qilinmagan** (§2 qoida 9 — kassa jonli ishlayapti; H-reja
+saboqi). Ya'ni smoke'ni bu sessiyada bajarib bo'lmaydi — bajarilgan deb yozish esa **yolg'on
+hisobot** bo'lardi. Yechim: smoke **stsenariysi** to'liq yozildi (`docs/ops/kassa-vaqt-jonli-smoke.md`
+— kim, qaysi kassa, har qadam, kutilgan natija, orqaga qaytarish, natija jadvali) va faza
+**QISMAN** deb yopildi. Faylning boshida «BAJARILMAGAN — deploy'ni kutmoqda» yozuvi turibdi va
+5-bo'limdagi bo'sh jadval «bajarilmagan» ning ochiq belgisi.
+
+**Nima qilindi** (kod — faqat `apps/web`; `apps/api` ga TEGILMADI)
+
+| Fayl | O'zgarish |
+|---|---|
+| `apps/web/src/lib/clock.ts` | `SKEW_WARN_MS` (2 daqiqa, sabab bilan) + **`clockSkewMeasured()`**. Yangi modul EMAS — mavjud vaqt modulining ichki holati oshkor qilindi (S4 dagi `posTimeDigits` naqshi). |
+| `apps/web/src/components/pos/pos-header.tsx` | `useMinuteClock` → `useServerMinuteClock` (soat + skew BITTA pulsdan) va yangi `ClockSkewChip`. |
+| `apps/web/src/messages/uz.json` · `ru.json` | +5 kalit har biriga (`header_clock_skew_ahead/behind/hours/minutes`, `header_clock_unverified`). |
+| `apps/web/src/lib/clock.test.ts` | +6 test. |
+| `apps/web/src/components/pos/__tests__/pos-header.test.tsx` | +8 test. |
+| `docs/ops/kassa-vaqt-ntp.md` | **YANGI** — NTP ops yo'riqnomasi (admin PowerShell, tekshiruv, muammolar, kassalar reyestri). |
+| `docs/ops/kassa-vaqt-jonli-smoke.md` | **YANGI** — jonli smoke stsenariysi (bajarilmagan, deploy'dan keyin). |
+
+**🔴 YANGI INTERVAL OCHILMADI.** Chip mavjud `useServerClock(30_000)` tick'iga minadi:
+`clockSkewMs()` sof funksiya (reaktiv emas), shuning uchun u **o'sha tick paytida** o'qiladi.
+Diffda birorta yangi `setInterval`/`setTimeout` yo'q; header'da `useServerClock` chaqiruvi
+avvalgidek **bitta**. Amaliy natija: soat siljisa chip eng ko'p 30 s ichida chiqadi.
+
+---
+
+**Chip qarorlari — har biri va SABABI**
+
+**1. Yo'nalish KO'RSATILADI** («~5 daqiqa **orqada**» / «**oldinda**», «~5 daqiqa xato» EMAS).
+Sabab: yozuvni o'qigan odamning keyingi harakati — soatni **tuzatish**, ya'ni qaysi tomonga
+surishni bilishi shart; «xato» esa yana bitta savol tug'diradi va odam Windows soatini taxmin
+bilan surib, holatni **battar** qilishi mumkin. Ustiga yo'nalish + kattalik birgalikda
+**diagnoz** beradi: «~5 soat oldinda» — deyarli har doim mintaqa noto'g'ri qo'yilib, kimdir
+devor-soatini qo'lda «to'g'rilagani» belgisi (yo'riqnomaning §3.3 bandi shu haqda).
+
+**2. Kattalik 60 daqiqadan oshsa SOATLARDA yoziladi** («~3 soat», «~180 daqiqa» EMAS).
+Sabab: 180 daqiqa o'qilmaydi va mintaqa/RTC nosozligining belgisini yashiradi. Ikkala kalit ham
+**statik** (`t('…_minutes')` / `t('…_hours')` ternar ichida) — dinamik kalit i18n gate'ning
+skaneriga ko'rinmaydi, ya'ni bu qaror gate qamrovini kamaytirmaydi.
+
+**3. O'LCHANMAGAN holat — alohida, NEYTRAL ko'rinish.** Bu S5 ning eng nozik qarori.
+`clockSkewMs()` hech qachon serverga ulanmagan mashinada ham `0` qaytaradi, ya'ni «chegara
+ostida = jim» qoidasi uni **«hammasi joyida»** qilib ko'rsatardi — aynan **yolg'on yashil**.
+Shuning uchun `clock.ts` ga `clockSkewMeasured()` qo'shildi va chip uch holatli bo'ldi:
+
+| Holat | Ko'rinish | Nega |
+|---|---|---|
+| mount'gacha (`useServerClock` → `null`) | **hech nima** | S1/S3 tamoyili: soxta qiymat chizilmaydi (soat matni ham shu kadrda bo'sh) |
+| o'lchanmagan (serverga hech ulanmagan) | neytral «Vaqt tekshirilmadi» (`bg-white/15`) | jim turish «soat ishonchli» degan **yolg'on** da'vo bo'lardi |
+| `\|skew\| ≤ 2 daq` | hech nima | soat ishonchli — shovqin qilinmaydi |
+| `\|skew\| > 2 daq` | sariq ogohlantirish, yo'nalishi bilan | odam aralashuvi kerak |
+
+Amalda «o'lchanmagan» holat deyarli uchramaydi: POS header'i sessiya yuklangandan keyin
+chiziladi, ya'ni kamida bitta HTTP javob (va uning `Date` sarlavhasi) allaqachon bo'lgan;
+qayta yuklashda esa skew `localStorage` dan tiklanadi (S1) va u ham «o'lchangan» hisoblanadi.
+Ya'ni bu neytral yozuv shovqin emas — u faqat **serverni umuman ko'rmagan** mashinada chiqadi,
+o'sha paytda yonida qizil «aloqa yo'q» indikatori ham turadi (bir voqeaning ikki tomoni).
+
+🔴 Shu qaror `clock.ts` ichida **jitter filtridan OLDIN** `measured = true` qo'yishni talab
+qildi: soati **ideal** mashinada birinchi o'lchov `next ≈ 0` bo'ladi va filtr uni yozmaydi —
+bayroq keyin qo'yilsa, to'g'ri soatli kassa **abadiy** «tekshirilmadi» chipi bilan yurardi.
+Bu tuzoq testga qulflandi (pastda, anti-vacuity jadvalining oxirgi qatori).
+
+**4. 2 daqiqa chegarasi — `lib/clock.ts` da, `MIN_UPDATE_MS` bilan YONMA-YON.** Sabab: ikkala
+chegara ham skew semantikasiga tegishli va bir-biriga bog'liq — jitter (~1,5 s) shovqin deb
+tashlanadi, ogohlantirish esa undan **80 barobar** kattaroqda boshlanadi, ya'ni chip `Date`
+sarlavhasining sekundlik yaxlitlanishidan yoki tarmoq kechikishidan **hech qachon** yonmaydi.
+Ular bir faylda tursa bu munosabat ko'rinib turadi; chegara komponentga yashirilsa — yo'q.
+Nega aynan 2 daqiqa: chek va smena hisobotlari daqiqa aniqligida o'qiladi, undan kichik farq
+qog'ozda ham, ekranda ham ko'rinmaydi (ko'rsatilsa kassir chipga umuman qaramay qo'yardi).
+
+**5. Rang tizimi O'YLAB TOPILMADI:** ogohlantirish — smena-chipning tayyor `stale` uslubi
+(`bg-amber-400 font-semibold text-amber-950`), neytral holat — o'sha chipning «stale emas»
+uslubi (`bg-white/15`). Chip **pul ham, sana ham chizmaydi** (faqat daqiqa/soat soni), ya'ni
+`timeZone`/BCP-47 masalasi umuman tug'ilmadi — `pos-bcp47-guard` va `pos-clock-discipline`
+ikkalasi ham yashil.
+
+---
+
+**NTP bandi bo'yicha xulosa — nega KOD emas, OPS**
+
+O'lchov (rejaning aytganidek qayta tekshirildi, natija **mos keldi**):
+
+| Fayl | Qiymat |
+|---|---|
+| `desktop/package.json` → `build.nsis` | `"perMachine": false` |
+| `desktop/omborchi.builder.json` → `nsis` | `"perMachine": false` |
+
+`perMachine: false` = per-user o'rnatma, UAC so'ralmaydi, o'rnatuvchi **oddiy foydalanuvchi**
+huquqida ishlaydi. `w32tm /config` ham, `sc config w32time` ham administrator talab qiladi —
+demak o'rnatuvchidan chaqirib bo'lmaydi. `perMachine: true` ga o'tkazish **taqiqlangan va
+to'g'ri taqiqlangan**: `apps/web/src/__tests__/kassa-installer-config.test.ts:129` uni qulflab
+turadi va izohida niyati yozilgan (K03 — kassirda admin huquqi yo'q, per-machine o'rnatmada
+har avtoyangilanish UAC so'raydi ⇒ yangilanish amalda hech qachon o'rnatilmasdi).
+
+Qo'shimcha o'lchov (rejada yo'q edi, foydali chiqdi): **loyihada bu toifadagi ish uchun tayyor
+naqsh bor** — `desktop/tools/watchdog/install-watchdog.ps1` qurilmada «BIR MARTA, admin bilan»
+qo'lda yugurtiriladi (`-RunLevel Limited`). NTP sozlash ham aynan shu toifada, shuning uchun
+band **ops yo'riqnomasi** bo'lib rasmiylashtirildi: `docs/ops/kassa-vaqt-ntp.md` — nega
+o'rnatuvchi qila olmaydi, admin PowerShell buyruqlari, **tekshirish qadami**
+(`w32tm /query /status` → `Source` `Local CMOS Clock` BO'LMASIN, `/peers`, `/stripchart`),
+muammolar jadvali va «qaysi kassalarda bajarildi» reyestri (bo'sh — mashinalarga kirish
+egasining qo'lida).
+
+🔴 Yo'riqnomani yozishda **rejadagi buyruqning bir nuqsoni tuzatildi:** reja
+`sc config w32time start=auto` deb yozgan edi; PowerShell'da `sc` — **`Set-Content` ning
+aliasi**, ya'ni bu buyruq vaqt xizmatini sozlamaydi (fayl yozmoqchi bo'ladi). Yo'riqnomada
+`Set-Service w32time -StartupType Automatic` beriladi va tuzoq alohida ogohlantirish bilan
+yozilgan (`sc.exe` va `start= auto` dagi bo'shliq bilan birga).
+
+Yana bir aniqlik yo'riqnomaga kiritildi: **chip mintaqa xatosini KO'RSATMAYDI** — u UTC
+farqini o'lchaydi, mintaqa esa S4 dan keyin POS ko'rinishiga ta'sir qilmaydi. Xavf boshqa
+yoqdan: mintaqasi xato mashinada Windows soati odamga noto'g'ri ko'rinadi va kimdir uni qo'lda
+«to'g'rilaydi» — o'shanda UTC buziladi. Shuning uchun `tzutil /g` alohida qadam.
+
+---
+
+**Yangi testlar soni: 14** (`clock.test.ts` +6 · `pos-header.test.tsx` +8)
+
+**Test natijalari (raqam bilan)**
+
+- `src/lib/clock.test.ts` — **21/21** ✔ (ilgari 15)
+- `src/components/pos/__tests__/pos-header.test.tsx` — **20/20** ✔ (ilgari 12)
+- To'liq S5 doirasi (`src/components/pos` · `src/app/(app)/sotuv` · `src/__tests__` ·
+  `src/lib/clock.test.ts`, `--testTimeout=30000` bilan) —
+  **143 fayl · 2093 o'tdi · 25 o'tkazib yuborildi · 0 yiqildi** ✔
+- Qo'riqchilar alohida ham tekshirildi: `pos-clock-discipline` + `pos-bcp47-guard` +
+  ikkala soat testi — **4 fayl / 76 test** ✔ (chip `new Date()` ishlatmaydi, sana
+  formatlamaydi, qattiq BCP-47 teg qo'shmaydi)
+- `pnpm --filter @moysklad/web typecheck` — **0 xato** ✔
+- `npx biome check` (o'zgargan 6 fayl) — **0 xato, 0 ogohlantirish** ✔ (bir marta
+  formatlash xatosi chiqdi — `renderWithProviders` chaqiruvining o'ralishi — tuzatildi)
+- `pnpm i18n:gate` — **20/20** ✔ (yangi 5 kalit **ru+uz ikkalasida**)
+
+**ANTI-VACUITY — har qaror o'lchandi (yashil test o'z-o'zidan dalil emas)**
+
+Har tuzatish **vaqtincha orqaga qaytarilib** (Edit bilan, `git checkout` EMAS) testning
+qizarishi o'lchandi:
+
+| Vaqtincha qaytarildi | O'lchangan natija |
+|---|---|
+| `clockSkewMeasured() ? … : null` → to'g'ridan-to'g'ri `clockSkewMs()` (**yolg'on yashil** implementatsiyasi) | ✘ qizardi: «Unable to find an element by: `[data-test-id="pos-header-clock-chip"]`» — o'lchanmagan mashinada chip umuman chiqmasdi |
+| Chegara olib tashlandi (`<= SKEW_WARN_MS` → `<= 0`) | ✘ qizardi: «expected document not to contain element, found `<span…`» — chip chegara ostida ham chiqib ketdi |
+| Yo'nalish olib tashlandi (doim «orqada») | ✘ qizardi: `qurilma OLDINDA bo'lsa yo'nalish teskari yoziladi` — matn mos kelmadi |
+| Soat-formati olib tashlandi (doim daqiqa) | ✘ qizardi: `Received: Qurilma vaqti ~180 daqiqa orqada`, `~3 soat` kutilgan |
+| Mount qulfi olib tashlandi (`{clock && …}` → doim chizish) | ✘ qizardi: mount'gacha chip chizilib qoldi |
+| `measured = true` jitter filtridan KEYINGA ko'chirildi | ✘ qizardi: `soati IDEAL mashinada ham TRUE` — `expected false to be true` |
+
+Ya'ni oltita qarorning **har biri** o'z testi bilan qulflangan va test ularsiz qizaradi.
+
+**TZ tuzog'i (S4 eslatmasi).** Bu fazada mintaqa testi kerak **bo'lmadi**: chip sana/vaqt
+formatlamaydi (faqat daqiqa/soat soni), header soatining mintaqasi esa S1 testlari bilan
+allaqachon qulflangan. Shuning uchun `vi.stubEnv('TZ', …)` ishlatilmadi — ishlatilmagani
+uchun «`unstubAllEnvs` o'rnatilmagan `TZ` ni tiklamaydi» tuzog'i ham tug'ilmadi.
+
+**Modul holatini tozalash.** Skew modul darajasida yashaydi, shuning uchun «o'lchanmagan»
+testlari `vi.resetModules()` + dinamik import bilan **toza nusxa** oladi (`clock.test.ts`
+dagi `freshClock()` naqshi); mount'gacha holati esa `vi.doMock('@/hooks/use-server-clock')`
+bilan modellashtiriladi.
+
+**🔴 §2 qoida 3 — YOZMA ISBOT: serverga yangi maydon YUBORILMADI**
+
+`git show --stat 00dbee83` (S5 ning o'z fayllari):
+
+```
+ apps/web/src/components/pos/__tests__/pos-header.test.tsx | 144 +++++++++
+ apps/web/src/components/pos/pos-header.tsx                | 122 ++++++--
+ apps/web/src/lib/clock.test.ts                            |  50 +++
+ apps/web/src/lib/clock.ts                                 |  48 +++-
+ apps/web/src/messages/ru.json                             |   5 +
+ apps/web/src/messages/uz.json                             |   5 +
+ docs/ops/kassa-vaqt-jonli-smoke.md                        | 118 ++++++++
+ docs/ops/kassa-vaqt-ntp.md                                | 166 +++++++++++
+ docs/progress.json                                        |   2 +-
+ 9 files changed, 640 insertions(+), 20 deletions(-)
+```
+
+1. Diffda **`apps/api` YO'Q** — server yozuvlariga tegilmadi.
+2. Bu faza **birorta so'rov qilmaydi**: chip mavjud skew qiymatini O'QIYDI, yangi `GET /time`
+   ham, ping ham, `fetch` ham qo'shilmadi. `api-client.ts` ochilmadi ham.
+3. `desktop/` ga ham TEGILMADI — `perMachine` o'z joyida (`git show --name-only` da
+   `desktop/` yo'q), ya'ni o'rnatish/avtoyangilanish modeli o'zgarmadi.
+4. Commitga kirgan 9-fayl — `docs/progress.json`: uni repo'ning **o'z `pre-commit` hook'i**
+   qo'shadi (`pnpm -s progress && git add docs/progress.json`), o'zgargani `generatedAt`
+   tamg'asi. Parallel sessiyalarning ishi (`apps/api/**`, `android/manager-app/**`,
+   `docs/plans/2026-09-02-menejer-planshet-apk.md`) commitga **KIRMADI** —
+   `git show --name-only HEAD` bilan tekshirildi.
+
+**Qabul mezoni**
+
+- ✔ **`\|skew\| > 2 daqiqa` da sariq chip chiqadi** — test bilan (5 daq, 7 daq, 3 soat).
+- ✔ **Chegara ostida chiqmaydi** — test bilan (90 s va o'lchangan 0).
+- ✔ **O'lchanmagan holat yolg'on yashil BERMAYDI** — neytral chip + test; naive
+  implementatsiya o'lchovda qizardi.
+- ✔ **Yangi interval/so'rov/vaqt manbasi YO'Q** — diffda `setInterval` ham, `fetch` ham yo'q;
+  chip mavjud 30 s pulsdan o'qiydi.
+- ✔ **i18n ru+uz** — 5 kalit ikkala faylda, `pnpm i18n:gate` 20/20, ru ko'rinishi alohida
+  test bilan qulflangan.
+- ✔ **NTP bandi hujjatlashtirildi** — `docs/ops/kassa-vaqt-ntp.md`; `perMachine`
+  TEGILMADI, o'lchov rejaning natijasi bilan mos chiqdi.
+- ✘ **Jonli smoke BAJARILMADI** — deploy qilinmagani uchun bajarib bo'lmaydi (§2 qoida 9).
+  Stsenariy tayyor (`docs/ops/kassa-vaqt-jonli-smoke.md`), natija jadvali bo'sh. Shu band
+  sababli faza **QISMAN**.
+- ✘ **NTP hech bir kassada BAJARILMADI** — mashinalarga admin bilan kirish egasining qo'lida;
+  yo'riqnomadagi reyestr bo'sh.
+
+**«Bu o'zgarish qaysi mavjud oqimni buzishi mumkin?»**
+
+1. **Header'ga yangi element qo'shildi** — o'ng blokda joy oladi. Chip **faqat nosoz** yoki
+   **o'lchanmagan** holatda chiziladi, ya'ni sog'lom kassada header **aynan avvalgidek**
+   ko'rinadi (mavjud 12 ta header testi o'zgarishsiz yashil qoldi). Nosoz holatda kichik
+   yozuv qo'shiladi; `children` sloti va `WindowControls` o'z joyida.
+2. **`clock.ts` ga yangi holat (`measured`) qo'shildi.** U `skewMs` ga, `serverNow()` ga va
+   `noteServerDate` ning birorta shoxiga ta'sir qilmaydi — faqat **yoziladi**. S1 ning 15
+   testi o'zgartirilmasdan yashil qoldi, ya'ni vaqt hisobi o'zgarmadi.
+3. **`useMinuteClock` → `useServerMinuteClock` nomlandi va obyekt qaytaradi.** U faylning
+   ichki funksiyasi (eksport qilinmagan), tashqi chaqiruvchi yo'q. Hook tartibi o'zgarmadi:
+   `useBcp47()` va `useServerClock()` erta `return` dan OLDIN chaqiriladi.
+4. **Kassirga yangi xabar ko'rinadi.** Bu fazaning maqsadi, lekin amaliy oqibati bor: chip
+   chiqqan kassada odam «dastur buzildimi?» deb o'ylashi mumkin. Shuning uchun matn ayblovni
+   aniq manzilga qo'yadi — **qurilma vaqti**, dastur emas; hisobot/chek esa baribir to'g'ri
+   (S1–S4).
+5. **Yolg'on ogohlantirish xavfi** — chegara jitterdan 80 barobar katta, `Age` sarlavhali
+   keshlangan javob skew'ni yangilamaydi (S1), ya'ni chip tarmoq kechikishidan yonmaydi.
+6. **`desktop/` va o'rnatish modeli** — tegilmadi (NTP ops bo'lib qoldi), ya'ni
+   avtoyangilanish oqimi xavf ostida emas.
+
+**Ochiq qolganlar**
+
+- 🔴 **Jonli smoke** — `docs/ops/kassa-vaqt-jonli-smoke.md` bo'yicha, **deploy'dan keyin**.
+  Natija o'sha faylning 5-bo'limiga va shu hisobotga yoziladi.
+- 🔴 **NTP kassalarda bajarilishi** — `docs/ops/kassa-vaqt-ntp.md` reyestri to'ldirilsin.
+- **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda (`00dbee83`),
+  egasi «chiqar» desa chiqariladi. S1–S5 bir deploy bilan chiqadi.
+- NTP qadamini `install-watchdog.ps1` naqshida **skriptga** aylantirish mumkin
+  (`desktop/tools/` ga `install-ntp.ps1`, extraResources bilan yetkaziladi) — bu artefakt
+  tarkibini o'zgartiradi (`check-build-assets.js` va installer testlari), shuning uchun S5
+  doirasidan tashqarida qoldirildi. Kerak bo'lsa alohida kichik faza.
+- Chip faqat POS header'ida. Omborchi/TSD qobiqlari va ERP ning boshqa sahifalari qurilma
+  soatini ko'rsatishda davom etadi — S-reja ataylab **kassa** doirasi bilan chegaralangan.
+- `pos-clock-discipline` qo'riqchisi `desktop/main.js` ni qamramaydi (S4 ochiq bandi) —
+  o'zgarmadi.
