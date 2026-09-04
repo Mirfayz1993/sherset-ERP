@@ -526,4 +526,171 @@ describe('HrTaskSendService.listLogs', () => {
     expect(findArgs.where.templateId).toBe('tpl-1');
     expect(findArgs.where.sentAt).toEqual({ gte: dateFrom, lte: dateTo });
   });
+
+  // ── X3 REGRESS: qamrov query-param bilan bosib o'tilmaydi ────────────────
+  //
+  // Nuqson (X-reja X3.1): `if (filter.employeeId) where.employeeId = ...`
+  // qatori `scopeEmployeeId` dan KEYIN turardi, ya'ni o'ziga bog'langan
+  // chaqiruvchi ham bitta parametr bilan O'ZGA xodimning vazifalarini
+  // so'rab olardi. Bu uch test o'sha qatorni qaytib kelishidan qo'riqlaydi.
+
+  it("🔴 qamrov qo'yilgan bo'lsa ?employeeId= E'TIBORSIZ — o'zga xodim so'rab bo'lmaydi", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listLogs('acc1', 'emp-1', {
+      page: 1,
+      limit: 50,
+      employeeId: 'emp-BOSHQA',
+    });
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    expect(findArgs.where.employeeId).toBe('emp-1');
+    expect(findArgs.where.employeeId).not.toBe('emp-BOSHQA');
+  });
+
+  it("🔴 hisob (count) ham AYNI where bilan — jami boshqa xodimniki bo'lib qolmasin", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listLogs('acc1', 'emp-1', {
+      page: 1,
+      limit: 50,
+      employeeId: 'emp-BOSHQA',
+    });
+    const countArgs = prisma.client.hrTaskLog.count.mock.calls[0]![0];
+    expect(countArgs.where.employeeId).toBe('emp-1');
+  });
+
+  it("🔴 qamrovli where'da FAQAT accountId+employeeId (kalitlar qat'iy)", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listLogs('acc1', 'emp-1', {
+      page: 1,
+      limit: 50,
+      employeeId: 'emp-BOSHQA',
+    });
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    // `OR`/`in` kabi qamrovni kengaytiradigan kalit qo'shilsa test yiqiladi.
+    expect(Object.keys(findArgs.where).sort()).toEqual(['accountId', 'employeeId']);
+  });
+
+  it('qamrovsiz (admin) chaqiruvda ?employeeId= HAMON ishlaydi — menejer ekrani buzilmaydi', async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listLogs('acc1', null, { page: 1, limit: 50, employeeId: 'emp-7' });
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    expect(findArgs.where).toEqual({ accountId: 'acc1', employeeId: 'emp-7' });
+  });
+});
+
+describe('HrTaskSendService.listMyTasks — «Ishlarim» (X3)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let events: ReturnType<typeof makeEvents>;
+  let svc: HrTaskSendService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    events = makeEvents();
+    // biome-ignore lint/suspicious/noExplicitAny: test wiring
+    svc = new HrTaskSendService(prisma as any, events as any);
+  });
+
+  const NOW = new Date('2026-09-04T10:00:00.000Z');
+
+  function row(over: Record<string, unknown> = {}) {
+    return {
+      id: 'log-1',
+      templateId: 'tpl-1',
+      status: 'sent',
+      responseText: null,
+      sentAt: new Date('2026-09-04T09:00:00.000Z'),
+      answeredAt: null,
+      reviewedAt: null,
+      reviewComment: null,
+      failReason: null,
+      template: {
+        title: 'Kassa yopildimi?',
+        description: 'Kun oxirida tekshir',
+        priority: 'medium',
+        responseType: 'yes_no',
+        deadlineMinutes: 30,
+      },
+      ...over,
+    };
+  }
+
+  it("🔴 where'da FAQAT accountId + berilgan employeeId (kalitlar qat'iy)", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    expect(Object.keys(findArgs.where).sort()).toEqual(['accountId', 'employeeId']);
+    expect(findArgs.where).toEqual({ accountId: 'acc1', employeeId: 'emp-1' });
+  });
+
+  it("🔴 boshqa akkaunt xodimi so'ralsa ham where akkauntga bog'liq qolaveradi", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    const countArgs = prisma.client.hrTaskLog.count.mock.calls[0]![0];
+    expect(countArgs.where.accountId).toBe('acc1');
+    expect(countArgs.where.employeeId).toBe('emp-1');
+  });
+
+  it("status filtri qo'llanadi, limit `take` ga tushadi", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listMyTasks('acc1', 'emp-1', { limit: 10, status: 'sent' }, NOW);
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    expect(findArgs.where.status).toBe('sent');
+    expect(findArgs.take).toBe(10);
+    expect(findArgs.orderBy).toEqual({ sentAt: 'desc' });
+  });
+
+  it("javobda BOSHQA xodim maydonlari yo'q — select xodim/tekshiruvchi ismini so'ramaydi", async () => {
+    prisma.client.$transaction.mockResolvedValue([[], 0]);
+    await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    const findArgs = prisma.client.hrTaskLog.findMany.mock.calls[0]![0];
+    expect(findArgs.include).toBeUndefined();
+    expect(findArgs.select.employee).toBeUndefined();
+    expect(findArgs.select.reviewedBy).toBeUndefined();
+    // Mukofot/jarima summasi ham chiqmaydi.
+    expect(findArgs.select.template.select.rewardMinor).toBeUndefined();
+    expect(findArgs.select.template.select.fineMinor).toBeUndefined();
+  });
+
+  it('muddat = sentAt + deadlineMinutes', async () => {
+    prisma.client.$transaction.mockResolvedValue([[row()], 1]);
+    const r = await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    expect(r.rows[0]!.deadlineAt).toEqual(new Date('2026-09-04T09:30:00.000Z'));
+    expect(r.total).toBe(1);
+  });
+
+  it('🔴 muddat belgilanmagan shablonda deadlineAt = null (0 EMAS) va overdue = false', async () => {
+    prisma.client.$transaction.mockResolvedValue([
+      [row({ template: { ...row().template, deadlineMinutes: null } })],
+      1,
+    ]);
+    const r = await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    expect(r.rows[0]!.deadlineAt).toBeNull();
+    expect(r.rows[0]!.overdue).toBe(false);
+  });
+
+  it("muddati o'tgan va hamon javob kutayotgan vazifa overdue", async () => {
+    prisma.client.$transaction.mockResolvedValue([[row()], 1]);
+    const r = await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    // sentAt 09:00 + 30 daq = 09:30 < NOW 10:00
+    expect(r.rows[0]!.overdue).toBe(true);
+    expect(r.rows[0]!.needsAnswer).toBe(true);
+  });
+
+  it("javob berilgan vazifa muddati o'tgan bo'lsa ham qizarmaydi (overdue false)", async () => {
+    prisma.client.$transaction.mockResolvedValue([
+      [row({ status: 'answered_yes', answeredAt: new Date('2026-09-04T09:10:00.000Z') })],
+      1,
+    ]);
+    const r = await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    expect(r.rows[0]!.overdue).toBe(false);
+    expect(r.rows[0]!.needsAnswer).toBe(false);
+  });
+
+  it("responseType 'none' — vazifa faqat xabar, javob tugmasi chizilmaydi", async () => {
+    prisma.client.$transaction.mockResolvedValue([
+      [row({ template: { ...row().template, responseType: 'none' } })],
+      1,
+    ]);
+    const r = await svc.listMyTasks('acc1', 'emp-1', { limit: 50 }, NOW);
+    expect(r.rows[0]!.needsAnswer).toBe(false);
+  });
 });

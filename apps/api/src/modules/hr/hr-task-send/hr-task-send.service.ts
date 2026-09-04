@@ -19,6 +19,7 @@ import type {
   DispatchTemplateInput,
   HrTaskLogStatus,
   ListLogsFilter,
+  MyTasksQuery,
 } from './hr-task-send.schema.js';
 
 interface DispatchOptions {
@@ -320,11 +321,28 @@ export class HrTaskSendService {
     this.events.emit(HR_EVENT.HR_TASK_LOG_FINALIZED, payload);
   }
 
+  /**
+   * Vazifa jurnali.
+   *
+   * 🔴 `scopeEmployeeId` — QAT'IY SHIFT (X3 tuzatishi). Chaqiruvchi qamrov
+   * bergan bo'lsa (ya'ni «bu odam FAQAT o'zinikini ko'radi» degan bo'lsa),
+   * so'rovdagi `?employeeId=` HECH QACHON uni qayta yozmaydi.
+   *
+   * Ilgari uch qator shu tartibda turardi:
+   *   `if (scopeEmployeeId) where.employeeId = scopeEmployeeId;`
+   *   … `if (filter.employeeId) where.employeeId = filter.employeeId;`
+   * — ikkinchisi birinchisini bosib ketardi, ya'ni o'ziga bog'langan
+   * chaqiruvchi ham bitta query-param bilan O'ZGA xodimning vazifalarini
+   * so'rab olardi. Endi param FAQAT qamrovsiz (`null`) chaqiruvda ishlaydi;
+   * o'zgani so'rash huquqi kontrollerda, ruxsat darajasi bo'yicha beriladi
+   * (X-reja 0-bo'lim 7-qoidasi).
+   */
   async listLogs(accountId: string, scopeEmployeeId: string | null, filter: ListLogsFilter) {
     const where: Record<string, unknown> = { accountId };
     if (scopeEmployeeId) where.employeeId = scopeEmployeeId;
     if (filter.templateId) where.templateId = filter.templateId;
-    if (filter.employeeId) where.employeeId = filter.employeeId;
+    // Qamrov qo'yilgan bo'lsa param E'TIBORSIZ — 403 emas, jimgina o'ziniki.
+    if (!scopeEmployeeId && filter.employeeId) where.employeeId = filter.employeeId;
     if (filter.status) where.status = filter.status;
     if (filter.dateFrom || filter.dateTo) {
       where.sentAt = {
@@ -347,6 +365,88 @@ export class HrTaskSendService {
       this.prisma.client.hrTaskLog.count({ where }),
     ]);
     return { rows, total, page: filter.page, limit: filter.limit };
+  }
+
+  /**
+   * «Ishlarim» — xodimning O'Z vazifalari (`GET /hr/tasks/my`, X3).
+   *
+   * `employeeId` MAJBURIY parametr va kontrollerda FAQAT `user.sub` dan
+   * beriladi — bu yerda qamrovni bo'shatadigan yo'l YO'Q (`listLogs` dan
+   * ataylab ajratilgan: u menejer jurnali, bu esa own-only ekran).
+   *
+   * Javob ekran uchun tayyorlangan: shablon matni, muddat, holat. Xodimga
+   * KERAKSIZ maydonlar (mukofot/jarima summasi, tekshiruvchi kim ekani)
+   * ATAYLAB yuborilmaydi.
+   *
+   * 🔴 Halol raqamlar (X-reja 8-qoidasi): shablonda muddat belgilanmagan
+   * bo'lsa `deadlineAt = null` («muddatsiz»), 0 yoki `sentAt` EMAS.
+   */
+  async listMyTasks(
+    accountId: string,
+    employeeId: string,
+    query: MyTasksQuery,
+    now: Date = new Date(),
+  ) {
+    const where: Record<string, unknown> = { accountId, employeeId };
+    if (query.status) where.status = query.status;
+
+    const [rows, total] = await this.prisma.client.$transaction([
+      this.prisma.client.hrTaskLog.findMany({
+        where,
+        orderBy: { sentAt: 'desc' },
+        take: query.limit,
+        select: {
+          id: true,
+          templateId: true,
+          status: true,
+          responseText: true,
+          sentAt: true,
+          answeredAt: true,
+          reviewedAt: true,
+          reviewComment: true,
+          failReason: true,
+          template: {
+            select: {
+              title: true,
+              description: true,
+              priority: true,
+              responseType: true,
+              deadlineMinutes: true,
+            },
+          },
+        },
+      }),
+      this.prisma.client.hrTaskLog.count({ where }),
+    ]);
+
+    const nowMs = now.getTime();
+    return {
+      rows: rows.map((r) => {
+        const dl = r.template.deadlineMinutes;
+        const deadlineAt = dl != null && dl > 0 ? new Date(r.sentAt.getTime() + dl * 60_000) : null;
+        return {
+          id: r.id,
+          templateId: r.templateId,
+          title: r.template.title,
+          description: r.template.description,
+          priority: r.template.priority,
+          responseType: r.template.responseType,
+          status: r.status,
+          sentAt: r.sentAt,
+          answeredAt: r.answeredAt,
+          reviewedAt: r.reviewedAt,
+          reviewComment: r.reviewComment,
+          responseText: r.responseText,
+          failReason: r.failReason,
+          deadlineAt,
+          /** Muddati o'tgan va HAMON javob kutmoqda (yopilgan vazifa qizarmaydi). */
+          overdue: deadlineAt !== null && r.status === 'sent' && deadlineAt.getTime() < nowMs,
+          /** Javob tugmalari chizilsinmi — `responseType: 'none'` da vazifa faqat xabar. */
+          needsAnswer: r.status === 'sent' && r.template.responseType !== 'none',
+        };
+      }),
+      total,
+    };
   }
 
   // ─── private helpers ────────────────────────────────────────────────────

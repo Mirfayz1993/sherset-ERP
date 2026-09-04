@@ -82,6 +82,35 @@
     <string name="att_day_absent">Kelmadi</string>
     <string name="att_day_off">Dam</string>
 
+    <!-- Ishlarim (X3) — xodimning O\'Z vazifalari -->
+    <string name="task_filter_new">Javob kutmoqda</string>
+    <string name="task_filter_all">Hammasi</string>
+    <string name="task_empty_new">Javob kutayotgan vazifa yo\'q</string>
+    <string name="task_empty_all">Sizga vazifa berilmagan</string>
+    <string name="task_sent_at">Berilgan</string>
+    <string name="task_deadline">Muddat</string>
+    <string name="task_no_deadline">Muddatsiz</string>
+    <string name="task_answered_at">Javob berilgan</string>
+    <string name="task_my_answer">Javobingiz</string>
+    <string name="task_review_comment">Tekshiruvchi izohi</string>
+    <string name="task_urgent">Shoshilinch</string>
+    <string name="task_overdue">Muddati o\'tdi — javob kutilmoqda</string>
+    <string name="task_status_new">Yangi</string>
+    <string name="task_status_pending">Tekshiruvda</string>
+    <string name="task_status_ok">Qabul qilindi</string>
+    <string name="task_status_bad">Rad etildi</string>
+    <string name="task_status_failed">Yuborilmadi</string>
+    <string name="task_answer_yes">Ha</string>
+    <string name="task_answer_no">Yo\'q</string>
+    <string name="task_answer_open">Javob yozish</string>
+    <string name="task_answer_hint">Javobingiz</string>
+    <string name="task_answer_send">Yuborish</string>
+    <string name="task_answer_sending">Yuborilmoqda…</string>
+    <string name="task_answer_cancel">Bekor qilish</string>
+    <string name="task_answer_sent">Javobingiz yuborildi</string>
+    <string name="task_answer_forbidden">Bu vazifa sizniki emas</string>
+    <string name="task_answer_stale">Bu vazifaga allaqachon javob berilgan</string>
+
     <!-- Joylashuv — FAQAT «Keldim»/«Ketyapman» bosilganda so\'raladi -->
     <string name="loc_denied">Joylashuv ruxsati berilmadi — «Keldim» ishlamaydi</string>
     <string name="loc_disabled">GPS o\'chiq — qurilma sozlamalaridan yoqing</string>

@@ -30,6 +30,20 @@ export const HR_TASK_LOG_STATUSES = [
 ] as const;
 export type HrTaskLogStatus = (typeof HR_TASK_LOG_STATUSES)[number];
 
+/**
+ * `GET /hr/tasks/my` — «Ishlarim» (X3).
+ *
+ * 🔴 `employeeId` maydoni ATAYLAB YO'Q (X2 dagi `MyHistoryQuerySchema` naqshi):
+ * zod obyekti notanish kalitlarni olib tashlaydi, ya'ni `?employeeId=<o'zga>`
+ * kontrollergacha YETIB BORMAYDI. Xodim so'rovda KIMNI so'rashini tanlay
+ * olmaydi — u doim `user.sub`.
+ */
+export const MyTasksQuerySchema = z.object({
+  status: z.enum(HR_TASK_LOG_STATUSES).optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+export type MyTasksQuery = z.infer<typeof MyTasksQuerySchema>;
+
 export const ListLogsFilterSchema = z.object({
   templateId: z.string().uuid().optional(),
   employeeId: z.string().uuid().optional(),

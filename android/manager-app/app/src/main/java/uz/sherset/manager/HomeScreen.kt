@@ -132,7 +132,8 @@ class HomeScreen(private val shell: Shell) : Screen {
                 icon = Icons.Filled.Edit,
                 label = stringResource(R.string.tile_my_tasks),
                 tint = Palette.Warning,
-            ) { shell.go(ComingSoonScreen(shell, R.string.tile_my_tasks)) },
+                // X3 — «Tez orada» o'rniga haqiqiy ekran ulandi.
+            ) { shell.go(MyTasksScreen(shell)) },
             TileSpec(
                 icon = Icons.Filled.Star,
                 label = stringResource(R.string.tile_my_kpi),

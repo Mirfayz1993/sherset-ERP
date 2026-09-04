@@ -418,3 +418,63 @@ reja pastiga X9 hisobotini yoz va TO'XTA.
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x2 — davomat ekrani va my/history endpointi`.
+
+---
+
+### X3 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi
+
+**O'zgargan/yangi fayllar:**
+
+*Server — `apps/api/src/modules/hr/hr-task-send/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `hr-task-send.service.ts` | 🔴 **NUQSON TUZATILDI** (`listLogs`): `if (filter.employeeId) where.employeeId = …` qatori `scopeEmployeeId` dan KEYIN turardi va uni bosib ketardi. Endi `if (!scopeEmployeeId && filter.employeeId)` — qamrov QAT'IY SHIFT, uni hech qanday query-param bosib o'tolmaydi. **+ `listMyTasks(accountId, employeeId, query, now)`** — «Ishlarim» uchun alohida metod (`listLogs` dan ataylab ajratilgan: u menejer jurnali, bu own-only ekran). |
+| `hr-task-send.schema.ts` | `MyTasksQuerySchema` — FAQAT `status` + `limit`. 🔴 `employeeId` maydoni ATAYLAB YO'Q (X2 dagi `MyHistoryQuerySchema` naqshi): zod obyekti notanish kalitlarni olib tashlaydi ⇒ `?employeeId=` kontrollergacha YETIB BORMAYDI. |
+| `hr-task-send.controller.ts` | `GET /hr/tasks/my` (`@RequireHrPermission('tasks','own_only')`, `employeeId = user.sub`). `GET logs` da qamrov qarori endi ANIQ: sukut bo'yicha tor (o'ziniki), admin — butun akkaunt, o'zgani so'rash faqat `tasks:read`+ da (`mayReadOthersTasks`). |
+| `hr-task-send.service.test.ts` | +11 test (4 tasi regress + 7 tasi `listMyTasks`). |
+| `my-tasks.controller.test.ts` | **YANGI** — 11 ta kontroller-darajasidagi qulf testi. |
+
+*Ilova — `android/manager-app/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/Tasks.kt` | **YANGI.** Karta mantig'ining SOF funksiyalari (`HrAccess`/`Davomat` naqshi — Android'siz, `org.json` siz ⇒ JVM testi): `dateTime` (UTC→Toshkent), `hoursLeft`, `statusTone`, `isTextAnswer`, `needsAnswer`, `isAnswerTextValid`, `isUrgent`. |
+| `…/MyTasksScreen.kt` | **YANGI.** Filtr plashkalari (Javob kutmoqda / Hammasi), vazifa kartalari (holat plashkasi, muddat, shoshilinch belgisi, muddati o'tgani QIZIL kartochka), `yes_no` uchun Ha/Yo'q tugmalari, `text` uchun ko'p qatorli javob maydoni. |
+| `…/ApiClient.kt` | `myTasks(status, limit)` + `answerTask(logId, type, text)`. |
+| `…/HomeScreen.kt` | «Ishlarim» plitkasi `ComingSoonScreen` o'rniga `MyTasksScreen` ga ulandi (X5–X6 plitkalari hamon kutmoqda). |
+| `…/res/values/strings.xml` | +27 satr (filtrlar, karta maydonlari, holat lug'ati, javob oqimi, xato matnlari). |
+| `…/test/…/TasksTest.kt` | **YANGI** — 17 ta JVM testi. |
+
+**Testlar:**
+
+- `vitest run src/modules/hr/hr-task-send` → **2 fayl, 47 test, 47 o'tdi, 0 yiqildi** (shundan 22 tasi yangi).
+  - 🔴 **Regress ISHLAYAPTI — o'lchab tekshirildi:** tuzatilgan qator vaqtincha eski holiga qaytarildi va `vitest` yuritildi → **2 test YIQILDI** (`?employeeId= e'tiborsiz` va `count ham AYNI where bilan`), tuzatish qaytarilgach yana 47/47. Ya'ni test haqiqatan o'sha nuqsonni tutadi, shunchaki yashil turmaydi.
+  - Servis (11): qamrov qo'yilganda param e'tiborsiz · `count` ham AYNI `where` bilan (jami boshqa xodimniki bo'lib qolmasin) · **qamrovli `where` da FAQAT `accountId`+`employeeId`** (kalitlar ro'yxati qat'iy — kelajakda `OR`/`in` qo'shilsa test yiqiladi) · qamrovsiz (admin) chaqiruvda `?employeeId=` HAMON ishlaydi (menejer ekrani buzilmadi) · `listMyTasks` where'i qat'iy · javobda BOSHQA xodim maydonlari yo'q (`select` da `employee`/`reviewedBy` YO'Q, mukofot/jarima summasi YO'Q) · muddat = `sentAt + deadlineMinutes` · **muddatsiz shablonda `deadlineAt = null`, `overdue = false`** · muddati o'tgan `sent` → `overdue` · javob berilgan vazifa muddati o'tsa ham qizarmaydi · `responseType: 'none'` da javob tugmasi yo'q.
+  - Kontroller (11): `employeeId` token'dan · **🔴 `?employeeId=<o'zga>` e'tiborsiz** · **🔴 `?accountId=` ham e'tiborsiz** · noto'g'ri `status`/`limit` (0, 201) rad etiladi · `/logs` qamrovi: admin → qamrovsiz, oddiy xodim → o'ziga, `tasks:read` + `employeeId` → ataylab o'zga, **`tasks:own_only` → qamrov O'ZIDA**, ruxsatsiz → o'zida, **boshqa sahifada `full` bo'lsa ham `tasks` ochilmaydi**.
+- `vitest run src/modules/hr` (butun HR moduli) → **96 fayl, 1046 test, hammasi o'tdi.**
+- `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato.**
+- `no-mojibake.test.ts` qo'riqchisi → 4 test, o'tdi. Barcha yangi fayllar BOM'siz UTF-8 (`file` bilan tekshirildi).
+- `gradle testDebugUnitTest` → **55 test, 55 o'tdi** (17 yangi `TasksTest` + 22 `DavomatTest` + 16 `HrAccessTest`).
+- `gradle assembleDebug` (JDK 17, Gradle 8.7) → **BUILD SUCCESSFUL.** APK 13 697 552 bayt (~13,1 MiB; X2 dan +663 KB — yangi bog'liqlik qo'shilmadi, o'sish `OutlinedTextField`/`clickable` yo'llarining Compose kodidan).
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **Nuqson jonlida ekspluatatsiya qilinadigan darajada emas edi — LATENT edi, lekin endi yopildi.** `/hr/tasks/logs` darvozasi `tasks:read` talab qiladi, `read` esa ma'no jihatidan «o'zganikini o'qish» degani — ya'ni bugun param bilan o'zgani so'ragan odam allaqachon huquqli edi. Xavf KELAJAKDA edi: `listLogs` ni own-only yo'ldan chaqirgan har qanday yangi kod (masalan X3 ning `my` endpointi `listLogs` ni qayta ishlatganda) bitta parametr bilan ochilib ketardi. Shuning uchun tuzatish ikki qavatli: servis qamrovni QAT'IY qildi, kontroller esa qamrov qarorini `isAdmin` degan tasodifiy mezondan RUXSAT DARAJASIGA ko'chirdi.
+2. ⚠️ **`/logs` qamrovida ONGLI kelishuv.** Sof model bo'yicha `tasks:read` egasi jurnalning HAMMASINI ko'rishi kerak edi, lekin web'dagi `hr/my-tasks` sahifasi `?employeeId=` SIZ so'rov yuboradi va serverning o'zi-o'ziga qamrab qo'yishiga tayanadi — qamrovni bo'shatsam o'sha sahifa hamma xodimning vazifalarini ko'rsatib qo'yardi. Shuning uchun sukut TOR qoldirildi (o'ziniki), o'zgani so'rash esa ATAYLAB harakat (`?employeeId=` + `read`+). Natijada `hr/employees/[id]/tasks` menejer sahifasi ham, `hr/my-tasks` ham AVVALGIDEK ishlaydi — web'ga tegilmadi.
+3. **`/hr/tasks/my` uchun `listLogs` QAYTA ISHLATILMADI.** Sabab: `listLogs` javobi menejer jurnali uchun (`employee`, `reviewedBy` ismlari, sahifalash), xodim ekraniga esa shablon matni + muddat kerak. Own-only yo'lga o'z metodini yozish — o'zga xodim maydonlarini javobga tushirmaslikning eng ishonchli yo'li (test bu `select` ni qat'iy tekshiradi).
+4. 🔴 **Muddat SERVERDA hisoblanadi, `overdue` ham.** `HrTaskLog` da muddat maydoni YO'Q — u `sentAt + template.deadlineMinutes` (`hr-deadline-expire.service.ts` bilan bir xil formula). Ilova qurilma soati bilan qayta hisoblamaydi: qurilma soati noto'g'ri bo'lsa xodim «muddat o'tmagan» deb o'ylab qolardi. `deadlineMinutes = null` → `deadlineAt = null` va ekranda «Muddatsiz» — 0 yoki `sentAt` EMAS (8-qoida).
+5. **X2 ning 2-topilmasi (UTC tuzoq) TAKRORLANDI va oldi olindi.** `sentAt`/`deadlineAt`/`answeredAt` — Nest `Date`, ya'ni UTC. `Tasks.dateTime` ularni Toshkentga o'giradi (4 ta test, shundan biri mintaqa siljishi kunni ham surishini tekshiradi: 20:10 UTC → ertangi 01:10). **X5/X6 ga eslatma: bu tuzoq har `Date` maydonda qaytadi.**
+6. **v0.1 ning «faqat o'qish» qoidasidan ATAYLAB istisno** (rejada shunday): javob yuborish — xodimning O'Z amali. Egalik SERVERDA tekshiriladi (`recordAnswer` → `ForbiddenException('Bu vazifa sizniki emas')`), ilova faqat sababni tarjima qiladi.
+7. **Javob yuborishda 401 da so'rov BIR MARTA qaytariladi.** 401 ni `JwtAuthGuard` beradi, ya'ni so'rov kontrollergacha yetib bormagan va hech narsa yozilmagan ⇒ qaytarish qo'sh javob yaratmaydi. Aksi bo'lsa access-token eskirgan xodim yozgan matnini yo'qotardi.
+8. **v0.1 vidjetlariga TEGILMADI.** Filtr plashkasi (`Pill` bosilmaydi) va ko'p qatorli javob maydoni (`PlainField` bir qatorli) `MyTasksScreen.kt` ichida — `Widgets.kt` hamon KUZATILMAGAN fayl, uni commitga tortmaslik uchun ataylab shunday qilindi.
+9. ⚠️ **`tasks` ruxsati umuman yo'q xodim «Ishlarim» ekranida 403 ko'radi.** Endpoint rejadagidek `tasks:own_only` bilan ochildi, guard esa sahifa qatori BO'LMAGAN xodimni rad etadi. Ekran buni `no_permission` matni bilan halol aytadi (bo'sh ro'yxat ko'rsatib aldamaydi). **Egasidan so'raladi:** jonlida har bir xodimga `tasks:own_only` qatori berilganmi? Berilmagan bo'lsa plitka bosilganda 403 chiqadi (fail-closed — xavfsiz, lekin foydasiz). Bu X1 ning 2-topilmasi (haydovchi roli qiymati) bilan bir xil sinfdagi savol.
+10. **Bosh ekranda «Ishlarim» plitkasi HAMMAGA ko'rinadi** (X1 dagi qaror o'zgarmadi) — ruxsat tekshiruvi ekran ichida, serverda. Klientdagi yashirish qulaylik bo'lardi, xavfsizlik emas.
+11. **X1 ning 4-topilmasi HAMON KUCHDA:** `android/manager-app/` ning katta qismi (`BriefingScreen.kt`, `Widgets.kt`, `Theme.kt`, `Updater.kt`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` …) hamon KUZATILMAGAN — X1+X2+X3 commitlari yolg'iz o'zi yig'ilmaydi. Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 ga shu vazifa berilsin).
+12. **Biome formatlashi.** Yangi fayllarda qo'shtirnoq uslubi va qator uzunligi `biome check --write` bilan tekislandi (faqat MENING fayllarim), keyin testlar qayta yuritildi — 47 o'tdi. `docs/progress.json` ni yana repo'ning O'Z pre-commit ilgagi qo'shishi mumkin (X2 ning 11-topilmasi).
+13. Daraxtda boshqa sessiyalarning commit qilinmagan ishi turibdi (`apps/api/src/modules/auth`, `permissions`, `apps/api/src/scripts/ops-menejer-rol.ts`, `docs/plans/2026-09-04-bolak-hisobi-…`). Ularga TEGILMADI, commitga ham kirmadi.
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x3 — ishlarim ekrani va tasks own-only qulfi`.

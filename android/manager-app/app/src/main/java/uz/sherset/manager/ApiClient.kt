@@ -169,6 +169,37 @@ class ApiClient(private val baseUrl: String) {
     private fun ping(lat: Double, lng: Double, accuracy: Double): JSONObject =
         JSONObject().put("lat", lat).put("lng", lng).put("accuracy", accuracy)
 
+    // ── Xodimning O'ZI: vazifalar (X3) ──────────────────────────────────────
+    //
+    // `GET /hr/tasks/my` — `tasks:own_only`, xodim token'dan olinadi. So'rovda
+    // `employeeId` UMUMAN yo'q (server sxemasi notanish kalitni tashlab
+    // yuboradi), ya'ni ilova KIMNI so'rashini tanlay olmaydi.
+
+    /** «Ishlarim»: `{rows, total}`. `status` bo'sh bo'lsa — hammasi. */
+    fun myTasks(status: String?, limit: Int): JSONObject {
+        val q = StringBuilder("/hr/tasks/my?limit=").append(limit)
+        if (!status.isNullOrEmpty()) q.append("&status=").append(enc(status))
+        return get(q.toString())
+    }
+
+    /**
+     * Vazifaga javob (`POST /hr/tasks/logs/:id/answer`, `tasks:own_only`).
+     * Egalik SERVERDA tekshiriladi — o'zganing vazifasi 403 bilan qaytadi.
+     *
+     * `type`: `yes` | `no` | `text`; `text` faqat matnli javobda.
+     *
+     * Javob bir martalik amal (server ikkinchisini «allaqachon javob berilgan»
+     * deb rad etadi), lekin 401 da BIR MARTA qaytarish xavfsiz: 401 ni
+     * `JwtAuthGuard` beradi, ya'ni so'rov kontrollergacha YETIB BORMAGAN va
+     * hech narsa yozilmagan. Aks holda access-token eskirgan xodim yozgan
+     * javobini yo'qotib, qaytadan kirishga majbur bo'lardi.
+     */
+    fun answerTask(logId: String, type: String, text: String?): JSONObject {
+        val body = JSONObject().put("type", type)
+        if (text != null) body.put("text", text)
+        return post("/hr/tasks/logs/" + enc(logId) + "/answer", body)
+    }
+
     // -- ichki ---------------------------------------------------------------
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path
@@ -183,6 +214,8 @@ class ApiClient(private val baseUrl: String) {
      * check-in ochiq yozuv bo'lsa yangi yozuv yaratmay `already_open` beradi,
      * check-out esa ochiq yozuv bo'lmasa `no_open_record` — ikkalasi ham
      * takrorlansa qo'sh yozuv chiqmaydi (`ping-ingest.service.ts`).
+     * Vazifa javobi (X3) esa bir martalik, lekin 401 ni guard beradi — so'rov
+     * kontrollergacha yetib bormaydi, ya'ni qaytarish hech narsani buzmaydi.
      */
     private fun post(path: String, body: JSONObject): JSONObject =
         exec(
