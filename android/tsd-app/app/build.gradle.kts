@@ -17,8 +17,8 @@ android {
         // (`Updater.isNewer`). Har chiqarishda BIRGA oshiriladi va hech qachon
         // kamaymaydi; `versionName` esa odam o'qiydigan yorliq va u
         // `latest.json` dagi nom hamda APK fayl nomi bilan MOS bo'lishi kerak.
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.5.0"
     }
 
     compileOptions {
