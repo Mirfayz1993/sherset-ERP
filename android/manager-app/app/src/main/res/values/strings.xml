@@ -252,6 +252,47 @@
     <string name="mykpi_sig_refund">Qaytarish</string>
     <string name="mykpi_sig_late">Kechikish</string>
 
+    <!-- Oyligim (X6) -->
+    <string name="payroll_empty">Bu oy uchun oylik hali hisoblanmagan</string>
+    <string name="payroll_total">Oylik</string>
+    <string name="payroll_not_computed">hisoblanmadi</string>
+    <string name="payroll_status_partial">Hisob CHALA — %1$d kun hali qabul qilinmagan, summa o\'zgarishi mumkin</string>
+    <string name="payroll_status_computed">Hamma kun qabul qilingan — summa yakuniy</string>
+    <string name="payroll_status_unknown">Holat noma\'lum: %1$s</string>
+    <string name="payroll_computed_at">Hisoblangan: %1$s</string>
+    <string name="payroll_components">Tarkibi</string>
+    <string name="payroll_fix">Bazaviy oylik</string>
+    <string name="payroll_kpi">KPI qismi</string>
+    <string name="payroll_bonus">Bonus</string>
+    <string name="payroll_fine">Jarima</string>
+    <string name="payroll_commission">Komissiya</string>
+    <string name="payroll_correction_increase">Tuzatma: qo\'shimcha to\'lov</string>
+    <string name="payroll_correction_decrease">Tuzatma: ushlanma</string>
+    <string name="payroll_sales">Sotuv va KPI</string>
+    <string name="payroll_total_sales">Hisobga kirgan sotuv</string>
+    <string name="payroll_target">Oylik reja</string>
+    <string name="payroll_achievement">Rejaning bajarilishi</string>
+    <string name="payroll_tier">To\'lov darajasi</string>
+    <string name="payroll_accepted_days">Qabul qilingan kunlar</string>
+    <string name="payroll_pending_days">Qabul kutayotgan kunlar</string>
+    <string name="payroll_blocked">Qabul qilinmagani uchun hisobga kirmagan sotuv: %1$s</string>
+    <string name="payroll_ledger">Bonus va jarimalar</string>
+    <string name="payroll_ledger_empty">Bu oyda bonus ham, jarima ham yo\'q</string>
+    <string name="payroll_ledger_bonus_total">Bonuslar jami</string>
+    <string name="payroll_ledger_fine_total">Jarimalar jami</string>
+    <string name="payroll_ledger_stale">Bu ro\'yxat oylik hisobidan keyin o\'zgargan — jamidagi raqam hali yangilanmagan</string>
+    <string name="payroll_no_reason">Sabab yozilmagan</string>
+    <string name="payroll_src_manual">Qo\'lda kiritilgan</string>
+    <string name="payroll_src_rule">Qoida bo\'yicha</string>
+    <string name="payroll_src_auto_late">Kechikish uchun</string>
+    <string name="payroll_src_task_reward">Vazifa uchun mukofot</string>
+    <string name="payroll_src_task_fine">Vazifa uchun jarima</string>
+    <string name="payroll_src_expire_fine">Muddat o\'tgani uchun jarima</string>
+    <string name="payroll_src_kpi_accept">Kunlik KPI qabuli</string>
+    <string name="payroll_src_kpi_reversal">KPI qabuli bekor qilindi</string>
+    <string name="payroll_kind_bonus">Bonus</string>
+    <string name="payroll_kind_fine">Jarima</string>
+
     <!-- Undirish -->
     <string name="collection_title">Qarz undirish</string>
     <string name="collection_empty">Undiriladigan qarz yo\'q</string>

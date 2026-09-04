@@ -607,3 +607,80 @@ Xavfsizlik bundan zaiflashmaydi: himoyani **darvoza emas, QAMROV** beradi — `e
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x5 — mening kpi'im ekrani va hr/kpi/my endpointi`.
+
+---
+
+### X6 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi
+
+**O'zgargan/yangi fayllar:**
+
+*Server — `apps/api/src/modules/hr/hr-salary/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `hr-payroll.service.ts` | `listMonthly(accountId, yearMonth, employeeId?)` — ixtiyoriy filtr. 🔴 Kalit SHARTLI SPREAD bilan qo'yiladi: prisma'da `employeeId: undefined` «filtr yo'q» degani, ya'ni bitta `undefined` butun ro'yxatni ochib yuborardi. Filtrsiz chaqiruv (menejer «Oylik» jadvali) AVVALGIDEK ishlaydi — testi bor. |
+| `my-payroll.schema.ts` | **YANGI.** `MyPayrollParamsSchema` — FAQAT `yearMonth`. 🔴 `employeeId`/`accountId` maydonlari ATAYLAB YO'Q (X2/X3/X5 naqshi). Regex mavjud `HrSalaryController.parseYearMonth` dan QATTIQROQ: u `\d{4}-\d{2}` ga rozi edi, ya'ni `2026-00`/`2026-13` ni o'tkazib yuborardi. |
+| `my-payroll.service.ts` | **YANGI.** `MyPayrollService.myMonthly` — UCH QAVATLI qamrov (pastda), javob shakli, o'z bonus/jarima ro'yxati. |
+| `my-payroll.controller.ts` | **YANGI.** `GET /hr/payroll/my/:yearMonth` — `@UseGuards(JwtAuthGuard, HrPermissionGuard)` + `@RequireHrPermission('oylik','own_only')`, `employeeId = user.sub`. |
+| `hr-salary.module.ts` | `MyPayrollController` + `MyPayrollService` ro'yxatga qo'shildi (yetim kontroller = jim 404). |
+| `hr-payroll.service.test.ts` | +3 test — `listMonthly` filtrining regressi. |
+| `my-payroll.service.test.ts` | **YANGI** — 20 test. |
+| `my-payroll.controller.test.ts` | **YANGI** — 13 test (6 tasi darvoza qulfi). |
+
+*Ilova — `android/manager-app/`:*
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/MyPayroll.kt` | **YANGI.** Oylik kartasining SOF funksiyalari (`HrAccess`/`Davomat`/`Tasks`/`Routes`/`MyKpi` naqshi — Android'siz, `org.json` siz ⇒ JVM testi): `statusTone`, `isFinal`, `money`, `signedMoney`, `isZero`, `isPositive`, `kindTone`, `sourceTone`, `ledgerMatches`, `rowDateTime`. Oy hisobi YOZILMADI — `Davomat` (X2) dan qayta ishlatildi. |
+| `…/MyPayrollScreen.kt` | **YANGI.** Oy tanlagichi · jami summa katta kartada · tarkib qatorlari · sotuv/KPI kartasi · bonus-jarima ro'yxati · «hisoblanmagan oy» bo'sh holati. |
+| `…/ApiClient.kt` | `myPayroll(yearMonth)` — `GET /hr/payroll/my/:yearMonth`. |
+| `…/HomeScreen.kt` | «Oyligim» plitkasi `ComingSoonScreen` o'rniga `MyPayrollScreen` ga ulandi — **«Mening kunim» bo'limining oxirgi plitkasi ham ochildi.** |
+| `…/res/values/strings.xml` | +38 satr (holat, tarkib, sotuv, ro'yxat, manba lug'ati). |
+| `…/test/…/MyPayrollTest.kt` | **YANGI** — 30 ta JVM testi. |
+
+**Darvoza tanlovi — X5 dan ATAYLAB FARQ QILADI:** X5 «Mening KPI'im» ni `JwtAuthGuard` + qat'iy self bilan ochgan edi, sababi «`oylik` — OYLIK sahifasi, KPI emas» (noto'g'ri xarita). X6 da xarita TO'G'RI keladi: bu aynan oylik sahifasining o'z-o'ziga qamralgan ko'rinishi va `hr-permission-adapter` `oylik:own_only` ni `hrsalary` + `view:OWN` ga xaritalaydi. Reja ham `own_only` ni nomma-nom talab qiladi, qabul mezoni esa «`oylik` ruxsati umuman yo'q xodim → 403» degan MANFIY testni MAJBURIY qiladi — ya'ni 403 bu yerda nuqson emas, **kutilgan xulq**: pul raqami ochiq turadigan yo'l emas. Amaliy oqibati 2-topilmada.
+
+**Uch qavatli qamrov (nega bitta emas):**
+1. **Darvoza** — `oylik:own_only`; sahifa qatori yo'q xodim 403 oladi.
+2. **So'rov** — `employeeId` FAQAT `user.sub` dan; oy YO'L parametri, kontroller `@Query`/`@Body` ni umuman o'qimaydi; prisma `where` i `accountId`+`employeeId`+`yearMonth` bilan qat'iy yopilgan.
+3. **Javob** — o'qilgan qator YANA solishtiriladi (`assertOwn`: o'zga xodim/akkaunt qatori yoki bittadan ko'p qator → 403) va javobga sanoqli maydon ko'chiriladi. `employee` relation'i ham, ism ham, «jarimani kim yozgani» ham javobga TUSHMAYDI.
+
+**Testlar:**
+
+- `vitest run src/modules/hr/hr-salary` → **7 fayl, 133 test, 133 o'tdi, 0 yiqildi** (shundan 36 tasi yangi).
+  - Kontroller (7): `accountId`+`employeeId` token'dan · **🔴 kontroller manbasida `employeeId` so'zi UMUMAN yo'q** · **🔴 `@Query` ham, `@Body` ham o'qilmaydi** · darvoza dekoratorlari manbada · noto'g'ri oy rad etiladi (13-oy, 0-oy, kun bilan, qisqa, bo'sh, `../`) · chegara oylari (01, 12) o'tadi.
+  - Darvoza (6): **🔴 `oylik` ruxsati UMUMAN yo'q xodim → 403** · `own_only` yetadi · `read`/`full` ham yetadi · **🔴 boshqa sahifada `full` bo'lsa ham `oylik` ochilmaydi** (`employees` fallback'i bu yo'lda UMUMAN so'ralmaydi — o'lchandi) · admin o'tadi · token'siz 403. Testlar HAQIQIY `HrPermissionGuard` + HAQIQIY `Reflector` bilan, metadata kontroller metodining O'ZIDAN o'qiladi.
+  - Servis (20): **🔴 oylik `where` ida FAQAT `accountId`+`employeeId`+`yearMonth`** (kalitlar ro'yxati qat'iy) · **🔴 bonus/jarima `where` ida FAQAT `accountId`+`employeeId`+`createdAt`** · **🔴 `select` da `employee`/`employeeName`/`createdBy`/`createdById` YO'Q** · oyna oylik dvigateli bilan AYNI (31-avgust 19:00Z … 30-sentabr 18:59:59.999Z) · **boshqa akkaunt → qator yo'q** · bo'sh `employeeId` → 403 va bazaga so'rov UMUMAN ketmaydi · **o'zga xodim / o'zga akkaunt / bittadan ko'p qator → 403** · **javobda ism ham, `employee` so'zi ham yo'q** · javob kalitlari qat'iy · pul MATN bo'lib chiqadi · `Long` chegarasidan katta summa · **`null` ≠ 0** (hisoblanmagan oyda summalar umuman yo'q) · `partial`/`computed` holatlari · buzuq foiz `null` · **bonus va jarima ALOHIDA sanaladi** · qator maydonlari qat'iy · sababsiz yozuvda `reason: null`.
+  - 🔴 **Qulflar O'LCHAB TEKSHIRILDI (test vakuum emas):** (a) `listMonthly` filtri vaqtincha o'chirildi → **3 test YIQILDI** (`my-payroll` where-qulfi + 2 ta filtr regressi), qaytarilgach 133/133; (b) `@RequireHrPermission` dekoratori vaqtincha olib tashlandi → **5 test YIQILDI** (403 qulflari + metadata qulfi), qaytarilgach yashil.
+- `vitest run src/modules/hr src/app-boot.test.ts` → **102 fayl, 1138 test, hammasi o'tdi** (marshrut to'qnashuvi qo'riqchisi ham yashil: `hr/payroll/my/:p` ≠ `hr/payroll/:p`).
+- `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato** (biome formatlashdan KEYIN qayta yuritildi).
+- `no-mojibake.test.ts` → 4 test, o'tdi. 14 ta yangi/o'zgargan fayl qo'lda ham skanlandi: **BOM'siz UTF-8, mojibake imzosi 0 marta.**
+- `gradle testDebugUnitTest` → **139 test, 139 o'tdi, 0 yiqildi** (30 yangi `MyPayrollTest` + 27 `MyKpiTest` + 27 `RoutesTest` + 17 `TasksTest` + 22 `DavomatTest` + 16 `HrAccessTest`).
+- `gradle assembleDebug` (JDK 17, Gradle 8.7) → **BUILD SUCCESSFUL.** APK 13 746 148 bayt (~13,1 MiB; X5 dan +16 336 bayt — yangi bog'liqlik qo'shilmadi).
+- `gradle :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --rerun-tasks` → **BUILD SUCCESSFUL, bitta ham `warning:` yo'q.**
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **Bonus/jarima ro'yxati QO'SHILDI (reja «imkoni bo'lmasa sabab yoz» degan band) — lekin `hr-bonus-fine.service.list()` QAYTA ISHLATILMADI.** Sababi: o'sha metod javobiga `employee` va `createdBy` (jarimani yozgan odam) `include` bilan tushadi, ya'ni «boshqa odam ekranga chiqmaydi» shartini buzardi. O'rniga `MyPayrollService` o'z so'rovini yozdi — qat'iy `select` (id, kind, source, amountMinor, reason, createdAt) va testi shu ro'yxatni kalitma-kalit qulflaydi. Oy oynasi ATAYLAB oylik dvigateli bilan AYNI (`monthInstantBounds`, `gte start … lte endExclusive−1ms`): boshqa oyna olinsa ro'yxatning yig'indisi `bonusSumMinor` ga to'g'ri kelmasdi.
+2. ⚠️ **`oylik:own_only` qatori berilmagan xodim ekranda 403 ko'radi — bu X-reja talabi, lekin JONLIDA TEKSHIRILISHI KERAK.** X5 hisoboti buni oldindan aytgan edi: `seed-hr.ts` sahifa qatorlarini FAQAT egalarga/adminlarga yozadi, qolganiga HR ekranidan qo'lda beriladi. **Egasidan so'raladi:** jonlida har bir xodimga `oylik:own_only` qatori berilganmi? Berilmagan bo'lsa plitka bosilganda 403 chiqadi (fail-closed — xavfsiz, lekin foydasiz). Bu X1 ning 2-topilmasi (haydovchi roli) va X3 ning 9-topilmasi (`tasks:own_only`) bilan **bir xil sinfdagi uchinchi savol** — X7 da bitta ro'yxat qilib egasiga berilsin. Darvozani yumshatish X-rejaga zid bo'lgani uchun bu fazada QABUL QILINMADI.
+3. 🔴 **`HR_BONUS_FINE_SOURCES` zod-enumi ESKIRGAN — kod undan tashqarida yozadi.** Enumda 5 qiymat bor (`manual`, `rule`, `auto_task_reward`, `auto_task_fine`, `auto_expire_fine`), lekin `late-fine.service.ts` `auto_late` yozadi, `kpi-accrual.ts` esa `kpi_accept` va `kpi_accept_reversal`. Ustun `VarChar(30)`, enum faqat FILTR sxemasida ishlatiladi — shuning uchun jonlida sezilmaydi, ammo menejer «manba» filtri bu uch qiymatni tanlashga imkon bermaydi. Ilovadagi lug'at shu sababdan enumdan EMAS, yozuvchi kodning O'ZIDAN yig'ildi (testda har biri manba-fayli bilan izohlangan). **X7/keyingi fazaga:** enumni to'ldirish alohida (kichik) ish, X6 qamrovidan tashqarida — sxemani o'zgartirish menejer filtriga tegadi.
+4. 🔴 **«Hisob eskirgan» holati OCHIQ aytiladi.** Oylik qatori bir marta hisoblanadi (`computedAt`), yangi bonus/jarima esa keyin ham yozilishi mumkin — o'sha payt ro'yxatdagi jarima jamiga KIRMAGAN bo'ladi. Jim qolinsa xodim «jami noto'g'ri» deb o'ylardi. Shuning uchun ekran ro'yxatning jonli yig'indisini saqlangan `bonusSumMinor`/`fineSumMinor` bilan solishtiradi va farq bo'lsa «bu ro'yxat oylik hisobidan keyin o'zgargan» deb yozadi. Solishtiruv `BigInteger` bilan (`Long` ga siqilsa katta sonlar teng chiqib qolardi — testi bor).
+5. 🔴 **MANFIY belgi endi BAYT-BA-BAYT qulflangan.** `Fmt.group` manfiy sonda U+2212 (MINUS SIGN) qo'yadi, oddiy defis EMAS. `MyPayroll.signedMoney` ham aynan shu belgini ishlatadi (`MINUS` konstantasi), test esa ikkalasini `Fmt.minor("-…")` bilan solishtirib tekshiradi — aks holda bitta ekranda ikki xil «minus» turib qolardi. **X5 ning 9-topilmasi (U+00A0 minglik ajratgichi) ham qaytdi va oldi olindi:** ko'rinmas belgilar test faylida FAQAT ikkita konstantada (`nbsp`, `minus`) turadi, qolgan kutilgan matnlar shulardan yig'iladi.
+6. 🔴 **Manfiy oylik NOLGA SIQILMAYDI.** `computeFinalSalaryMinor` izohi aniq aytadi: jarima hammasidan ko'p bo'lsa natija manfiy bo'ladi va u imzolangan holda qaytariladi. Ekran ham shunday ko'rsatadi (testi bor) — nolga siqilsa «qarzdor oy» ko'rinmay qolardi va xodim keyingi oyda sababsiz kamayishni ko'rardi.
+7. **`0` bilan `null` ekranda ham AJRATILGAN.** «0 so'm komissiya» — o'lchangan natija, ko'rsatiladi; «hisoblanmadi» — boshqa matn. `MyPayroll.isZero(null) == false` (ya'ni `null` nol EMAS) alohida test bilan qulflangan. Tuzatma qatorlari (`correctionIncrease/Decrease`) esa faqat noldan farqli bo'lsa chiziladi — ular kamdan-kam uchraydi va doim-bo'sh qator chalkashtirardi.
+8. 🔴 **`computedAt` — INSTANT, `yearMonth` esa YORLIQ.** X5 ning 2-topilmasi bu ekranda ikkalasi bilan ham uchraydi: `computedAt`/`createdAt` UTC `Date` ⇒ `Tasks.dateTime` bilan Toshkentga o'giriladi (X3 dagi funksiya qayta ishlatildi, yangi nusxa yozilmadi), `yearMonth` («2026-09») esa mintaqaga SURILMAYDI. Oy hisobi butunlay `Davomat` (X2) dan olindi — `MyPayrollTest` da buni qulflaydigan alohida test bor (ikkinchi nusxa paydo bo'lsa ikki ekran ikki xil oy so'rardi).
+9. ⚠️ **Oylik hisoblanmagan bo'lsa ham bonus/jarima RO'YXATI ko'rinadi.** Ular hisobdan mustaqil (`HrBonusFineLog` da turadi), shuning uchun `not_computed` oyda ham chiziladi. Bu ATAYLAB: «oylik hali hisoblanmagan» degani «bu oyda menga jarima yozilmagan» degani emas.
+10. ⚠️ **Ekran `POST payroll/compute` ni CHAQIRMAYDI.** Xodim o'z oyligini «qayta hisoblat» deb bosa olmaydi — u `oylik:full` amali (`HrSalaryController`) va pul zanjiriga yozadi. Ya'ni oy hisoblanmagan bo'lsa ekran shuni halol aytadi, o'zi hisoblab qo'ymaydi. Bu X4 ning 9-topilmasi (`driver-cash/collect` ulanmadi) bilan bir xil qaror.
+11. **Ball uchun «yaxshi/yomon» rang bandlari bu yerda ham O'YLAB TOPILMADI** (X5 ning 3-topilmasi): jami summa neytral (ko'k) rangda, karta faqat `computed` holatida yashil hoshiya oladi. Sariq bo'ladigan yagona narsa — SERVER bergan `pendingDays > 0` va `blockedSalesMinor > 0`.
+12. **Uzun jumlalar `Pill` ga solinmadi.** `Pill` — chip (bir qatorli belgi); ichida o'ralib ketgan gap o'qilmaydi. «Hisob chala…», «hisobga kirmagan sotuv…» va «ro'yxat o'zgargan…» oddiy `Text` bo'lib chiqadi. `Widgets.kt` ga TEGILMADI.
+13. **`ComingSoonScreen.kt` endi hech qayerdan chaqirilmaydi** (X1 da yaratilgan, oxirgi plitka ham ulandi). Fayl O'CHIRILMADI: X8–X9 to'lqinida yangi bo'lim qo'shilsa kerak bo'ladi va uni o'chirish X1 commitiga qayta tegish bo'lardi.
+14. **Biome commitdan OLDIN yuritildi** (`biome check --write src/modules/hr/hr-salary/`) — 2 ta test fayli formatlandi (qator uzunligi), keyin testlar va typecheck QAYTA yuritildi: 133/133 va 0 xato. X2 ning 11-topilmasidagi «lint-staged testlardan keyin fayllarni o'zgartirib qo'yadi» holatining oldi shu bilan olindi.
+15. **X1 ning 4-topilmasi HAMON KUCHDA:** `android/manager-app/` ning katta qismi (`BriefingScreen.kt`, `Widgets.kt`, `Theme.kt`, `Fmt.kt`, `Updater.kt`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` …) hamon KUZATILMAGAN — X1…X6 commitlari yolg'iz o'zi yig'ilmaydi. Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 ga shu vazifa berilsin). Bu commit `Widgets.kt`/`Fmt.kt`/`Theme.kt` ga TEGMADI (`SectionCard`, `InfoRow`, `Pill`, `EmptyState`, `SecondaryButton`, `Fmt.minor`, `Fmt.group` xuddi borligicha ishlatildi).
+16. Daraxtda boshqa sessiyalarning commit qilinmagan ishi turibdi (`apps/api/src/modules/auth`, `permissions`, `apps/api/src/scripts/ops-menejer-rol.ts`, yangi `docs/plans/` fayllari). Ularga TEGILMADI, commitga ham kirmadi. `docs/progress.json` ni repo'ning O'Z pre-commit ilgagi qo'shdi (X2 ning 11-topilmasi) — commitdagi 16-fayl shu, uni MEN yozmadim.
+17. 🔴 **CLAUDE.md §6.7 B HODISASI QAYTA UCHRADI — X7 ga ESLATMA.** Birinchi commit urinishida `git add` aniq 15 yo'l bilan qilingan edi, commitga esa **22 fayl** tushdi: `lint-staged` parallel J2 sessiyasining ishini (`apps/api/src/scripts/j2-pilot-audit-*.ts`, `ops-j2-piece-pilot-audit.ts`, `docs/ops/jonli-holat.md`, `docs/plans/2026-09-04-bolak-hisobi-…md`) qo'shib yubordi. **Tuzatildi:** `git reset --soft HEAD~1` + `git reset` + AYNAN 15 yo'lni qayta `git add` + qayta commit — begona fayllar untracked holiga qaytdi va keyin J2 sessiyasining O'ZI ularni `2fc81625` da commit qildi (hech narsa yo'qolmadi, tekshirildi).
+    **Ikki amaliy xulosa:** (a) hodisa POYGA — J2 sessiyasi aynan mening commitim paytida fayl yozayotgan edi; ikkinchi urinish (daraxt tinchiganda) TOZA chiqdi, ya'ni §6.7 B dagi «hook'ni chetlab o't» maslahati har doim ham kerak emas; (b) **`git show --stat HEAD` ni commitdan KEYIN ko'rish shart** — `git add` ning aniqligi kafolat emas. X7 (bir nechta fayl + versiya + smoke-reja) da bu xavf yanada yuqori.
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x6 — oyligim ekrani va hr/payroll/my endpointi`.

@@ -226,10 +226,26 @@ export class HrPayrollService {
     return { written };
   }
 
-  /** Read the stored monthly scores for the Oylik table (whole roster). */
-  async listMonthly(accountId: string, yearMonth: string) {
+  /**
+   * Read the stored monthly scores for the Oylik table.
+   *
+   * `employeeId` berilmasa — butun ro'yxat (menejer «Oylik» jadvali, eski
+   * xulq o'zgarmadi). Berilsa — FAQAT o'sha xodimning qatori: X6 dagi
+   * «Oyligim» ekrani shu yo'ldan o'qiydi.
+   *
+   * 🔴 Filtr `undefined` bilan CHAQIRILMAYDI. Prisma'da `employeeId: undefined`
+   * «filtr yo'q» degani, ya'ni bitta `undefined` butun ro'yxatni ochib
+   * yuborardi. Shuning uchun kalit shartli SPREAD bilan qo'yiladi va
+   * chaqiruvchi (`MyPayrollService`) qiymatning bo'sh emasligini o'zi
+   * tekshiradi — ikkalasi ham testlar bilan qulflangan.
+   */
+  async listMonthly(accountId: string, yearMonth: string, employeeId?: string) {
     return this.prisma.client.hrKpiMonthlyScore.findMany({
-      where: { accountId, yearMonth },
+      where: {
+        accountId,
+        yearMonth,
+        ...(employeeId !== undefined ? { employeeId } : {}),
+      },
       orderBy: { finalSalaryMinor: 'desc' },
       include: { employee: { select: { id: true, name: true } } },
     });

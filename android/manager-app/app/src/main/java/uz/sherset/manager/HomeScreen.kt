@@ -144,7 +144,8 @@ class HomeScreen(private val shell: Shell) : Screen {
                 icon = Icons.Filled.AccountBox,
                 label = stringResource(R.string.tile_my_payroll),
                 tint = Palette.Success,
-            ) { shell.go(ComingSoonScreen(shell, R.string.tile_my_payroll)) },
+                // X6 — «Tez orada» o'rniga haqiqiy ekran ulandi.
+            ) { shell.go(MyPayrollScreen(shell)) },
         )
         if (HrAccess.isDriver(shell.hrRoles)) {
             tiles.add(

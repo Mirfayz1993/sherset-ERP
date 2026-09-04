@@ -503,3 +503,62 @@ describe('KPI-05 — oylik hisob KPI og`irligini o`qimaydi', () => {
     expect(shape).toMatch(/autoValue/);
   });
 });
+
+/**
+ * X6 — `listMonthly` ga qo'shilgan ixtiyoriy `employeeId` filtri.
+ *
+ * Menejer «Oylik» jadvali (filtrsiz chaqiruv) O'ZGARMASLIGI shart: bir
+ * xodimni ochish uchun qo'yilgan filtr butun ro'yxatni jimgina toraytirib
+ * qo'ysa, buxgalter yarim jadvalni ko'rardi.
+ */
+describe('X6 — listMonthly employeeId filtri', () => {
+  function makeSvc() {
+    const prisma = makePrisma();
+    const svc = new HrPayrollService(
+      // biome-ignore lint/suspicious/noExplicitAny: test wiring
+      prisma as any,
+      // biome-ignore lint/suspicious/noExplicitAny: test wiring
+      makeSalary() as any,
+      // biome-ignore lint/suspicious/noExplicitAny: test wiring
+      makeBonusFine() as any,
+    );
+    prisma.client.hrKpiMonthlyScore.findMany.mockResolvedValue([]);
+    return { prisma, svc };
+  }
+
+  it('filtrsiz chaqiruv AVVALGIDEK — `where` da employeeId YO`Q', async () => {
+    const { prisma, svc } = makeSvc();
+    await svc.listMonthly('acc1', '2026-05');
+
+    const args = prisma.client.hrKpiMonthlyScore.findMany.mock.calls[0]?.[0] as {
+      where: Record<string, unknown>;
+    };
+    expect(Object.keys(args.where).sort()).toEqual(['accountId', 'yearMonth']);
+    // 🔴 `employeeId: undefined` ham YARAMAYDI — prisma uni «filtr yo'q» deb
+    // o'qiydi, lekin kalitning o'zi turishi kelajakda `null` bilan almashib
+    // ketishi mumkin. Kalit UMUMAN bo'lmasligi kerak.
+    expect('employeeId' in args.where).toBe(false);
+  });
+
+  it('filtr berilganda `where` ga AYNAN o`sha xodim qo`shiladi', async () => {
+    const { prisma, svc } = makeSvc();
+    await svc.listMonthly('acc1', '2026-05', 'emp-7');
+
+    const args = prisma.client.hrKpiMonthlyScore.findMany.mock.calls[0]?.[0] as {
+      where: Record<string, unknown>;
+    };
+    expect(args.where).toEqual({ accountId: 'acc1', yearMonth: '2026-05', employeeId: 'emp-7' });
+  });
+
+  it('bo`sh matn ham FILTR — butun ro`yxatga aylanib ketmaydi', async () => {
+    const { prisma, svc } = makeSvc();
+    await svc.listMonthly('acc1', '2026-05', '');
+
+    const args = prisma.client.hrKpiMonthlyScore.findMany.mock.calls[0]?.[0] as {
+      where: Record<string, unknown>;
+    };
+    // Bo'sh matn hech qanday qatorga to'g'ri kelmaydi (fail-closed), «hamma
+    // xodim» ga aylanmaydi.
+    expect(args.where.employeeId).toBe('');
+  });
+});

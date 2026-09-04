@@ -252,6 +252,20 @@ class ApiClient(private val baseUrl: String) {
     /** «Mening KPI'im»: `{limit, total, days[]}` — yangi kun tepada. */
     fun myKpi(limit: Int): JSONObject = get("/hr/kpi/my?limit=$limit")
 
+    // ── Xodimning O'ZI: oylik (X6) ──────────────────────────────────────────
+    //
+    // `GET /hr/payroll/my/:yearMonth` — `oylik:own_only` darvozasi ostida va
+    // `employeeId = user.sub`. Bu X5 dan FARQ qiladi (u faqat `JwtAuthGuard`
+    // edi): oylik AYNAN `oylik` sahifasining o'z-o'ziga qamralgan ko'rinishi,
+    // ya'ni ruxsat xaritasi to'g'ri keladi. Amaliy oqibat — `oylik` sahifa
+    // qatori berilmagan xodim 403 oladi va ekran buni OCHIQ aytadi.
+    //
+    // Oy — YO'L parametri, so'rov satri emas: bu yo'lda `employeeId` na
+    // parametrda, na tanada bor ⇒ ilova KIMNI so'rashini TANLAY OLMAYDI.
+
+    /** «Oyligim»: `{yearMonth, status, finalSalaryMinor, components, sales, ledger}`. */
+    fun myPayroll(yearMonth: String): JSONObject = get("/hr/payroll/my/" + enc(yearMonth))
+
     // -- ichki ---------------------------------------------------------------
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path
