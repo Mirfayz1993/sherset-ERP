@@ -2321,10 +2321,16 @@ Hajm: `yozuvSoniChegarasi` · `baytChegarasiHamKesadi` · **`engQalinYacheykaBol
 4. **`org.json:json` test-bog'liqligi qo'shildi** (faqat `testImplementation`). Ilova baribir
    Android'ning o'z `org.json` ini ishlatadi; APK hajmi o'zgarmadi (13 029 136 bayt, T7 dagi
    13 007 956 dan farq — T9/T10 kodi).
-5. **Pre-commit hook `docs/progress.json` ni commitga qo'shdi** (faqat `generatedAt` vaqt tamg'asi
+5. ⚠️ **Push `CHECK_LINT=0` bilan qilindi.** `pre-push` lint darvozasi BEGONA, hali commit
+   qilinmagan faylda yiqilardi: `apps/web/src/lib/pos/pos-calendar.ts` (format xatosi, S-reja
+   ishi — `git status` da `M`). §2 qoida 2 bo'yicha unga TEGILMADI; darvoza hookning o'zi
+   taklif qiladigan `CHECK_LINT=0` bilan chetlab o'tildi (`--no-verify` EMAS: typecheck va
+   guard darvozalari o'tdi). Egasi yoki S-reja agenti o'sha faylni tuzatgach darvoza yana
+   o'z-o'zidan ishlaydi. Push: `fba97849..5b6e4f75`.
+6. **Pre-commit hook `docs/progress.json` ni commitga qo'shdi** (faqat `generatedAt` vaqt tamg'asi
    yangilandi) — bu avtomatik generatsiya, T10 ishi emas.
-6. **Oldingi fazalardan qolgan ochiqlar hamon ochiq**: `ShortageScreen` da ifoda rejimi yo'q,
+7. **Oldingi fazalardan qolgan ochiqlar hamon ochiq**: `ShortageScreen` da ifoda rejimi yo'q,
    `getCellProducts` da `deletedAt: null` filtri yo'q, T6 dagi 7 ta Списание, T9 ning egasidan
    kutilayotgan ikki ishi (zaxira + jonli o'tish). T10 ularga tegmadi.
-7. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T10 commitiga ham
+8. **`apps/api` + `apps/web` + `android/manager-app` hamon commit qilinmagan** — T10 commitiga ham
    qo'shilmadi (§2 qoida 6). Keyingi faza agenti ham o'z commitiga qo'shmasin.
