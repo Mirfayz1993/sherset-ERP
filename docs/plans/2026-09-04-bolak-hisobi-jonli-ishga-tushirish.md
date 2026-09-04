@@ -497,7 +497,7 @@ Sen Sherset ERP loyihasida ishlayapsan (D:\sherset-v2).
 
 ## 5. HISOBOTLAR (har faza o'z hisobotini SHU YERGA yozadi)
 
-### J3 — Reyestrni jismoniy sanoq bilan to'ldirish · ⚠️ QISMAN (qoida 11) · 2026-09-05
+### J3 — Reyestrni jismoniy sanoq bilan to'ldirish · ⚠️ QISMAN (qoida 11) · 2026-09-05 · `7232fc3c`
 
 **Holat: QISMAN.** J3 ning ikkita qabul mezoni bor va **ikkalasi ham hali
 yopilmagan**, chunki ularning ikkalasi ham OMBORDA, odam qo'li bilan
@@ -764,7 +764,7 @@ chaqirishi.
 |---|---|
 | Yangi `j3-trial-core.test.ts` | **21** ✅ |
 | Yangi `j3-trial-guard.test.ts` | **16** ✅ |
-| `apps/api/src/scripts/` to'plami | 16 fayl · **389 test** ✅ (J2 da 354 edi) |
+| `apps/api/src/scripts/` to'plami | 16 fayl · **391 test** ✅ (J2 da 354 edi) |
 | `tsc --noEmit` — `apps/api` | ✅ 0 xato |
 | biome (tegilgan 4 fayl) | ✅ 0 **error** (CLI skriptlaridagi `noConsole` OGOHLANTIRISHLARI avvaldan bor) |
 | Jonli `warehouse-state.ts` (serverdagi versiya) | **EXIT=0** · split mos **1456**, mos emas 0 · **POS yeta olmaydigan qoldiq 0** · «✅ Reyestrga MOS» |
