@@ -19,6 +19,14 @@ Ya'ni tartib **qat'iy**:
 2. **shundan keyin** shu yo'riqnoma bajariladi;
 3. natija shu faylning 5-bo'limiga yoziladi.
 
+> 🔴 **Egasining qarori, 2026-09-04 20:00 — chiqarish MARKETPLACE ishi tugagandan KEYIN.**
+> O'sha kuni o'lchandi: jonli HEAD `ef99ecb1` («Merge marketplace M1–M9», 2 soat oldin
+> chiqarilgan), VPS `origin/climart-adoption` dan **37 commit oldinda** (o'sha ish hech qayerga
+> push qilinmagan). Marketplace commitlari S-reja tekkan POS fayllariga tegadi (`m7` — zakazlar
+> ro'yxatidagi sayt belgisi, `m5` — onlayn kassir ish o'rni, i18n kalitlari), ya'ni chiqarish
+> oddiy «yangi commitni qo'yish» emas, **haqiqiy merge**. Shuning uchun deploy o'sha ish
+> joyiga tushgunicha KUTADI. S-reja kodi `yacheyka-inventarizatsiya` da (`00dbee83`) tayyor.
+
 Deploy'dan **oldin** bajarilgan smoke hech nimani isbotlamaydi — jonlida hali eski kod turadi.
 
 ---

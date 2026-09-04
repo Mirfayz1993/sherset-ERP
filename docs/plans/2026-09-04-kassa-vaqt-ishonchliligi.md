@@ -1263,8 +1263,31 @@ bilan modellashtiriladi.
 - 🔴 **Jonli smoke** — `docs/ops/kassa-vaqt-jonli-smoke.md` bo'yicha, **deploy'dan keyin**.
   Natija o'sha faylning 5-bo'limiga va shu hisobotga yoziladi.
 - 🔴 **NTP kassalarda bajarilishi** — `docs/ops/kassa-vaqt-ntp.md` reyestri to'ldirilsin.
-- **Deploy QILINMADI** (§2 qoida 9) — kassa jonli ishlayapti. Kod branchda (`00dbee83`),
-  egasi «chiqar» desa chiqariladi. S1–S5 bir deploy bilan chiqadi.
+- **Deploy QILINMADI** (§2 qoida 9). Kod branchda (`00dbee83`). S1–S5 bir deploy bilan chiqadi.
+
+  🔴 **2026-09-04 20:00 — deploy urinildi va EGASI QARORI bilan KECHIKTIRILDI** («marketplace
+  bo'lganidan so'ng»). O'lchov (keyingi sessiya buni takrorlamasin):
+
+  | Nima | Holat (2026-09-04 20:00) |
+  |---|---|
+  | Jonli HEAD (`13.140.157.10:/var/www/sherset-v2`) | `ef99ecb1` — «Merge marketplace M1–M9», ~2 soat oldin chiqarilgan |
+  | Jonli quti ↔ `origin/climart-adoption` | quti **37 commit oldinda** — marketplace ishi hech qayerga push qilinmagan |
+  | `origin/climart-adoption` | `6f0247a4` (mijoz-ekran krossfeyd) |
+  | S-reja jonlida | **YO'Q** |
+  | `yacheyka-inventarizatsiya` delta'si | **193 commit** — S1–S5 dan tashqari TSD T1–T11, menejer X1–X5, J1 |
+
+  Egasi **faqat S-rejani** chiqarishni tanladi (butun branch emas) ⇒ jonli HEAD ustiga
+  **cherry-pick** kerak. Lekin marketplace commitlari S-reja tekkan POS fayllariga tegadi
+  (`m7` zakazlar sayt-belgisi, `m5` onlayn kassir `uiMode`, i18n kalitlari) — bu **haqiqiy
+  merge**, to'qnashuv qo'lda yechiladi, keyin `next build` + flip. Ustiga `git push` avto-rejim
+  klassifikatori tomonidan rad etildi, VPS esa commitlarni faqat `mirfayz` fork'i orqali oladi
+  (Davlatbek'nikiga push huquqi yo'q).
+
+  **Keyingi deploy sessiyasi uchun tartib:** marketplace ishi push qilinib joyiga tushsin →
+  jonli HEAD ustiga S-reja cherry-pick (`2636a6d3` S1 · `988fb45c` S2 · `c1ed09b4` S3 ·
+  `5efe6430` S4 · `00dbee83` S5) → `docs/progress.json` to'qnashuvi kutiladi (avtogeneratsiya,
+  ahamiyatsiz) → gate'lar → `NEXT_DISTDIR=.next-new` + sentinel + flip + `pm2 restart` →
+  darhol `docs/ops/kassa-vaqt-jonli-smoke.md` bo'yicha smoke.
 - NTP qadamini `install-watchdog.ps1` naqshida **skriptga** aylantirish mumkin
   (`desktop/tools/` ga `install-ntp.ps1`, extraResources bilan yetkaziladi) — bu artefakt
   tarkibini o'zgartiradi (`check-build-assets.js` va installer testlari), shuning uchun S5

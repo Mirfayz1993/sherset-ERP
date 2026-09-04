@@ -2432,3 +2432,36 @@ iz qatlami hech qachon sanoqni bloklamaydi), narx sizishi (sessiya qatorlarida `
    X-reja agenti `hr-kpi` fayllarini `biome check --apply` bilan tuzatsa yopiladi.
 5. **T8 (jonli qurilma smoke) hamon REJA** va T9 egasidan kutilayotgan ikki ishi bilan QISMAN —
    T11 ularga tegmadi.
+
+---
+
+#### T-rejaning KOD tomoni — to'liq tekshiruv (2026-09-04, T11 sessiyasida)
+
+Egasining so'roviga ko'ra butun T-reja koddan qayta o'lchandi (hisobotlar da'vosiga ishonmasdan).
+
+**O'lchov:** `gradle testDebugUnitTest assembleDebug` → **BUILD SUCCESSFUL**, JVM unit-testlar
+**40/40 yashil** (`QtyExpressionTest` 17 · `CacheShapeTest` 15 · `CountUndoTest` 8, 0 failure /
+0 error); `npx vitest run src/modules/tsd src/modules/auth/tsd-policy.test.ts src/modules/store`
+→ **17 fayl / 263 test yashil**. Ilova manbasida `TODO`/`FIXME`/`HACK` **bitta ham yo'q**.
+`versionCode = 6`, `versionName = "0.6.0"` (T9 ko'targan) ⇒ T1–T7 hisobotlaridagi «versiya
+oshirilmadi» bandlari **YOPILGAN**.
+
+**Uchta ochiq kod qarzi qoldi — uchalasi ham koddan tasdiqlandi, bittasi ham «TUGADI» fazaning
+qabul mezoniga kirmagan** (ya'ni bitta ham faza noto'g'ri yopilmagan):
+
+| # | Qarz | Dalil | Kimda |
+|---|---|---|---|
+| 1 | 🔴 `getCellProducts` da `deletedAt: null` filtri yo'q ⇒ o'chirilgan tovar TSD ro'yxatiga tushadi va sanalganda 404 | `store-address.service.ts:407–417` — `where: { accountId, OR: [...] }`, filtr yo'q; `getCellStock` da esa BOR | **N-reja N2** (T6 hisoboti T11 ga yo'naltirgan; N2 vazifa 5 sifatida yozildi) |
+| 2 | `ShortageScreen` ifoda rejimisiz ⇒ `14,5` xom holda serverga ketadi | `ShortageScreen.kt:62` — `NumberField(...)` `expression` bermaydi (`Widgets.kt:256` default `false`); `send()` `put("qty", qty)` xom string | **EGASI QAROR QILSIN** — 5 ta faza (T5#4, T6#6, T7#5, T9#6, T10#7) «keyingi fazaga» deb o'tkazgan, hech kim olmagan |
+| 3 | Qidiruv natijasida o'lchov birligi ko'rinmaydi ⇒ metrli tovarda chalkashlik | `Widgets.kt:420` — `InfoRow(label = productWhere(p), value = p.optString("totalQty"))`, `uom` chizilmaydi; server esa uni BERADI (`tsd-scan.ts:29` `uom: true`) | **EGASI QAROR QILSIN** — T3#4 dan beri yetim |
+
+2 va 3 ning ikkalasi ham **bir qatorlik**, lekin §2 qoida 2 («yo'l-yo'lakay tuzatdim» TAQIQ)
+bo'yicha T11 ularga TEGMADI. Ular uchun kichik bir fazani (T12) ochish yoki T8 jonli smoke'i
+bilan birga qilish — egasining qarori.
+
+**Ataylab qoldirilgan, nuqson EMAS** (hisobotlarda asoslangan savdolar): `take: 30` nozik
+saralashdan oldin ishlaydi (`tsd.service.ts:225–243` — DB tartibi aniq, `truncated` bayrog'i
+omborchini ogohlantiradi); miqdor maydonida belgi kursor joyiga emas matn oxiriga qo'shiladi
+(`TextFieldValue` ga o'tish kerak); `PlaceScreen` da `0` server 400 si bilan rad etiladi;
+xato banneri `back()` da tozalanmaydi; ommaviy «qolganini 0 qilib yopish» ning qaytarishi yo'q
+(7 ta Списание — N-reja doirasi).

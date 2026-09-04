@@ -202,11 +202,20 @@ qator** sifatida yozilsin; yopilganda hujjat `counted` holatiga o'tsin.
 4. Ruxsat: sessiya ochish/yopish `storekeeper` da bor bo'lgan yacheyka amali ruxsatiga tayanadi
    (yangi ruxsat kiritilmaydi — `role-templates.ts` tegilmaydi; agar tegishi kerak bo'lsa
    hisobotda alohida asoslanadi).
+5. 🔴 **T-reja T6 dan meros qolgan qarz — `getCellProducts` da `deletedAt: null` filtri YO'Q**
+   (`store-address.service.ts:407–417`; T6 hisobotining 2-bandi buni aynan T11 ga yo'naltirgan,
+   2026-09-04 da koddan qayta tasdiqlandi). `getCellStock` da filtr BOR, `getCellProducts` da
+   yo'q ⇒ TSD ning «biriktirilgan» ro'yxatiga **yumshoq o'chirilgan** tovar tushadi va u
+   sanalganda server **404** beradi. Sessiya qatori ham o'sha 404 ni oladi ⇒ iz qatlamida
+   tushuntirib bo'lmaydigan bo'shliq. Tuzatish bir qatorlik, LEKIN u web'ning «Ko'rish»
+   ekraniga ham tegadi — shuning uchun N2 hisobotida **o'zgarish oldi/keyin qator soni bilan**
+   ko'rsatiladi va egasiga aytiladi.
 
 **Qabul mezoni.**
 - Yangi testlar: sessiya ochish idempotent; sanoq qator qo'shadi (`expected/actual/variance`
   raqamlari `stock_by_cell` bilan mos); sessiya yo'q bo'lsa sanoq **avvalgidek** ishlaydi
   (orqaga moslik); qator yozish xatosi sanoqni yiqitmaydi.
+- Yangi test: `getCellProducts` yumshoq o'chirilgan tovarni QAYTARMAYDI (5-vazifa).
 - `tsd-policy.test.ts` yashil, `/products` va `/inventories` yopiqligi test bilan isbotlangan.
 - Javob namunasi hisobotda keltiriladi va unda **narx maydoni yo'qligi** `select` oq ro'yxati
   bilan yozma isbotlanadi («ekranda ko'rsatmayapmiz» — isbot EMAS).
