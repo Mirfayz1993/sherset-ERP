@@ -1,6 +1,6 @@
 # TSD — omborchi qulayligi (T-reja)
 
-> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04 — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda)
+> **Yaratilgan:** 2026-09-03 · **Buyurtmachi:** Ozodbek (egasi) · **Holat:** BAJARILMOQDA — T1 TUGADI (2026-09-03, `9c7276e8`), T2 TUGADI (2026-09-03, `da2d7daa`), T3 TUGADI (2026-09-04, `1086d253`), T4 TUGADI (2026-09-04, `c339187f`), T5 TUGADI (2026-09-04, `d47a9786`), T6 TUGADI (2026-09-04, `4ac4aff0`), T7 TUGADI (2026-09-04, `53001842`), **T9 QISMAN** (2026-09-04, `fd271d18` — release-imzo tayyor, jonli o'tish va zaxira egasidan kutilmoqda)
 > **Boshlang'ich nuqta:** TSD ilovasi `0.4.0` (versionCode 4), Compose UI, jonli terminal **iData 95W Pro** qo'lda.
 > **Sabab:** jonli sinovda omborchi «Sanash» ekranida tiqilib qoldi — yacheyka bo'sh edi va tovarni biriktirishning
 > HECH QANDAY yo'li yo'q edi (§1.2). Egasining talabi: «omborchi umuman qiynalmasligi kerak».
@@ -2005,7 +2005,7 @@ va narx tushunchasini bilmaydi.
    `pre-commit` hook'i qo'shgan `docs/progress.json`). Keyingi faza agenti ham
    o'z commitiga qo'shmasin.
 
-### T9 — Release-imzo va tarqatish kanali · **QISMAN — jonli o'tish va zaxira egasidan kutilmoqda** · 2026-09-04
+### T9 — Release-imzo va tarqatish kanali · **QISMAN — jonli o'tish va zaxira egasidan kutilmoqda** · 2026-09-04 · `fd271d18`
 
 **Nima qilindi.**
 
