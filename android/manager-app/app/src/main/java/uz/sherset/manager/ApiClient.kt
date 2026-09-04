@@ -4,6 +4,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -200,6 +201,44 @@ class ApiClient(private val baseUrl: String) {
         return post("/hr/tasks/logs/" + enc(logId) + "/answer", body)
     }
 
+    // ── Xodimning O'ZI: haydovchi yo'nalishlari (X4) ────────────────────────
+    //
+    // Hammasi FAQAT `JwtAuthGuard` bilan yopilgan va `driverId = user.sub`
+    // (`driver-tracking.controller.ts`, `driver-cash.controller.ts` — SELF
+    // bo'limi). Ya'ni ilova KIMNI so'rashini TANLAY OLMAYDI: bu yo'llarda
+    // `driverId` na parametrda, na tanada bor. Dispecher yo'llari
+    // (`live`, `route`, `driver-cash` umumiy ro'yxati) `DispatcherGuard`
+    // ostida va bu ilovadan UMUMAN chaqirilmaydi.
+
+    /**
+     * Ochiq smena yoki `null` (smena boshlanmagan). Server ochiq yozuv
+     * bo'lmasa `null` qaytaradi — bu XATO emas, oddiy holat.
+     */
+    fun driverShiftCurrent(): JSONObject? = getObjectOrNull("/driver-tracking/shifts/current")
+
+    /**
+     * Smenani boshlash. Server IDEMPOTENT: ochiq smena bo'lsa o'shani
+     * qaytaradi, yangisini yaratmaydi (`driver-shift.service.start`) —
+     * shuning uchun 401 dan keyin so'rovni qaytarish qo'sh smena yaratmaydi.
+     *
+     * 400 — xodim `field` (haydovchi) rejimida emas.
+     */
+    fun driverShiftStart(): JSONObject = post("/driver-tracking/shifts/start", JSONObject())
+
+    /**
+     * Smenani yakunlash. Javobda yopilgan smena: harakat/to'xtash soniyalari
+     * va yetkazmalar soni SERVERDA ping-oqimidan qayta hisoblanadi.
+     *
+     * 400 — ochiq smena topilmadi (masalan kron avtomatik yopib qo'ygan).
+     */
+    fun driverShiftEnd(): JSONObject = post("/driver-tracking/shifts/end", JSONObject())
+
+    /** Oxirgi 20 reys (server chegarasi) — yangisi tepada. */
+    fun driverTrips(): JSONArray = getArray("/driver-tracking/my/trips")
+
+    /** O'z naqd yozuvlari (oxirgi 50) — «qo'limdagi pul» shu yerdan sanaladi. */
+    fun driverCashMine(): JSONArray = getArray("/driver-cash/mine")
+
     // -- ichki ---------------------------------------------------------------
 
     private fun url(path: String): String = baseUrl.trimEnd('/') + path
@@ -210,12 +249,39 @@ class ApiClient(private val baseUrl: String) {
         exec(Request.Builder().url(url(path)).get(), auth = true, retryOn401 = true)
 
     /**
+     * MASSIV qaytaradigan yo'llar (X4: `my/trips`, `driver-cash/mine`).
+     * Bo'sh tana — bo'sh ro'yxat. Obyekt kelib qolsa JIM bo'sh ro'yxat
+     * ko'rsatmaymiz: shartnoma buzilgan, buni xato deb aytamiz.
+     */
+    private fun getArray(path: String): JSONArray {
+        val text = execRaw(Request.Builder().url(url(path)).get(), auth = true, retryOn401 = true)
+        if (text.isBlank() || text == "null") return JSONArray()
+        return runCatching { JSONArray(text) }.getOrElse {
+            throw ApiException(0, "Javob ro'yxat emas: " + path)
+        }
+    }
+
+    /**
+     * `null` ham to'g'ri javob bo'lgan yo'llar (X4: `shifts/current` — ochiq
+     * smena yo'q). Bo'sh tana ham, `null` matni ham `null` demakdir.
+     */
+    private fun getObjectOrNull(path: String): JSONObject? {
+        val text = execRaw(Request.Builder().url(url(path)).get(), auth = true, retryOn401 = true)
+        if (text.isBlank() || text == "null") return null
+        return runCatching { JSONObject(text) }.getOrElse {
+            throw ApiException(0, "Javob obyekt emas: " + path)
+        }
+    }
+
+    /**
      * Auth'li POST. 401 da BIR MARTA qaytarish bu yo'llar uchun XAVFSIZ:
      * check-in ochiq yozuv bo'lsa yangi yozuv yaratmay `already_open` beradi,
      * check-out esa ochiq yozuv bo'lmasa `no_open_record` — ikkalasi ham
      * takrorlansa qo'sh yozuv chiqmaydi (`ping-ingest.service.ts`).
      * Vazifa javobi (X3) esa bir martalik, lekin 401 ni guard beradi — so'rov
      * kontrollergacha yetib bormaydi, ya'ni qaytarish hech narsani buzmaydi.
+     * Smena boshlash (X4) idempotent (ochiq smena qaytariladi), yakunlash esa
+     * ochiq smena bo'lmasa 400 beradi — ikkalasi ham qo'sh yozuv yaratmaydi.
      */
     private fun post(path: String, body: JSONObject): JSONObject =
         exec(
@@ -230,6 +296,15 @@ class ApiClient(private val baseUrl: String) {
      * davomat POST'larida).
      */
     private fun exec(builder: Request.Builder, auth: Boolean, retryOn401: Boolean): JSONObject {
+        val text = execRaw(builder, auth, retryOn401)
+        // `null` — obyekt kutayotgan yo'lda bo'sh javob bilan bir xil
+        // (X4 dan oldin bunday yo'l yo'q edi; `getObjectOrNull` uni ATAYLAB
+        // farqlaydi, bu yerda esa eski xulq saqlanadi).
+        return if (text.isBlank() || text == "null") JSONObject() else JSONObject(text)
+    }
+
+    /** So'rovni bajaradi va javob TANASINI xom matn sifatida qaytaradi. */
+    private fun execRaw(builder: Request.Builder, auth: Boolean, retryOn401: Boolean): String {
         if (auth) accessToken?.let { builder.header("Authorization", "Bearer $it") }
         val req = builder.build()
         try {
@@ -247,11 +322,11 @@ class ApiClient(private val baseUrl: String) {
                         if (!r2.isSuccessful) {
                             throw ApiException(r2.code, "HTTP " + r2.code + ": " + text2)
                         }
-                        return if (text2.isBlank()) JSONObject() else JSONObject(text2)
+                        return text2
                     }
                 }
                 if (!r.isSuccessful) throw ApiException(r.code, "HTTP " + r.code + ": " + text)
-                return if (text.isBlank()) JSONObject() else JSONObject(text)
+                return text
             }
         } catch (e: ApiException) {
             throw e

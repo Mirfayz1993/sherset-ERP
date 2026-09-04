@@ -151,7 +151,8 @@ class HomeScreen(private val shell: Shell) : Screen {
                     icon = Icons.Filled.LocationOn,
                     label = stringResource(R.string.tile_my_routes),
                     tint = Palette.Danger,
-                ) { shell.go(ComingSoonScreen(shell, R.string.tile_my_routes)) },
+                    // X4 — «Tez orada» o'rniga haqiqiy ekran ulandi.
+                ) { shell.go(RoutesScreen(shell)) },
             )
         }
         return tiles

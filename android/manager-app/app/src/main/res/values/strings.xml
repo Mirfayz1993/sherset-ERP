@@ -111,6 +111,56 @@
     <string name="task_answer_forbidden">Bu vazifa sizniki emas</string>
     <string name="task_answer_stale">Bu vazifaga allaqachon javob berilgan</string>
 
+    <!-- Yo\'nalishlarim (X4) — haydovchining O\'Z smenasi, reyslari va puli -->
+    <string name="route_shift_title">Smena</string>
+    <string name="route_shift_open">Ochiq</string>
+    <string name="route_shift_closed">Yopiq</string>
+    <string name="route_shift_none">Smena boshlanmagan</string>
+    <string name="route_shift_start">Smenani boshlash</string>
+    <string name="route_shift_end">Smenani yakunlash</string>
+    <string name="route_shift_busy">Yuborilmoqda…</string>
+    <string name="route_shift_started">Smena boshlandi</string>
+    <string name="route_shift_ended">Smena yakunlandi</string>
+    <string name="route_shift_summary">Yakunlangan smena</string>
+    <string name="route_started_at">Boshlangan</string>
+    <string name="route_ended_at">Tugagan</string>
+    <string name="route_duration">Davomiyligi</string>
+    <string name="route_active_time">Harakatda</string>
+    <string name="route_stop_time">To\'xtashda</string>
+    <string name="route_deliveries">Yetkazmalar</string>
+    <string name="route_auto_closed">Smenani tizim avtomatik yopgan</string>
+    <string name="route_open_totals_note">Harakat vaqti va yetkazmalar soni smena yakunlanganda hisoblanadi.</string>
+    <string name="route_not_driver">Siz haydovchi rejimida emassiz — HR ga murojaat qiling</string>
+    <string name="route_no_open_shift">Ochiq smena topilmadi</string>
+
+    <!-- Qo\'limdagi pul — VALYUTALAR ALOHIDA, jami hisoblanmaydi -->
+    <string name="route_cash_title">Qo\'limdagi pul</string>
+    <string name="route_cash_empty">Topshirilmagan pul yo\'q</string>
+    <string name="route_cash_count">%1$s · %2$d ta yozuv</string>
+    <string name="route_cash_unreadable">hisoblanmadi</string>
+    <string name="route_cash_note">Valyutalar alohida ko\'rsatiladi — jami hisoblanmaydi.</string>
+
+    <!-- Reyslar -->
+    <string name="route_trips_title">REYSLAR</string>
+    <string name="route_trips_empty">Sizga reys biriktirilmagan</string>
+    <string name="route_no_address">Manzil ko\'rsatilmagan</string>
+    <string name="route_coords">Koordinata</string>
+    <string name="route_order_type">Manba</string>
+    <string name="route_order_demand">Realizatsiya</string>
+    <string name="route_order_retail">Kassa cheki</string>
+    <string name="route_order_manual">Qo\'lda kiritilgan</string>
+    <string name="route_assigned_at">Biriktirilgan</string>
+    <string name="route_started_trip">Yo\'lga chiqqan</string>
+    <string name="route_arrived_at">Yetib borgan</string>
+    <string name="route_completed_at">Yakunlangan</string>
+    <string name="route_eta">Taxminiy vaqt</string>
+    <string name="route_distance">Taxminiy masofa</string>
+    <string name="route_status_assigned">Biriktirildi</string>
+    <string name="route_status_enroute">Yo\'lda</string>
+    <string name="route_status_arrived">Yetib bordi</string>
+    <string name="route_status_completed">Yakunlandi</string>
+    <string name="route_status_cancelled">Bekor qilindi</string>
+
     <!-- Joylashuv — FAQAT «Keldim»/«Ketyapman» bosilganda so\'raladi -->
     <string name="loc_denied">Joylashuv ruxsati berilmadi — «Keldim» ishlamaydi</string>
     <string name="loc_disabled">GPS o\'chiq — qurilma sozlamalaridan yoqing</string>

@@ -478,3 +478,56 @@ reja pastiga X9 hisobotini yoz va TO'XTA.
 
 **Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
 `git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x3 — ishlarim ekrani va tasks own-only qulfi`.
+
+---
+
+### X4 hisoboti — 2026-09-04
+
+**Holat:** ✅ bajarildi
+
+**O'zgargan/yangi fayllar** (hammasi `android/manager-app/`; **server TEGILMADI** — `apps/api` da bitta ham qatorim yo'q):
+
+| Fayl | Nima qilindi |
+|---|---|
+| `…/Routes.kt` | **YANGI.** Smena/reys/naqd hisobining SOF funksiyalari (`HrAccess`/`Davomat`/`Tasks` naqshi — Android'siz, `org.json` siz ⇒ JVM testi): `pendingByCurrency` (🔴 valyuta kesimi, jami YO'Q), `parseMinor`, `elapsedSeconds`, `durationLabel`, `tripStatusTone`, `isTripActive`, `orderTypeTone`, `destLabel`, `coords`, `distanceLabel`. |
+| `…/RoutesScreen.kt` | **YANGI.** Smena kartasi (holat plashkasi + «Smenani boshlash/yakunlash»), yakunlangan smena yig'masi, «Qo'limdagi pul» (valyutalar alohida), reyslar ro'yxati (manzil/koordinata, manba, bosqich vaqtlari, faol reysda ETA). |
+| `…/ApiClient.kt` | `driverShiftCurrent/Start/End`, `driverTrips`, `driverCashMine` + `exec` **ikkiga bo'lindi**: `execRaw` (xom tana) ustida `getArray` va `getObjectOrNull`. Sababi pastda (1-topilma). |
+| `…/HomeScreen.kt` | «Yo'nalishlarim» plitkasi `ComingSoonScreen` o'rniga `RoutesScreen` ga ulandi (X5–X6 plitkalari hamon kutmoqda). |
+| `…/res/values/strings.xml` | +44 satr (smena, naqd, reys holatlari, manba turlari, rad sabablari). |
+| `…/test/…/RoutesTest.kt` | **YANGI** — 27 ta JVM testi. |
+
+**Testlar:**
+
+- `gradle testDebugUnitTest` → **82 test, 82 o'tdi, 0 yiqildi** (27 yangi `RoutesTest` + 17 `TasksTest` + 22 `DavomatTest` + 16 `HrAccessTest`).
+  - Naqd (11): faqat `pending` sanaladi (`handed`/`cancelled` — YO'Q, server `outstandingByCurrency` qarori bilan bir xil) · **🔴 valyutalar QO'SHILMAYDI** (UZS va USD alohida qatorda) · tartib qat'iy (UZS birinchi, keyin alifbo — ro'yxat har yuklanishda bir joyda) · valyutasiz qator sukut `UZS` · **`Long` chegarasidan katta summa ham to'g'ri** (BigInteger; `9223372036854775807 × 2`) · **🔴 o'qilmagan summa jamlanmani `null` qiladi, 0 EMAS** · o'qilmagan qator ham SANALADI (jimgina tashlanmaydi — qo'ldagi pulni kamaytirib ko'rsatardi) · «o'qilmadi» holati YOPISHQOQ (buzuq qator birinchi kelsa ham, oxirida kelsa ham natija `null` — yarim yig'indi chiqmaydi) · bir valyutadagi nosozlik boshqasini buzmaydi.
+  - Smena (6): davomiylik UTC vaqtdan to'g'ri · qurilma soati orqada bo'lsa manfiy emas 0 · buzuq/`null`/«null» vaqt → `null` · «2 soat 15 daq»/«45 daq»/«2 soat» · **bir daqiqadan kam vaqt «0» deb ko'rsatilmaydi** («1 daq dan kam») · yo'q davomiylik `null`.
+  - Reys (4): holat lug'ati server `ALLOWED_TRANSITIONS` kalitlari bilan bir xil · **server yangi holat qo'shsa ilova yiqilmaydi** (`unknown`) · faol reyslar (`assigned`/`enroute`/`arrived`) · manba turi yopiq lug'at.
+  - Manzil (6): matn bo'lsa u, bo'sh bo'lsa koordinata, ikkalasi yo'q bo'lsa `null` · **🔴 `Locale.ROOT` testi — lokal `ru-RU` ga ATAYLAB almashtirilib tekshiriladi** · NaN/cheksiz koordinata `null` · masofa m/km.
+- `gradle assembleDebug` (JDK 17, Gradle 8.7) → **BUILD SUCCESSFUL.** APK 13 715 740 bayt (~13,1 MiB; X3 dan +18 188 bayt — yangi bog'liqlik qo'shilmadi).
+- `gradle :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --rerun-tasks` → **BUILD SUCCESSFUL, bitta ham `warning:` yo'q** (inkremental qurishda ogohlantirishlar yashirinib qolmasin deb ataylab qayta yuritildi).
+- `apps/api` `tsc --noEmit` (`--max-old-space-size=8192`) → **0 xato** (server o'zgarmagani uchun formallik; X4 qabul mezoni «typecheck 0» deydi).
+- Server o'zgarmagani uchun `vitest` yuritilmadi (X4 qabul mezoni buni ataylab talab qilmaydi).
+- Kodlash: barcha yangi/o'zgargan fayllar `file` bilan tekshirildi — **BOM'siz UTF-8**, `no-mojibake.test.ts` dagi imzolar ro'yxati bo'yicha `grep` — 0 marta uchraydi. (Qo'riqchining O'ZI FAQAT `apps/web/src` ni skanerlaydi — `android/` uning qamrovida EMAS, shuning uchun qo'lda o'lchandi. Imzolarni bu yerga literal ko'chirmadim: reja fayli kelajakda qo'riqchi qamroviga kirsa o'zini tutib qolardi.)
+
+**Topilmalar/og'ishlar:**
+
+1. 🔴 **`ApiClient` massiv ham, `null` ham qaytara olmasdi — X4 dan oldin bu yo'llar ILOVANI YIQITARDI.** `exec` javobni doim `JSONObject(text)` qilardi; `my/trips` va `driver-cash/mine` esa MASSIV, `shifts/current` esa ochiq smena bo'lmasa `null` qaytaradi. `JSONObject("[…]")`/`JSONObject("null")` — `JSONException`, u `ApiException` emas, ya'ni `shell.io` ushlamay ilova qulardi. Shuning uchun `exec` `execRaw` (xom tana) ustiga ko'chirildi va ikkita yangi yo'l qo'shildi: `getArray` (bo'sh tana → bo'sh ro'yxat) va `getObjectOrNull` (bo'sh tana/`null` → `null`). Shartnoma buzilsa (massiv o'rniga obyekt) JIM bo'sh ro'yxat KO'RSATILMAYDI — `ApiException` bo'lib ekranga chiqadi. Eski `exec` xulqi o'zgarmadi (mavjud chaqiruvlar shu bo'yicha ishlaydi).
+2. 🔴 **REJADAN OG'ISH: «qaysi mijozga» KO'RSATIB BO'LMAYDI.** X4 vazifasida reys qatorida «qaysi mijozga» deb yozilgan, lekin `GET /driver-tracking/my/trips` xom `DriverTrip` qatorlarini qaytaradi va **`DriverTrip` modelida mijoz maydoni UMUMAN YO'Q** (`schema.prisma:11314`): faqat `orderType` (`demand`/`retail_sale`/`manual`) va `orderId` — XOM UUID, hech qanday relation'siz. Mijoz ismini chiqarish uchun serverda `orderId` bo'yicha realizatsiya/chek → kontragent join'i kerak, ya'ni **server o'zgarishi** — X4 esa «Server o'zgarmaydi» deb qat'iy yozilgan. Shuning uchun kartada mijoz o'rniga: **manzil** (`destAddress`, bo'lmasa koordinata), **manba turi** va bosqich vaqtlari. Amalda haydovchi uchun manzil mijoz ismidan muhimroq, lekin bu OG'ISH — **X7 ga eslatma:** mijoz ismi kerak bo'lsa u alohida server ishi (`my/trips` javobini boyitish).
+3. 🔴 **OCHIQ SMENA YIG'MASI ATAYLAB KO'RSATILMAYDI.** `activeSeconds`/`stopSeconds`/`deliveriesCount` ping-oqimidan FAQAT smena yopilganda hisoblanadi (`driver-shift.service.close`), ochiq smenada bazada `0` turadi. Ularni chizsam ekran ish kuni o'rtasida «harakatda: 0, yetkazma: 0» deb turardi — 8-qoidaga zid YOLG'ON. Ochiq smenada faqat boshlanish vaqti va davomiyligi bor, yig'ma esa YAKUNLANGAN smena kartasida chiqadi (o'sha karta `shifts/end` javobidan to'ldiriladi). Ekranda buning sababi ham yozilgan («…smena yakunlanganda hisoblanadi»).
+4. 🔴 **Reys bosqichi ilovadan O'ZGARTIRILMAYDI.** `PATCH /driver-trips/:id/status` `DispatcherGuard` ostida va bu ATAYLAB shunday (`driver-trip.controller.ts` izohi: «field-haydovchi dispecher bo'la olmaydi»). Ya'ni haydovchi «yo'lga chiqdim/yetib bordim» deb bosa olmaydi — holat dispecherdan yoki ping avto-kelishidan (`markArrivalIfInside`) o'zgaradi. Ekran reyslar bo'yicha FAQAT O'QIYDI. **Egasidan so'raladi:** haydovchi holatni o'zi belgilashi kerakmi? Kerak bo'lsa bu server qarori (yangi self-endpoint) va alohida faza.
+5. 🔴 **ETA eskirgan bo'lishi mumkin — shuning uchun HISOBLANGAN VAQTI bilan birga chiqadi.** `etaSeconds` ni `eta-worker.cron.ts` davriy yozadi; uni yolg'iz ko'rsatish «hozirgi taxmin» degan taassurot berardi. Kartada «25 daq · 04.09 · 14:12» ko'rinishida va FAQAT yakunlanmagan reysda. `etaSeconds` yoki `etaComputedAt` dan biri `null` bo'lsa qator UMUMAN chizilmaydi.
+6. ⚠️ **HAYDOVCHILIKNING IKKI XIL MANBASI BOR — bu jonlida plitkani ko'rinmas qilib qo'yishi mumkin.** Plitka `hrRoles` da `driver` bo'lishiga qarab chiziladi (X1 qarori), server esa haydovchilikni **`Employee.trackingMode === 'field'`** bo'yicha hal qiladi (`driver-shift.service`, `driver-trip.service`, `driver-cash.service` — uchalasida bir xil tekshiruv). Ikki nomuvofiqlik holati:
+   - `trackingMode = 'field'`, lekin `hrRoles` da `driver` yo'q → **haydovchi plitkani KO'RMAYDI** (fail-closed, lekin foydasiz);
+   - `hrRoles` da `driver` bor, lekin `trackingMode ≠ 'field'` → plitka bor, «Smenani boshlash» 400 beradi. Endi bu 400 «Siz haydovchi rejimida emassiz — HR ga murojaat qiling» deb tarjima qilinadi (xom `HTTP 400: {...}` emas).
+
+   **X1 ning 2-topilmasi HAMON OCHIQ:** `hrRoles` erkin lug'at, `seed-hr.ts` da `driver` YO'Q. `HrAccess.DRIVER_ROLES = {"driver","haydovchi"}` shundayligicha qoldi (X4 X1 mantig'iga TEGMADI). **Egasidan so'raladi:** jonlida haydovchilarga (a) qaysi `hrRoles` qiymati va (b) `trackingMode = 'field'` qo'yilganmi? Ikkalasi ham kerak.
+7. 🔴 **`Locale.ROOT` tuzog'i — yangi sinf, testi bor.** Koordinata va «km» `String.format` bilan yoziladi; qurilma lokali ruscha/o'zbekcha bo'lsa `%f` kasr ajratgichni VERGUL qiladi va koordinata «41,31083, 69,27972» bo'lib navigatorga ko'chirib bo'lmay qolardi. `Routes.coords`/`distanceLabel` da `Locale.ROOT` qat'iy; test lokalni ataylab `ru-RU` ga o'girib tekshiradi. **X5/X6 ga eslatma:** har `String.format`/`%f` da shu tuzoq qaytadi (X2 ning UTC tuzog'i bilan bir sinfda).
+8. **Vaqt formatlash `Tasks.dateTime` dan QAYTA ISHLATILDI** (X3 da yozilgan, 4 ta testi bor): `startedAt`/`assignedAt`/`arrivedAt`/`completedAt` — hammasi Nest `Date`, ya'ni UTC. Yangi nusxa yozilmadi — X2 ning 2-topilmasi (UTC tuzog'i) shu bilan uchinchi marta yopildi.
+9. **`POST /driver-cash/collect` ATAYLAB ULANMADI.** X4 vazifasida «Qo'limdagi pul» kartasi FAQAT o'qish deb yozilgan. «Mijozdan naqd oldim» yozuvi — pul zanjiriga kiradigan YOZUV amali (summa, valyuta, reys tanlash, xato yozuvni bekor qilish oqimi kerak) va u alohida fazaga arziydi. Hozir yozuvlarni web ERP/dispecher qiladi.
+10. **Uch manba BITTA IO ishida ketma-ket o'qiladi** (`shifts/current` → `my/trips` → `driver-cash/mine`). Sababi: ekran yaxlit, «smena bor-u reyslar hali yo'q» degan yarim holat foydalanuvchiga tushunarsiz. Xato bo'lsa butun ekran xato kartasi + «Qayta urinish» ko'rsatadi.
+11. **Bo'sh holatlar HALOL ajratilgan:** «Topshirilmagan pul yo'q» (o'lchandi, natija nol) va «hisoblanmadi» (summa o'qilmadi) — ikki BOSHQA matn. «Sizga reys biriktirilmagan» ham bo'sh ro'yxat, xato emas.
+12. **X1 ning 4-topilmasi HAMON KUCHDA:** `android/manager-app/` ning katta qismi (`BriefingScreen.kt`, `Widgets.kt`, `Theme.kt`, `Fmt.kt`, `Updater.kt`, `settings.gradle.kts`, `README.md`, `.gitignore`, `tools/` …) hamon KUZATILMAGAN — X1+X2+X3+X4 commitlari yolg'iz o'zi yig'ilmaydi. Egasi v0.1 poydevorini alohida commit qilishi kerak (yoki X7 ga shu vazifa berilsin). Bu commit `Widgets.kt`/`Fmt.kt` ga TEGMADI (`Pill`, `InfoRow`, `SectionCard`, `EmptyState`, `PrimaryButton`, `Fmt.minor` xuddi borligicha ishlatildi).
+13. Daraxtda boshqa sessiyalarning commit qilinmagan ishi turibdi (`android/tsd-app/`, `apps/api/src/modules/auth`, `permissions`, `apps/web/src/app/(app)/sotuv/`, `packages/db/scripts/`). Ularga TEGILMADI, commitga ham kirmadi. `docs/progress.json` ni repo'ning O'Z pre-commit ilgagi qo'shishi mumkin (X2 ning 11-topilmasi).
+
+**Commit:** kod va shu hisobot — BITTA commitda, push YO'Q. Hash ataylab yozilmadi (X1 dagi sabab: hisobot commitning O'ZI ichida bo'lgani uchun o'z hashini saqlay olmaydi). Topish yo'li:
+`git log --oneline -1 -- docs/plans/2026-09-03-xodim-profili-x-reja.md` → subject `feat(menejer): x4 — yo'nalishlarim ekrani (smena, reyslar, qo'ldagi pul)`.
